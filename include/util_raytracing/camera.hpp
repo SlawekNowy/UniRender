@@ -18,6 +18,7 @@ namespace ccl {class Camera;};
 class DataStream;
 namespace raytracing
 {
+	enum class StereoEye : uint8_t;
 	class Camera;
 	using PCamera = std::shared_ptr<Camera>;
 	class Scene;
@@ -43,8 +44,14 @@ namespace raytracing
 		static PCamera Create(Scene &scene);
 		util::WeakHandle<Camera> GetHandle();
 
+		void SetInterocularDistance(umath::Meter dist);
+		void SetEquirectangularHorizontalRange(umath::Degree range);
+		void SetEquirectangularVerticalRange(umath::Degree range);
+		void SetStereoscopic(bool stereo);
+		bool IsStereoscopic() const;
+
 		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
+		void Deserialize(uint32_t version,DataStream &dsIn);
 
 		void SetResolution(uint32_t width,uint32_t height);
 		void GetResolution(uint32_t &width,uint32_t &height) const;
@@ -73,11 +80,15 @@ namespace raytracing
 
 		ccl::Camera *operator->();
 		ccl::Camera *operator*();
+
+		// For internal use only
+		void SetStereoscopicEye(StereoEye eye);
 	private:
 		Camera(Scene &scene,ccl::Camera &cam);
 		ccl::Camera &m_camera;
 
 		bool m_dofEnabled = false;
+		bool m_stereoscopic = false;
 	};
 };
 

@@ -28,7 +28,7 @@ namespace raytracing
 	{
 	public:
 		static PObject Create(Scene &scene,Mesh &mesh);
-		static PObject Create(Scene &scene,DataStream &dsIn);
+		static PObject Create(Scene &scene,uint32_t version,DataStream &dsIn);
 		util::WeakHandle<Object> GetHandle();
 		virtual void DoFinalize() override;
 
@@ -37,7 +37,7 @@ namespace raytracing
 		Mesh &GetMesh();
 
 		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
+		void Deserialize(uint32_t version,DataStream &dsIn);
 
 		const umath::Transform &GetMotionPose() const;
 		void SetMotionPose(const umath::Transform &pose);

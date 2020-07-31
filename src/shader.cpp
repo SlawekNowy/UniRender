@@ -548,6 +548,22 @@ void raytracing::ShaderColorTest::DoDeserialize(DataStream &dsIn) {}
 
 ////////////////
 
+bool raytracing::ShaderVolumeScatter::InitializeCCLShader(CCLShader &cclShader)
+{
+	auto volumeScatterNode = cclShader.AddScatterVolumeNode();
+	//volumeScatterNode.inDensity = 0.0001f;
+	volumeScatterNode.inVolumeMixWeight = 0.f;
+	volumeScatterNode.inAnisotropy = 0.f;
+	cclShader.Link(cclShader.AddConstantNode(0.01f),volumeScatterNode.inDensity);
+	//cclShader.Link(cclShader.AddCombineRGBNode(1.f,0.f,0.f),volumeScatterNode.inColor);
+	cclShader.Link(volumeScatterNode,cclShader.GetOutputNode().inVolume);
+	return true;
+}
+void raytracing::ShaderVolumeScatter::DoSerialize(DataStream &dsIn) const {}
+void raytracing::ShaderVolumeScatter::DoDeserialize(DataStream &dsIn) {}
+
+////////////////
+
 bool raytracing::ShaderNormal::InitializeCCLShader(CCLShader &cclShader)
 {
 	// Normal map

@@ -351,6 +351,16 @@ namespace raytracing
 		using Shader::Shader;
 	};
 
+	class DLLRTUTIL ShaderVolumeScatter
+		: public Shader
+	{
+	protected:
+		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
+		virtual void DoSerialize(DataStream &dsIn) const override;
+		virtual void DoDeserialize(DataStream &dsIn) override;
+		using Shader::Shader;
+	};
+
 	class DLLRTUTIL ShaderNormal
 		: public Shader,
 		public ShaderModuleNormal,

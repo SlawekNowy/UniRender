@@ -25,6 +25,7 @@ Camera::Camera(Scene &scene,ccl::Camera &cam)
 {
 	cam.type = ccl::CameraType::CAMERA_PERSPECTIVE;
 	cam.matrix = ccl::transform_identity();
+	cam.interocular_distance = 0.065;
 }
 
 util::WeakHandle<Camera> Camera::GetHandle()
@@ -54,10 +55,18 @@ void Camera::Serialize(DataStream &dsOut) const
 	dsOut->Write(m_camera.fisheye_lens);
 	dsOut->Write(m_camera.fisheye_fov);
 	dsOut->Write(m_dofEnabled);
+
+	dsOut->Write(m_camera.interocular_distance);
+	dsOut->Write(m_camera.longitude_min);
+	dsOut->Write(m_camera.longitude_max);
+	dsOut->Write(m_camera.latitude_min);
+	dsOut->Write(m_camera.latitude_max);
+	dsOut->Write(m_camera.use_spherical_stereo);
+	dsOut->Write(m_stereoscopic);
 }
-void Camera::Deserialize(DataStream &dsIn)
+void Camera::Deserialize(uint32_t version,DataStream &dsIn)
 {
-	WorldObject::Deserialize(dsIn);
+	WorldObject::Deserialize(version,dsIn);
 	m_camera.type = dsIn->Read<decltype(m_camera.type)>();
 	m_camera.matrix = dsIn->Read<decltype(m_camera.matrix)>();
 	m_camera.width = dsIn->Read<decltype(m_camera.width)>();
@@ -77,6 +86,49 @@ void Camera::Deserialize(DataStream &dsIn)
 	m_camera.fisheye_lens = dsIn->Read<decltype(m_camera.fisheye_lens)>();
 	m_camera.fisheye_fov = dsIn->Read<decltype(m_camera.fisheye_fov)>();
 	m_dofEnabled = dsIn->Read<decltype(m_dofEnabled)>();
+
+	if(version < 1)
+		return;
+
+	m_camera.interocular_distance = dsIn->Read<decltype(m_camera.interocular_distance)>();
+	m_camera.longitude_min = dsIn->Read<decltype(m_camera.longitude_min)>();
+	m_camera.longitude_max = dsIn->Read<decltype(m_camera.longitude_max)>();
+	m_camera.latitude_min = dsIn->Read<decltype(m_camera.latitude_min)>();
+	m_camera.latitude_max = dsIn->Read<decltype(m_camera.latitude_max)>();
+	m_camera.use_spherical_stereo = dsIn->Read<decltype(m_camera.use_spherical_stereo)>();
+	m_stereoscopic = dsIn->Read<decltype(m_stereoscopic)>();
+}
+
+void Camera::SetInterocularDistance(umath::Meter dist) {m_camera.interocular_distance = dist;}
+void Camera::SetEquirectangularHorizontalRange(umath::Degree range)
+{
+	range = umath::deg_to_rad(range);
+	m_camera.longitude_min = -range /2.f;
+	m_camera.longitude_max = range /2.f;
+}
+void Camera::SetEquirectangularVerticalRange(umath::Degree range)
+{
+	range = umath::deg_to_rad(range);
+	m_camera.latitude_min = -range /2.f;
+	m_camera.latitude_max = range /2.f;
+}
+void Camera::SetStereoscopic(bool stereo)
+{
+	m_camera.use_spherical_stereo = stereo;
+	m_stereoscopic = stereo;
+}
+bool Camera::IsStereoscopic() const {return m_stereoscopic && m_camera.type == ccl::CameraType::CAMERA_PANORAMA;}
+void Camera::SetStereoscopicEye(StereoEye eye)
+{
+	switch(eye)
+	{
+	case StereoEye::Left:
+		m_camera.stereo_eye = ccl::Camera::StereoEye::STEREO_LEFT;
+		break;
+	case StereoEye::Right:
+		m_camera.stereo_eye = ccl::Camera::StereoEye::STEREO_RIGHT;
+		break;
+	}
 }
 
 void Camera::SetResolution(uint32_t width,uint32_t height)

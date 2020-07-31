@@ -37,7 +37,7 @@ namespace raytracing
 			Triangle
 		};
 		static PLight Create(Scene &scene);
-		static PLight Create(Scene &scene,DataStream &dsIn);
+		static PLight Create(Scene &scene,uint32_t version,DataStream &dsIn);
 		util::WeakHandle<Light> GetHandle();
 
 		void SetType(Type type);
@@ -53,7 +53,7 @@ namespace raytracing
 		void SetSizeV(float sizeV);
 
 		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
+		void Deserialize(uint32_t version,DataStream &dsIn);
 
 		ccl::Light *operator->();
 		ccl::Light *operator*();

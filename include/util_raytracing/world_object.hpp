@@ -35,7 +35,7 @@ namespace raytracing
 		const umath::ScaledTransform &GetPose() const;
 
 		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
+		void Deserialize(uint32_t version,DataStream &dsIn);
 	protected:
 		WorldObject(Scene &scene);
 	private:

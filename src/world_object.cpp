@@ -29,7 +29,7 @@ void raytracing::WorldObject::Serialize(DataStream &dsOut) const
 {
 	dsOut->Write(m_pose);
 }
-void raytracing::WorldObject::Deserialize(DataStream &dsIn)
+void raytracing::WorldObject::Deserialize(uint32_t version,DataStream &dsIn)
 {
 	m_pose = dsIn->Read<decltype(m_pose)>();
 }

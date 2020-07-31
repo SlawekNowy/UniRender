@@ -28,10 +28,10 @@ raytracing::PObject raytracing::Object::Create(Scene &scene,Mesh *mesh)
 }
 raytracing::PObject raytracing::Object::Create(Scene &scene,Mesh &mesh) {return Create(scene,&mesh);}
 
-raytracing::PObject raytracing::Object::Create(Scene &scene,DataStream &dsIn)
+raytracing::PObject raytracing::Object::Create(Scene &scene,uint32_t version,DataStream &dsIn)
 {
 	auto o = Create(scene,nullptr);
-	o->Deserialize(dsIn);
+	o->Deserialize(version,dsIn);
 	return o;
 }
 
@@ -49,9 +49,9 @@ void raytracing::Object::Serialize(DataStream &dsOut) const
 	assert(it != meshes.end());
 	dsOut->Write<uint32_t>(it -meshes.begin());
 }
-void raytracing::Object::Deserialize(DataStream &dsIn)
+void raytracing::Object::Deserialize(uint32_t version,DataStream &dsIn)
 {
-	WorldObject::Deserialize(dsIn);
+	WorldObject::Deserialize(version,dsIn);
 	auto meshIdx = dsIn->Read<uint32_t>();
 	auto &scene = GetScene();
 	auto &meshes = scene.GetMeshes();

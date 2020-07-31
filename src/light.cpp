@@ -30,10 +30,10 @@ raytracing::PLight raytracing::Light::Create(Scene &scene)
 	return pLight;
 }
 
-raytracing::PLight raytracing::Light::Create(Scene &scene,DataStream &dsIn)
+raytracing::PLight raytracing::Light::Create(Scene &scene,uint32_t version,DataStream &dsIn)
 {
 	auto light = Create(scene);
-	light->Deserialize(dsIn);
+	light->Deserialize(version,dsIn);
 	return light;
 }
 
@@ -84,9 +84,9 @@ void raytracing::Light::Serialize(DataStream &dsOut) const
 	dsOut->Write(m_bRound);
 }
 
-void raytracing::Light::Deserialize(DataStream &dsIn)
+void raytracing::Light::Deserialize(uint32_t version,DataStream &dsIn)
 {
-	WorldObject::Deserialize(dsIn);
+	WorldObject::Deserialize(version,dsIn);
 	m_size = dsIn->Read<decltype(m_size)>();
 	m_color = dsIn->Read<decltype(m_color)>();
 	m_intensity = dsIn->Read<decltype(m_intensity)>();

@@ -45,6 +45,14 @@ namespace uimg {class ImageBuffer;};
 class DataStream;
 namespace raytracing
 {
+	enum class StereoEye : uint8_t
+	{
+		Left = 0,
+		Right,
+		Count,
+
+		None = std::numeric_limits<uint8_t>::max()
+	};
 	class SceneObject;
 	class Scene;
 	class Shader;
@@ -153,7 +161,7 @@ namespace raytracing
 		static std::shared_ptr<Scene> Create(RenderMode renderMode,const CreateInfo &createInfo={});
 		static std::shared_ptr<Scene> Create(DataStream &ds,RenderMode renderMode,const CreateInfo &createInfo={});
 		static std::shared_ptr<Scene> Create(DataStream &ds);
-		static bool ReadHeaderInfo(DataStream &ds,RenderMode &outRenderMode,CreateInfo &outCreateInfo,SerializationData &outSerializationData,SceneInfo *optOutSceneInfo=nullptr);
+		static bool ReadHeaderInfo(DataStream &ds,RenderMode &outRenderMode,CreateInfo &outCreateInfo,SerializationData &outSerializationData,uint32_t &outVersion,SceneInfo *optOutSceneInfo=nullptr);
 		//
 		static Vector3 ToPragmaPosition(const ccl::float3 &pos);
 		static ccl::float3 ToCyclesVector(const Vector3 &v);
@@ -196,7 +204,7 @@ namespace raytracing
 		static void SetVerbose(bool verbose);
 		static bool IsVerbose();
 
-		static bool ReadSerializationHeader(DataStream &dsIn,RenderMode &outRenderMode,CreateInfo &outCreateInfo,SerializationData &outSerializationData,SceneInfo *optOutSceneInfo=nullptr);
+		static bool ReadSerializationHeader(DataStream &dsIn,RenderMode &outRenderMode,CreateInfo &outCreateInfo,SerializationData &outSerializationData,uint32_t &outVersion,SceneInfo *optOutSceneInfo=nullptr);
 		void Serialize(DataStream &dsOut,const SerializationData &serializationData) const;
 		bool Deserialize(DataStream &dsIn);
 
@@ -218,6 +226,26 @@ namespace raytracing
 		void AddShader(CCLShader &shader);
 		ccl::Session *GetCCLSession();
 	private:
+		enum class ImageRenderStage : uint8_t
+		{
+			Lighting = 0,
+			Albedo,
+			Normal,
+			Denoise,
+			FinalizeImage,
+			MergeStereoscopic,
+
+			SceneAlbedo,
+			SceneNormals,
+			SceneDepth,
+
+			Finalize
+		};
+		enum class RenderStageResult : uint8_t
+		{
+			Complete = 0,
+			Continue
+		};
 		friend Shader;
 		friend Object;
 		friend Light;
@@ -225,6 +253,8 @@ namespace raytracing
 		static ccl::ShaderOutput *FindShaderNodeOutput(ccl::ShaderNode &node,const std::string &output);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const std::string &nodeName);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const OpenImageIO_v2_1::ustring &name);
+		void WaitForRenderStage(SceneWorker &worker,float baseProgress,float progressMultiplier,const std::function<RenderStageResult()> &fOnComplete);
+		RenderStageResult StartNextRenderImageStage(SceneWorker &worker,ImageRenderStage stage,StereoEye eyeStage);
 		void InitializeAlbedoPass(bool reloadShaders);
 		void InitializeNormalPass(bool reloadShaders);
 		void ApplyPostProcessing(uimg::ImageBuffer &imgBuffer,RenderMode renderMode);
@@ -235,6 +265,7 @@ namespace raytracing
 			uimg::ImageBuffer *optImgBufferNormal=nullptr,
 			const std::function<bool(float)> &fProgressCallback=nullptr
 		) const;
+		bool UpdateStereo(raytracing::SceneWorker &worker,ImageRenderStage stage,raytracing::StereoEye &eyeStage);
 		bool IsValidTexture(const std::string &filePath) const;
 		void CloseCyclesScene();
 		void FinalizeAndCloseCyclesScene();
@@ -264,9 +295,13 @@ namespace raytracing
 		StateFlags m_stateFlags = StateFlags::None;
 		RenderMode m_renderMode = RenderMode::RenderImage;
 		std::weak_ptr<Object> m_bakeTarget = {};
-		std::shared_ptr<uimg::ImageBuffer> m_resultImageBuffer = nullptr;
-		std::shared_ptr<uimg::ImageBuffer> m_normalImageBuffer = nullptr;
-		std::shared_ptr<uimg::ImageBuffer> m_albedoImageBuffer = nullptr;
+
+		std::shared_ptr<uimg::ImageBuffer> &GetResultImageBuffer(StereoEye eye=StereoEye::Left);
+		std::shared_ptr<uimg::ImageBuffer> &GetAlbedoImageBuffer(StereoEye eye=StereoEye::Left);
+		std::shared_ptr<uimg::ImageBuffer> &GetNormalImageBuffer(StereoEye eye=StereoEye::Left);
+		std::array<std::shared_ptr<uimg::ImageBuffer>,umath::to_integral(StereoEye::Count)> m_resultImageBuffer = {};
+		std::array<std::shared_ptr<uimg::ImageBuffer>,umath::to_integral(StereoEye::Count)> m_normalImageBuffer = {};
+		std::array<std::shared_ptr<uimg::ImageBuffer>,umath::to_integral(StereoEye::Count)> m_albedoImageBuffer = {};
 	};
 };
 REGISTER_BASIC_BITWISE_OPERATORS(raytracing::Scene::StateFlags)
