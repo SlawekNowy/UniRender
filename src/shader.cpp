@@ -100,6 +100,8 @@ void raytracing::Shader::SetAlphaMode(AlphaMode alphaMode,float alphaCutoff)
 }
 AlphaMode raytracing::Shader::GetAlphaMode() const {return m_alphaMode;}
 float raytracing::Shader::GetAlphaCutoff() const {return m_alphaCutoff;}
+void raytracing::Shader::SetAlphaFactor(float factor) {m_alphaFactor = factor;}
+float raytracing::Shader::GetAlphaFactor() const {return m_alphaFactor;}
 void raytracing::Shader::SetUVHandler(TextureType type,const std::shared_ptr<UVHandler> &uvHandler) {m_uvHandlers.at(umath::to_integral(type)) = uvHandler;}
 const std::shared_ptr<raytracing::UVHandler> &raytracing::Shader::GetUVHandler(TextureType type) const {return m_uvHandlers.at(umath::to_integral(type));}
 void raytracing::Shader::SetUVHandlers(const std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> &handlers) {m_uvHandlers = handlers;}
@@ -146,6 +148,7 @@ void raytracing::Shader::Serialize(DataStream &dsOut) const
 	dsOut->Write(m_flags);
 	dsOut->Write(m_alphaMode);
 	dsOut->Write(m_alphaCutoff);
+	dsOut->Write(m_alphaFactor);
 
 	for(auto &uvHandler : m_uvHandlers)
 	{
@@ -159,7 +162,7 @@ void raytracing::Shader::Serialize(DataStream &dsOut) const
 	}
 	DoSerialize(dsOut);
 }
-raytracing::PShader raytracing::Shader::Create(Scene &scene,DataStream &dsIn)
+raytracing::PShader raytracing::Shader::Create(Scene &scene,DataStream &dsIn,uint32_t version)
 {
 	auto type = dsIn->Read<ShaderType>();
 	auto name = dsIn->ReadString();
@@ -196,16 +199,18 @@ raytracing::PShader raytracing::Shader::Create(Scene &scene,DataStream &dsIn)
 	default:
 		throw std::runtime_error{"Invalid shader type"};
 	}
-	shader->Deserialize(dsIn);
+	shader->Deserialize(dsIn,version);
 	scene.m_shaders.push_back(shader);
 	return shader;
 }
-void raytracing::Shader::Deserialize(DataStream &dsIn)
+void raytracing::Shader::Deserialize(DataStream &dsIn,uint32_t version)
 {
 	m_meshName = dsIn->ReadString();
 	m_flags = dsIn->Read<decltype(m_flags)>();
 	m_alphaMode = dsIn->Read<decltype(m_alphaMode)>();
 	m_alphaCutoff = dsIn->Read<decltype(m_alphaCutoff)>();
+	if(version >= 2)
+		m_alphaFactor = dsIn->Read<decltype(m_alphaFactor)>();
 
 	for(auto &uvHandler : m_uvHandlers)
 	{
@@ -218,7 +223,7 @@ void raytracing::Shader::Deserialize(DataStream &dsIn)
 		uvHandler = UVHandler::Create(dsIn);
 	}
 
-	DoDeserialize(dsIn);
+	DoDeserialize(dsIn,version);
 }
 
 std::shared_ptr<raytracing::CCLShader> raytracing::Shader::GenerateCCLShader()
@@ -258,12 +263,11 @@ void raytracing::ShaderPBR::SetSheen(float sheen) {m_sheen = sheen;}
 void raytracing::ShaderPBR::SetSheenTint(float sheenTint) {m_sheenTint = sheenTint;}
 void raytracing::ShaderPBR::SetClearcoat(float clearcoat) {m_clearcoat = clearcoat;}
 void raytracing::ShaderPBR::SetClearcoatRoughness(float clearcoatRoughness) {m_clearcoatRoughness = clearcoatRoughness;}
-void raytracing::ShaderPBR::SetIOR(float ior) {m_ior = ior;}
 void raytracing::ShaderPBR::SetTransmission(float transmission) {m_transmission = transmission;}
 void raytracing::ShaderPBR::SetTransmissionRoughness(float transmissionRoughness) {m_transmissionRoughness = transmissionRoughness;}
 
 void raytracing::ShaderPBR::SetSubsurface(float subsurface) {m_subsurface = subsurface;}
-void raytracing::ShaderPBR::SetSubsurfaceColor(const Vector3 &color) {m_subsurfaceColor = color;}
+void raytracing::ShaderPBR::SetSubsurfaceColorFactor(const Vector3 &color) {m_subsurfaceColorFactor = color;}
 void raytracing::ShaderPBR::SetSubsurfaceMethod(PrincipledBSDFNode::SubsurfaceMethod method) {m_subsurfaceMethod = method;}
 void raytracing::ShaderPBR::SetSubsurfaceRadius(const Vector3 &radius) {m_subsurfaceRadius = radius;}
 
@@ -404,39 +408,54 @@ bool raytracing::ShaderModuleAlbedo::SetupAlbedoNodes(CCLShader &shader,Socket &
 }
 void raytracing::ShaderModuleAlbedo::SetWrinkleStretchMap(const std::string &wrinkleStretchMap) {m_wrinkleStretchMap = wrinkleStretchMap;}
 void raytracing::ShaderModuleAlbedo::SetWrinkleCompressMap(const std::string &wrinkleCompressMap) {m_wrinkleCompressMap = wrinkleCompressMap;}
-void raytracing::ShaderModuleAlbedo::LinkAlbedo(const Socket &color,const NumberSocket &alpha,bool useAlphaIfFlagSet)
+bool raytracing::ShaderModuleAlbedo::GetAlbedoColorNode(const Shader &shader,CCLShader &cclShader,Socket &outColor,NumberSocket *optOutAlpha)
 {
 	Socket albedoColor;
 	NumberSocket albedoAlpha;
-	auto &shader = color.GetShader();
-	if(SetupAlbedoNodes(shader,albedoColor,albedoAlpha) == false)
-		return;
+	if(SetupAlbedoNodes(cclShader,albedoColor,albedoAlpha) == false)
+		return false;
 	InitializeAlbedoColor(albedoColor);
-	shader.Link(albedoColor,color);
-	if(useAlphaIfFlagSet && shader.GetShader().GetAlphaMode() != AlphaMode::Opaque)
+	outColor = albedoColor;
+	if(optOutAlpha)
+		*optOutAlpha = albedoAlpha *shader.GetAlphaFactor();
+	return true;
+}
+void raytracing::ShaderModuleAlbedo::LinkAlbedo(const Shader &shader,const Socket &color,const NumberSocket *optAlpha,bool useAlphaIfFlagSet,NumberSocket *optOutAlpha)
+{
+	Socket albedoColor;
+	NumberSocket albedoAlpha;
+	auto &cclShader = color.GetShader();
+	if(GetAlbedoColorNode(shader,cclShader,albedoColor,&albedoAlpha) == false)
+		return;
+	cclShader.Link(albedoColor,color);
+	if((optAlpha || optOutAlpha) && useAlphaIfFlagSet && cclShader.GetShader().GetAlphaMode() != AlphaMode::Opaque)
 	{
-		albedoAlpha = shader.ApplyAlphaMode(albedoAlpha,shader.GetShader().GetAlphaMode(),shader.GetShader().GetAlphaCutoff());
+		albedoAlpha = cclShader.ApplyAlphaMode(albedoAlpha,cclShader.GetShader().GetAlphaMode(),cclShader.GetShader().GetAlphaCutoff());
 		InitializeAlbedoAlpha(albedoColor,albedoAlpha);
-		shader.Link(albedoAlpha,alpha);
+		if(optOutAlpha)
+			*optOutAlpha = albedoAlpha;
+		if(optAlpha)
+			cclShader.Link(albedoAlpha,*optAlpha);
 	}
 }
-void raytracing::ShaderModuleAlbedo::LinkAlbedoToBSDF(const Socket &bsdf)
+void raytracing::ShaderModuleAlbedo::LinkAlbedoToBSDF(const Shader &shader,const Socket &bsdf)
 {
 	Socket albedoColor;
 	NumberSocket albedoAlpha;
-	auto &shader = bsdf.GetShader();
-	if(SetupAlbedoNodes(shader,albedoColor,albedoAlpha) == false)
+	auto &cclShader = bsdf.GetShader();
+	if(SetupAlbedoNodes(cclShader,albedoColor,albedoAlpha) == false)
 		return;
 	InitializeAlbedoColor(albedoColor);
-	auto alphaMode = shader.GetShader().GetAlphaMode();
+	auto alphaMode = cclShader.GetShader().GetAlphaMode();
 	if(alphaMode != AlphaMode::Opaque)
 	{
 		InitializeAlbedoAlpha(albedoColor,albedoAlpha);
-		auto nodeTransparentBsdf = shader.AddTransparencyClosure(albedoColor,albedoAlpha,alphaMode,shader.GetShader().GetAlphaCutoff());
-		shader.Link(nodeTransparentBsdf,bsdf);
+		albedoAlpha = albedoAlpha *shader.GetAlphaFactor();
+		auto nodeTransparentBsdf = cclShader.AddTransparencyClosure(albedoColor,albedoAlpha,alphaMode,cclShader.GetShader().GetAlphaCutoff());
+		cclShader.Link(nodeTransparentBsdf,bsdf);
 	}
 	else
-		shader.Link(albedoColor,bsdf);
+		cclShader.Link(albedoColor,bsdf);
 }
 
 void raytracing::ShaderModuleAlbedo::Serialize(DataStream &dsOut) const
@@ -473,24 +492,49 @@ void raytracing::ShaderModuleAlbedo::InitializeAlbedoAlpha(const Socket &inAlbed
 
 bool raytracing::ShaderGlass::InitializeCCLShader(CCLShader &cclShader)
 {
-	auto nodeBsdf = cclShader.AddGlassBSDFNode();
+	auto glassBsdf = cclShader.AddGlassBSDFNode();
 	// Default settings (Taken from Blender)
-	nodeBsdf.SetIOR(1.45f);
-	nodeBsdf.SetDistribution(GlassBSDFNode::Distribution::Beckmann);
-
-	// Albedo map
-	if(GetAlbedoSet().AddAlbedoMap(*this,cclShader).has_value())
-		LinkAlbedoToBSDF(nodeBsdf);
-
-	// Normal map
-	if(AddNormalMap(cclShader))
-		LinkNormal(nodeBsdf.inNormal);
+	glassBsdf.SetIOR(GetIOR());
+	glassBsdf.SetDistribution(GlassBSDFNode::Distribution::Beckmann);
 
 	// Roughness map
 	if(AddRoughnessMap(cclShader))
-		LinkRoughness(nodeBsdf.inRoughness);
+		LinkRoughness(glassBsdf.inRoughness);
 
-	cclShader.Link(nodeBsdf,cclShader.GetOutputNode().inSurface);
+	// See https://docs.blender.org/manual/en/dev/render/cycles/optimizations/reducing_noise.html#render-cycles-reducing-noise-glass-and-transp-shadows
+	auto lightPathNode = cclShader.AddLightPathNode();
+
+	auto min = cclShader.AddMathNode(lightPathNode.outIsShadowRay,lightPathNode.outIsReflectionRay,ccl::NodeMathType::NODE_MATH_MINIMUM);
+	auto translucent = cclShader.AddTranslucentBSDFNode();
+
+	// Albedo map
+	auto alpha = cclShader.AddConstantNode(1.f);
+	/*if(GetAlbedoSet().AddAlbedoMap(*this,cclShader).has_value())
+	{
+		LinkAlbedo(*this,glassBsdf.inColor,nullptr,true,&alpha);
+		LinkAlbedo(*this,translucent.inColor);
+	}
+
+	// Normal map
+	if(AddNormalMap(cclShader))
+	{
+		LinkNormal(glassBsdf.inNormal);
+		LinkNormal(translucent.inNormal);
+	}*/
+
+	auto mix = cclShader.AddMixClosureNode();
+	cclShader.Link(min,mix.inFac);
+	cclShader.Link(glassBsdf,mix.inClosure1);
+	cclShader.Link(translucent,mix.inClosure2);
+
+	auto transparent = cclShader.AddTransparentBSDFNode();
+	auto finalMix = cclShader.AddMixClosureNode();
+	cclShader.Link(alpha,finalMix.inFac);
+	cclShader.Link(transparent,finalMix.inClosure1);
+	cclShader.Link(mix,finalMix.inClosure2);
+
+	//cclShader.Link(finalMix,cclShader.GetOutputNode().inSurface);
+	cclShader.Link(mix,cclShader.GetOutputNode().inSurface);
 	return true;
 }
 
@@ -499,12 +543,14 @@ void raytracing::ShaderGlass::DoSerialize(DataStream &dsIn) const
 	ShaderModuleNormal::Serialize(dsIn);
 	ShaderModuleRoughness::Serialize(dsIn);
 	ShaderModuleSpriteSheet::Serialize(dsIn);
+	ShaderModuleIOR::Serialize(dsIn);
 }
-void raytracing::ShaderGlass::DoDeserialize(DataStream &dsIn)
+void raytracing::ShaderGlass::DoDeserialize(DataStream &dsIn,uint32_t version)
 {
 	ShaderModuleNormal::Deserialize(dsIn);
 	ShaderModuleRoughness::Deserialize(dsIn);
 	ShaderModuleSpriteSheet::Deserialize(dsIn);
+	ShaderModuleIOR::Deserialize(dsIn,version);
 }
 
 ////////////////
@@ -512,7 +558,7 @@ void raytracing::ShaderGlass::DoDeserialize(DataStream &dsIn)
 bool raytracing::ShaderGeneric::InitializeCCLShader(CCLShader &cclShader) {return true;}
 
 void raytracing::ShaderGeneric::DoSerialize(DataStream &dsIn) const {}
-void raytracing::ShaderGeneric::DoDeserialize(DataStream &dsIn) {}
+void raytracing::ShaderGeneric::DoDeserialize(DataStream &dsIn,uint32_t version) {}
 
 ////////////////
 
@@ -520,7 +566,7 @@ bool raytracing::ShaderAlbedo::InitializeCCLShader(CCLShader &cclShader)
 {
 	// Albedo map
 	if(GetAlbedoSet().AddAlbedoMap(*this,cclShader).has_value())
-		LinkAlbedoToBSDF(cclShader.GetOutputNode().inSurface);
+		LinkAlbedoToBSDF(*this,cclShader.GetOutputNode().inSurface);
 	return true;
 }
 void raytracing::ShaderAlbedo::DoSerialize(DataStream &dsIn) const
@@ -528,7 +574,7 @@ void raytracing::ShaderAlbedo::DoSerialize(DataStream &dsIn) const
 	ShaderModuleAlbedo::Serialize(dsIn);
 	ShaderModuleSpriteSheet::Serialize(dsIn);
 }
-void raytracing::ShaderAlbedo::DoDeserialize(DataStream &dsIn)
+void raytracing::ShaderAlbedo::DoDeserialize(DataStream &dsIn,uint32_t version)
 {
 	ShaderModuleAlbedo::Deserialize(dsIn);
 	ShaderModuleSpriteSheet::Deserialize(dsIn);
@@ -544,7 +590,7 @@ bool raytracing::ShaderColorTest::InitializeCCLShader(CCLShader &cclShader)
 	return true;
 }
 void raytracing::ShaderColorTest::DoSerialize(DataStream &dsIn) const {}
-void raytracing::ShaderColorTest::DoDeserialize(DataStream &dsIn) {}
+void raytracing::ShaderColorTest::DoDeserialize(DataStream &dsIn,uint32_t version) {}
 
 ////////////////
 
@@ -560,7 +606,7 @@ bool raytracing::ShaderVolumeScatter::InitializeCCLShader(CCLShader &cclShader)
 	return true;
 }
 void raytracing::ShaderVolumeScatter::DoSerialize(DataStream &dsIn) const {}
-void raytracing::ShaderVolumeScatter::DoDeserialize(DataStream &dsIn) {}
+void raytracing::ShaderVolumeScatter::DoDeserialize(DataStream &dsIn,uint32_t version) {}
 
 ////////////////
 
@@ -576,7 +622,7 @@ void raytracing::ShaderNormal::DoSerialize(DataStream &dsIn) const
 	ShaderModuleNormal::Serialize(dsIn);
 	ShaderModuleSpriteSheet::Serialize(dsIn);
 }
-void raytracing::ShaderNormal::DoDeserialize(DataStream &dsIn)
+void raytracing::ShaderNormal::DoDeserialize(DataStream &dsIn,uint32_t version)
 {
 	ShaderModuleNormal::Deserialize(dsIn);
 	ShaderModuleSpriteSheet::Deserialize(dsIn);
@@ -601,7 +647,7 @@ void raytracing::ShaderDepth::DoSerialize(DataStream &dsIn) const
 	ShaderModuleSpriteSheet::Serialize(dsIn);
 	dsIn->Write(m_farZ);
 }
-void raytracing::ShaderDepth::DoDeserialize(DataStream &dsIn)
+void raytracing::ShaderDepth::DoDeserialize(DataStream &dsIn,uint32_t version)
 {
 	ShaderModuleAlbedo::Deserialize(dsIn);
 	ShaderModuleSpriteSheet::Deserialize(dsIn);
@@ -612,30 +658,141 @@ void raytracing::ShaderDepth::DoDeserialize(DataStream &dsIn)
 
 bool raytracing::ShaderToon::InitializeCCLShader(CCLShader &cclShader)
 {
-	auto nodeBsdf = cclShader.AddToonBSDFNode();
-	nodeBsdf.SetSize(0.5f);
-	nodeBsdf.SetSmooth(0.f);
+	auto e0 = cclShader.AddEmissionNode();
+	e0.SetColor(Vector3{1.f,1.f,1.f});
+	e0.SetStrength(0.f);
+
+	auto td = cclShader.AddToonBSDFNode();
+	td.SetComponent(raytracing::ToonBSDFNode::Component::Diffuse);
+	td.SetColor({1.0,0.637597,0.473532});
+	td.SetSize(0.9);
+	td.SetSmooth(0.0);
+
+	cclShader.Link(cclShader.AddConstantNode(0.9),td.inSize);
+	cclShader.Link(cclShader.AddConstantNode(0.0),td.inSmooth);
+	cclShader.Link(cclShader.AddCombineRGBNode(1.0,0.637597,0.473532),td.inColor);
+
+	auto tg = cclShader.AddToonBSDFNode();
+	tg.SetComponent(raytracing::ToonBSDFNode::Component::Glossy);
+	tg.SetColor({0.099899,0.099899,0.099899});
+	tg.SetSize(0.2);
+	tg.SetSmooth(0.0);
+
+	auto e1 = cclShader.AddEmissionNode();
+	e1.SetColor({0.701102,0.318547,0.212231});
+	e1.SetStrength(1.0);
+
+	auto a0 = cclShader.AddAddClosureNode();
+	cclShader.Link(td,a0.inClosure1);
+	cclShader.Link(tg,a0.inClosure2);
+
+	auto a1 = cclShader.AddAddClosureNode();
+	cclShader.Link(a0,a1.inClosure1);
+	cclShader.Link(e1,a1.inClosure2);
+
+	auto lp = cclShader.AddLightPathNode();
+
+	auto m = cclShader.AddMixClosureNode();
+	cclShader.Link(a1,m.inClosure1);
+	cclShader.Link(e0,m.inClosure2);
+	cclShader.Link(lp.outIsDiffuseRay,m.inFac);
+
+	//cclShader.Link(m,cclShader.GetOutputNode().inSurface);
+
+	cclShader.Link(td,cclShader.GetOutputNode().inSurface);
+	return true;
+#if 0
+	// See https://www.blendswap.com/blend/20178
+	auto diffEmission = cclShader.AddEmissionNode();
+	diffEmission.SetStrength(0.f);
+
+	auto diffuseToon = cclShader.AddToonBSDFNode();
+	diffuseToon.SetComponent(raytracing::ToonBSDFNode::Component::Diffuse);
+	diffuseToon.SetSize(m_diffuseSize);
+	diffuseToon.SetSmooth(m_diffuseSmooth);
 
 	// Albedo map
 	if(GetAlbedoSet().AddAlbedoMap(*this,cclShader).has_value())
-		LinkAlbedoToBSDF(nodeBsdf);
+		LinkAlbedoToBSDF(*this,diffuseToon.inColor);
+
+	auto specularToon = cclShader.AddToonBSDFNode();
+	specularToon.SetComponent(raytracing::ToonBSDFNode::Component::Glossy);
+	specularToon.SetSize(m_specularSize);
+	specularToon.SetSmooth(m_specularSmooth);
+	specularToon.SetColor(m_specularColor);
+
+	// Roughness map
+	if(AddRoughnessMap(cclShader).has_value())
+	{
+		auto roughnessRgb = cclShader.AddSeparateRGBNode();
+		LinkRoughness(roughnessRgb.inColor);
+
+		auto specular = cclShader.AddCombineRGBNode(1.f -roughnessRgb.outR,1.f -roughnessRgb.outG,1.f -roughnessRgb.outB);
+		cclShader.Link(specular,specularToon.inColor);
+	}
 
 	// Normal map
 	if(AddNormalMap(cclShader))
-		LinkNormal(nodeBsdf.inNormal);
-	cclShader.Link(nodeBsdf,cclShader.GetOutputNode().inSurface);
+	{
+		LinkNormal(diffuseToon.inNormal);
+		LinkNormal(specularToon.inNormal);
+	}
+
+	auto emission = cclShader.AddEmissionNode();
+	emission.SetColor(m_shadeColor);
+
+	auto diffuseSpecular = cclShader.AddAddClosureNode();
+	cclShader.Link(diffuseToon,diffuseSpecular.inClosure1);
+	cclShader.Link(specularToon,diffuseSpecular.inClosure2);
+
+	auto diffSpecEmission = cclShader.AddAddClosureNode();
+	cclShader.Link(diffuseSpecular,diffSpecEmission.inClosure1);
+	cclShader.Link(emission,diffSpecEmission.inClosure2);
+	
+	auto lightPathNode = cclShader.AddLightPathNode();
+	auto bsdf = cclShader.AddMixClosureNode();
+	cclShader.Link(diffSpecEmission,bsdf.inClosure1);
+	cclShader.Link(diffEmission,bsdf.inClosure2);
+	cclShader.Link(lightPathNode.outIsDiffuseRay,bsdf.inFac);
+
+	cclShader.Link(bsdf,cclShader.GetOutputNode().inSurface);
 	return true;
+#endif
 }
 void raytracing::ShaderToon::DoSerialize(DataStream &dsIn) const
 {
 	ShaderModuleNormal::Serialize(dsIn);
 	ShaderModuleSpriteSheet::Serialize(dsIn);
+	ShaderModuleRoughness::Serialize(dsIn);
+
+	dsIn->Write<decltype(m_specularColor)>(m_specularColor);
+	dsIn->Write<decltype(m_shadeColor)>(m_shadeColor);
+	dsIn->Write<decltype(m_diffuseSize)>(m_diffuseSize);
+	dsIn->Write<decltype(m_diffuseSmooth)>(m_diffuseSmooth);
+	dsIn->Write<decltype(m_specularSize)>(m_specularSize);
+	dsIn->Write<decltype(m_specularSmooth)>(m_specularSmooth);
 }
-void raytracing::ShaderToon::DoDeserialize(DataStream &dsIn)
+void raytracing::ShaderToon::DoDeserialize(DataStream &dsIn,uint32_t version)
 {
 	ShaderModuleNormal::Deserialize(dsIn);
 	ShaderModuleSpriteSheet::Deserialize(dsIn);
+	if(version >= 2)
+	{
+		ShaderModuleRoughness::Deserialize(dsIn);
+		m_specularColor = dsIn->Read<decltype(m_specularColor)>();
+		m_shadeColor = dsIn->Read<decltype(m_shadeColor)>();
+		m_diffuseSize = dsIn->Read<decltype(m_diffuseSize)>();
+		m_diffuseSmooth = dsIn->Read<decltype(m_diffuseSmooth)>();
+		m_specularSize = dsIn->Read<decltype(m_specularSize)>();
+		m_specularSmooth = dsIn->Read<decltype(m_specularSmooth)>();
+	}
 }
+void raytracing::ShaderToon::SetSpecularColor(const Vector3 &col) {m_specularColor = col;}
+void raytracing::ShaderToon::SetShadeColor(const Vector3 &col) {m_shadeColor = col;}
+void raytracing::ShaderToon::SetDiffuseSize(float size) {m_diffuseSize = size;}
+void raytracing::ShaderToon::SetDiffuseSmooth(float smooth) {m_diffuseSmooth = smooth;}
+void raytracing::ShaderToon::SetSpecularSize(float specSize) {m_specularSize = specSize;}
+void raytracing::ShaderToon::SetSpecularSmooth(float smooth) {m_specularSmooth = smooth;}
 
 ////////////////
 
@@ -911,6 +1068,22 @@ void raytracing::ShaderModuleEmission::Deserialize(DataStream &dsIn)
 
 ////////////////
 
+void raytracing::ShaderModuleIOR::SetIOR(float ior) {m_ior = ior;}
+float raytracing::ShaderModuleIOR::GetIOR() const {return m_ior;}
+
+void raytracing::ShaderModuleIOR::Serialize(DataStream &dsOut) const
+{
+	dsOut->Write(m_ior);
+}
+void raytracing::ShaderModuleIOR::Deserialize(DataStream &dsIn,uint32_t version)
+{
+	if(version < 2)
+		return;
+	m_ior = dsIn->Read<decltype(m_ior)>();
+}
+
+////////////////
+
 void raytracing::ShaderParticle::SetRenderFlags(RenderFlags flags) {m_renderFlags = flags;}
 void raytracing::ShaderParticle::SetColor(const Color &color) {m_color = color;}
 const Color &raytracing::ShaderParticle::GetColor() const {return m_color;}
@@ -954,7 +1127,7 @@ bool raytracing::ShaderParticle::InitializeCCLShader(CCLShader &cclShader)
 	cclShader.Link(diffuseBsdf,mix.inClosure2);
 
 	auto alphaHandled = InitializeTransparency(cclShader,*albedoNode,mix.inFac);
-	LinkAlbedo(diffuseBsdf.inColor,mix.inFac,alphaHandled == util::EventReply::Unhandled);
+	LinkAlbedo(*this,diffuseBsdf.inColor,&mix.inFac,alphaHandled == util::EventReply::Unhandled);
 
 	if(AddEmissionMap(cclShader).has_value())
 	{
@@ -998,9 +1171,9 @@ void raytracing::ShaderParticle::DoSerialize(DataStream &dsIn) const
 	dsIn->Write(m_renderFlags);
 	dsIn->Write(m_color);
 }
-void raytracing::ShaderParticle::DoDeserialize(DataStream &dsIn)
+void raytracing::ShaderParticle::DoDeserialize(DataStream &dsIn,uint32_t version)
 {
-	ShaderPBR::DoDeserialize(dsIn);
+	ShaderPBR::DoDeserialize(dsIn,version);
 
 	m_renderFlags = dsIn->Read<decltype(m_renderFlags)>();
 	m_color = dsIn->Read<decltype(m_color)>();
@@ -1018,9 +1191,15 @@ bool raytracing::ShaderPBR::InitializeCCLShader(CCLShader &cclShader)
 	if(albedoNode.has_value() == false)
 		return false;
 
+	float specular;
+	if(m_specular.has_value())
+		specular = *m_specular;
+	else
+		specular = umath::calc_dielectric_specular_reflection(GetIOR());
+
 	auto nodeBsdf = cclShader.AddPrincipledBSDFNode();
 	nodeBsdf.SetMetallic(m_metallic);
-	nodeBsdf.SetSpecular(m_specular);
+	nodeBsdf.SetSpecular(specular);
 	nodeBsdf.SetSpecularTint(m_specularTint);
 	nodeBsdf.SetAnisotropic(m_anisotropic);
 	nodeBsdf.SetAnisotropicRotation(m_anisotropicRotation);
@@ -1028,19 +1207,27 @@ bool raytracing::ShaderPBR::InitializeCCLShader(CCLShader &cclShader)
 	nodeBsdf.SetSheenTint(m_sheenTint);
 	nodeBsdf.SetClearcoat(m_clearcoat);
 	nodeBsdf.SetClearcoatRoughness(m_clearcoatRoughness);
-	nodeBsdf.SetIOR(m_ior);
+	nodeBsdf.SetIOR(GetIOR());
 	nodeBsdf.SetTransmission(m_transmission);
 	nodeBsdf.SetTransmissionRoughness(m_transmissionRoughness);
 
 	// Subsurface scattering
 	nodeBsdf.SetSubsurface(m_subsurface);
-	nodeBsdf.SetSubsurfaceColor(m_subsurfaceColor);
-	nodeBsdf.SetSubsurfaceMethod(m_subsurfaceMethod);
-	nodeBsdf.SetSubsurfaceRadius(m_subsurfaceRadius);
+	if(m_subsurface > 0.f)
+	{
+		Socket albedoColor;
+		if(GetAlbedoColorNode(*this,cclShader,albedoColor))
+		{
+			albedoColor = cclShader.AddMixNode(albedoColor,cclShader.AddCombineRGBNode(m_subsurfaceColorFactor.r,m_subsurfaceColorFactor.g,m_subsurfaceColorFactor.b));
+			cclShader.Link(albedoColor,nodeBsdf.inSubsurfaceColor);
+			nodeBsdf.SetSubsurfaceMethod(m_subsurfaceMethod);
+			nodeBsdf.SetSubsurfaceRadius(m_subsurfaceRadius);
+		}
+	}
 
 	// Albedo map
 	auto alphaHandled = InitializeTransparency(cclShader,*albedoNode,nodeBsdf.inAlpha);
-	LinkAlbedo(nodeBsdf.inBaseColor,nodeBsdf.inAlpha,alphaHandled == util::EventReply::Unhandled);
+	LinkAlbedo(*this,nodeBsdf.inBaseColor,&nodeBsdf.inAlpha,alphaHandled == util::EventReply::Unhandled);
 
 	// Normal map
 	if(AddNormalMap(cclShader).has_value())
@@ -1086,7 +1273,7 @@ bool raytracing::ShaderPBR::InitializeCCLShader(CCLShader &cclShader)
 		cclShader.Link(cclShader.AddCombineRGBNode(m_specular,m_specular,m_specular),cclShader.GetOutputNode().inSurface);
 		return true;
 	case DebugMode::Albedo:
-		LinkAlbedoToBSDF(cclShader.GetOutputNode().inSurface);
+		LinkAlbedoToBSDF(*this,cclShader.GetOutputNode().inSurface);
 		return true;
 	case DebugMode::Normal:
 		LinkNormalToBSDF(cclShader.GetOutputNode().inSurface);
@@ -1111,7 +1298,7 @@ bool raytracing::ShaderPBR::InitializeCCLShader(CCLShader &cclShader)
 	}
 	case DebugMode::Subsurface:
 	{
-		auto color = cclShader.AddCombineRGBNode(m_subsurfaceColor.r,m_subsurfaceColor.g,m_subsurfaceColor.b);
+		auto color = cclShader.AddCombineRGBNode(m_subsurfaceColorFactor.r,m_subsurfaceColorFactor.g,m_subsurfaceColorFactor.b);
 		cclShader.Link(color,cclShader.GetOutputNode().inSurface);
 		return true;
 	}
@@ -1127,6 +1314,7 @@ void raytracing::ShaderPBR::DoSerialize(DataStream &dsIn) const
 	ShaderModuleMetalness::Serialize(dsIn);
 	ShaderModuleEmission::Serialize(dsIn);
 	ShaderModuleSpriteSheet::Serialize(dsIn);
+	ShaderModuleIOR::Serialize(dsIn);
 
 	dsIn->Write(m_metallic);
 	dsIn->Write(m_specular);
@@ -1137,22 +1325,22 @@ void raytracing::ShaderPBR::DoSerialize(DataStream &dsIn) const
 	dsIn->Write(m_sheenTint);
 	dsIn->Write(m_clearcoat);
 	dsIn->Write(m_clearcoatRoughness);
-	dsIn->Write(m_ior);
 	dsIn->Write(m_transmission);
 	dsIn->Write(m_transmissionRoughness);
 
 	dsIn->Write(m_subsurface);
-	dsIn->Write(m_subsurfaceColor);
+	dsIn->Write(m_subsurfaceColorFactor);
 	dsIn->Write(m_subsurfaceMethod);
 	dsIn->Write(m_subsurfaceRadius);
 }
-void raytracing::ShaderPBR::DoDeserialize(DataStream &dsIn)
+void raytracing::ShaderPBR::DoDeserialize(DataStream &dsIn,uint32_t version)
 {
 	ShaderModuleNormal::Deserialize(dsIn);
 	ShaderModuleRoughness::Deserialize(dsIn);
 	ShaderModuleMetalness::Deserialize(dsIn);
 	ShaderModuleEmission::Deserialize(dsIn);
 	ShaderModuleSpriteSheet::Deserialize(dsIn);
+	ShaderModuleIOR::Deserialize(dsIn,version);
 
 	m_metallic = dsIn->Read<decltype(m_metallic)>();
 	m_specular = dsIn->Read<decltype(m_specular)>();
@@ -1163,12 +1351,13 @@ void raytracing::ShaderPBR::DoDeserialize(DataStream &dsIn)
 	m_sheenTint = dsIn->Read<decltype(m_sheenTint)>();
 	m_clearcoat = dsIn->Read<decltype(m_clearcoat)>();
 	m_clearcoatRoughness = dsIn->Read<decltype(m_clearcoatRoughness)>();
-	m_ior = dsIn->Read<decltype(m_ior)>();
+	if(version < 2)
+		SetIOR(dsIn->Read<float>());
 	m_transmission = dsIn->Read<decltype(m_transmission)>();
 	m_transmissionRoughness = dsIn->Read<decltype(m_transmissionRoughness)>();
 
 	m_subsurface = dsIn->Read<decltype(m_subsurface)>();
-	m_subsurfaceColor = dsIn->Read<decltype(m_subsurfaceColor)>();
+	m_subsurfaceColorFactor = dsIn->Read<decltype(m_subsurfaceColorFactor)>();
 	m_subsurfaceMethod = dsIn->Read<decltype(m_subsurfaceMethod)>();
 	m_subsurfaceRadius = dsIn->Read<decltype(m_subsurfaceRadius)>();
 }

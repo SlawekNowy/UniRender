@@ -125,8 +125,8 @@ void raytracing::Mesh::Serialize(DataStream &dsOut) const
 	auto numTris = umath::min(m_numTris,m_mesh.triangles.size());
 	dsOut->WriteString(m_mesh.name.c_str());
 	dsOut->Write(m_flags);
-	dsOut->Write(numVerts);
-	dsOut->Write(numTris);
+	dsOut->Write<decltype(m_numVerts)>(numVerts);
+	dsOut->Write<decltype(m_numTris)>(numTris);
 
 	auto flags = SerializationFlags::None;
 	if(m_alphas)
@@ -144,6 +144,8 @@ void raytracing::Mesh::Serialize(DataStream &dsOut) const
 
 	if(umath::is_flag_set(flags,SerializationFlags::UseSubdivFaces))
 		dsOut->Write(reinterpret_cast<const uint8_t*>(m_mesh.subd_faces.data()),numVerts *sizeof(m_mesh.subd_faces[0]));
+
+	// Validate();
 
 	dsOut->Write(reinterpret_cast<const uint8_t*>(m_mesh.triangles.data()),numTris *3 *sizeof(m_mesh.triangles[0]));
 	dsOut->Write(reinterpret_cast<const uint8_t*>(m_mesh.shader.data()),numTris *sizeof(m_mesh.shader[0]));
@@ -204,6 +206,8 @@ void raytracing::Mesh::Deserialize(DataStream &dsIn)
 	dsIn->Read(m_mesh.shader.data(),m_numTris *sizeof(m_mesh.shader[0]));
 	m_mesh.smooth.resize(m_numTris);
 	dsIn->Read(m_mesh.smooth.data(),m_numTris *sizeof(m_mesh.smooth[0]));
+
+	// Validate();
 
 	if(umath::is_flag_set(flags,SerializationFlags::UseSubdivFaces))
 	{
@@ -359,6 +363,16 @@ uint32_t raytracing::Mesh::AddSubMeshShader(Shader &shader)
 {
 	m_subMeshShaders.push_back(shader.shared_from_this());
 	return m_subMeshShaders.size() -1;
+}
+
+void raytracing::Mesh::Validate() const
+{
+	for(auto i=decltype(m_numTris){0u};i<m_numTris;++i)
+	{
+		auto idx = m_mesh.triangles[i];
+		if(idx < 0 || idx >= m_mesh.verts.size())
+			throw std::range_error{"Triangle index " +std::to_string(idx) +" is out of range of number of vertices (" +std::to_string(m_mesh.verts.size()) +")"};
+	}
 }
 
 ccl::Mesh *raytracing::Mesh::operator->() {return &m_mesh;}

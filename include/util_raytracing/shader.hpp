@@ -53,7 +53,7 @@ namespace raytracing
 	public:
 		template<class TShader>
 			static std::shared_ptr<TShader> Create(Scene &scene,const std::string &name);
-		static PShader Create(Scene &scene,DataStream &dsIn);
+		static PShader Create(Scene &scene,DataStream &dsIn,uint32_t version);
 
 		enum class Flags : uint8_t
 		{
@@ -89,11 +89,14 @@ namespace raytracing
 		const std::shared_ptr<UVHandler> &GetUVHandler(TextureType type) const;
 
 		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
+		void Deserialize(DataStream &dsIn,uint32_t version);
 
 		void SetAlphaMode(AlphaMode alphaMode,float alphaCutoff=0.5f);
 		AlphaMode GetAlphaMode() const;
 		float GetAlphaCutoff() const;
+
+		void SetAlphaFactor(float factor);
+		float GetAlphaFactor() const;
 
 		void SetUVHandlers(const std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> &handlers);
 		const std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> &GetUVHandlers() const;
@@ -105,13 +108,14 @@ namespace raytracing
 		bool SetupCCLShader(CCLShader &cclShader);
 		virtual bool InitializeCCLShader(CCLShader &cclShader)=0;
 		virtual void DoSerialize(DataStream &dsIn) const=0;
-		virtual void DoDeserialize(DataStream &dsIn)=0;
+		virtual void DoDeserialize(DataStream &dsIn,uint32_t version)=0;
 
 		std::string m_name;
 		std::string m_meshName;
 		Flags m_flags = Flags::None;
 		AlphaMode m_alphaMode = AlphaMode::Opaque;
 		float m_alphaCutoff = 0.5f;
+		float m_alphaFactor = 1.f;
 		Scene &m_scene;
 		std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> m_uvHandlers = {};
 	};
@@ -210,8 +214,9 @@ namespace raytracing
 		void SetWrinkleStretchMap(const std::string &wrinkleStretchMap);
 		void SetWrinkleCompressMap(const std::string &wrinkleCompressMap);
 
-		void LinkAlbedo(const Socket &color,const NumberSocket &alpha,bool useAlphaIfFlagSet=true);
-		void LinkAlbedoToBSDF(const Socket &bsdf);
+		bool GetAlbedoColorNode(const Shader &shader,CCLShader &cclShader,Socket &outColor,NumberSocket *optOutAlpha=nullptr);
+		void LinkAlbedo(const Shader &shader,const Socket &color,const NumberSocket *optLinkAlpha=nullptr,bool useAlphaIfFlagSet=true,NumberSocket *optOutAlpha=nullptr);
+		void LinkAlbedoToBSDF(const Shader &shader,const Socket &bsdf);
 
 		void Serialize(DataStream &dsOut) const;
 		void Deserialize(DataStream &dsIn);
@@ -317,6 +322,19 @@ namespace raytracing
 		std::optional<Socket> m_emissionSocket = {};
 	};
 
+	class DLLRTUTIL ShaderModuleIOR
+	{
+	public:
+		virtual ~ShaderModuleIOR()=default;
+		void SetIOR(float ior);
+		float GetIOR() const;
+
+		void Serialize(DataStream &dsOut) const;
+		void Deserialize(DataStream &dsIn,uint32_t version);
+	private:
+		float m_ior = 1.45f;
+	};
+
 	/////////////////////
 
 	class DLLRTUTIL ShaderGeneric
@@ -325,7 +343,7 @@ namespace raytracing
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
 		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn) override;
+		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
 		using Shader::Shader;
 	};
 
@@ -337,7 +355,7 @@ namespace raytracing
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
 		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn) override;
+		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
 		using Shader::Shader;
 	};
 
@@ -347,7 +365,7 @@ namespace raytracing
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
 		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn) override;
+		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
 		using Shader::Shader;
 	};
 
@@ -357,7 +375,7 @@ namespace raytracing
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
 		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn) override;
+		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
 		using Shader::Shader;
 	};
 
@@ -369,7 +387,7 @@ namespace raytracing
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
 		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn) override;
+		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
 		using Shader::Shader;
 	};
 
@@ -383,7 +401,7 @@ namespace raytracing
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
 		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn) override;
+		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
 		using Shader::Shader;
 	private:
 		float m_farZ = 1.f;
@@ -392,25 +410,41 @@ namespace raytracing
 	class DLLRTUTIL ShaderToon
 		: public Shader,
 		public ShaderModuleNormal,
-		public ShaderModuleSpriteSheet
+		public ShaderModuleSpriteSheet,
+		public ShaderModuleRoughness
 	{
+	public:
+		void SetSpecularColor(const Vector3 &col);
+		void SetShadeColor(const Vector3 &col);
+		void SetDiffuseSize(float size);
+		void SetDiffuseSmooth(float smooth);
+		void SetSpecularSize(float specSize);
+		void SetSpecularSmooth(float smooth);
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
 		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn) override;
+		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
 		using Shader::Shader;
+	private:
+		Vector3 m_specularColor {0.1f,0.1f,0.1f};
+		Vector3 m_shadeColor {0.701102f,0.318547f,0.212231f};
+		float m_diffuseSize = 0.9f;
+		float m_diffuseSmooth = 0.f;
+		float m_specularSize = 0.2f;
+		float m_specularSmooth = 0.f;
 	};
 
 	class DLLRTUTIL ShaderGlass
 		: public Shader,
 		public ShaderModuleNormal,
 		public ShaderModuleRoughness,
-		public ShaderModuleSpriteSheet
+		public ShaderModuleSpriteSheet,
+		public ShaderModuleIOR
 	{
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
 		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn) override;
+		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
 		using Shader::Shader;
 	};
 
@@ -420,7 +454,8 @@ namespace raytracing
 		public ShaderModuleRoughness,
 		public ShaderModuleMetalness,
 		public ShaderModuleEmission,
-		public ShaderModuleSpriteSheet
+		public ShaderModuleSpriteSheet,
+		public ShaderModuleIOR
 	{
 	public:
 		void SetMetallic(float metallic);
@@ -432,25 +467,24 @@ namespace raytracing
 		void SetSheenTint(float sheenTint);
 		void SetClearcoat(float clearcoat);
 		void SetClearcoatRoughness(float clearcoatRoughness);
-		void SetIOR(float ior);
 		void SetTransmission(float transmission);
 		void SetTransmissionRoughness(float transmissionRoughness);
 
 		// Subsurface scattering
 		void SetSubsurface(float subsurface);
-		void SetSubsurfaceColor(const Vector3 &color);
+		void SetSubsurfaceColorFactor(const Vector3 &color);
 		void SetSubsurfaceMethod(PrincipledBSDFNode::SubsurfaceMethod method);
 		void SetSubsurfaceRadius(const Vector3 &radius);
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
 		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn) override;
+		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
 		virtual util::EventReply InitializeTransparency(CCLShader &cclShader,ImageTextureNode &albedoNode,const NumberSocket &alphaSocket) const;
 		using Shader::Shader;
 	private:
 		// Default settings (Taken from Blender)
 		float m_metallic = 0.f;
-		float m_specular = 0.5f;
+		std::optional<float> m_specular {};
 		float m_specularTint = 0.f;
 		float m_anisotropic = 0.f;
 		float m_anisotropicRotation = 0.f;
@@ -458,13 +492,12 @@ namespace raytracing
 		float m_sheenTint = 0.5f;
 		float m_clearcoat = 0.f;
 		float m_clearcoatRoughness = 0.03f;
-		float m_ior = 1.45f;
 		float m_transmission = 0.f;
 		float m_transmissionRoughness = 0.f;
 
 		// Subsurface scattering
 		float m_subsurface = 0.f;
-		Vector3 m_subsurfaceColor = {1.f,1.f,1.f};
+		Vector3 m_subsurfaceColorFactor = {1.f,1.f,1.f};
 		PrincipledBSDFNode::SubsurfaceMethod m_subsurfaceMethod = PrincipledBSDFNode::SubsurfaceMethod::Burley;
 		Vector3 m_subsurfaceRadius = {0.f,0.f,0.f};
 	};
@@ -486,7 +519,7 @@ namespace raytracing
 	protected:
 		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
 		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn) override;
+		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
 		virtual util::EventReply InitializeTransparency(CCLShader &cclShader,ImageTextureNode &albedoNode,const NumberSocket &alphaSocket) const override;
 		virtual void InitializeAlbedoColor(Socket &inOutColor) override;
 		virtual void InitializeAlbedoAlpha(const Socket &inAlbedoColor,NumberSocket &inOutAlpha) override;

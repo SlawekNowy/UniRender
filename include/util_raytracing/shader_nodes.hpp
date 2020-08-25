@@ -14,9 +14,9 @@
 
 namespace ccl
 {
-	class PrincipledBsdfNode; class NormalMapNode; class ToonBsdfNode; class GlassBsdfNode; class MixClosureNode; class TransparentBsdfNode; class MixNode;
+	class PrincipledBsdfNode; class NormalMapNode; class ToonBsdfNode; class GlassBsdfNode; class MixClosureNode; class AddClosureNode; class TransparentBsdfNode; class TranslucentBsdfNode; class MixNode;
 	class SeparateXYZNode; class CombineXYZNode; class SeparateRGBNode; class CombineRGBNode; class BackgroundNode; class TextureCoordinateNode; class MappingNode;
-	class EnvironmentTextureNode; class ImageTextureNode; class ColorNode; class MathNode; class AttributeNode; class LightPathNode; class DiffuseBsdfNode;
+	class EnvironmentTextureNode; class ImageTextureNode; class ColorNode; class EmissionNode; class MathNode; class AttributeNode; class LightPathNode; class DiffuseBsdfNode;
 	class CameraNode; class HSVNode; class ScatterVolumeNode;
 	enum AttributeStandard : int32_t;
 	enum NodeMathType : int32_t;
@@ -265,6 +265,19 @@ namespace raytracing
 	private:
 		ccl::MixClosureNode *m_node = nullptr;
 	};
+	struct DLLRTUTIL AddClosureNode
+		: public Node
+	{
+		AddClosureNode(CCLShader &shader,const std::string &nodeName,ccl::AddClosureNode &node);
+		Socket inClosure1;
+		Socket inClosure2;
+
+		Socket outClosure;
+
+		operator const Socket&() const;
+	private:
+		ccl::AddClosureNode *m_node = nullptr;
+	};
 	struct DLLRTUTIL BackgroundNode
 		: public Node
 	{
@@ -338,13 +351,18 @@ namespace raytracing
 	struct DLLRTUTIL EmissionNode
 		: public Node
 	{
-		EmissionNode(CCLShader &shader,const std::string &nodeName);
+		EmissionNode(CCLShader &shader,const std::string &nodeName,ccl::EmissionNode &node);
 		Socket inColor;
 		NumberSocket inStrength;
 		NumberSocket inSurfaceMixWeight;
 		Socket outEmission;
 
+		void SetColor(const Vector3 &color);
+		void SetStrength(float strength);
+
 		operator const Socket&() const;
+	private:
+		ccl::EmissionNode *m_node = nullptr;
 	};
 	struct DLLRTUTIL ColorNode
 		: public Node
@@ -447,6 +465,23 @@ namespace raytracing
 	private:
 		ccl::TransparentBsdfNode *m_node = nullptr;
 	};
+	struct DLLRTUTIL TranslucentBsdfNode
+		: public Node
+	{
+		TranslucentBsdfNode(CCLShader &shader,const std::string &nodeName,ccl::TranslucentBsdfNode &node);
+		Socket inColor;
+		Socket inNormal;
+		NumberSocket inSurfaceMixWeight;
+
+		Socket outBsdf;
+
+		operator const Socket&() const;
+
+		void SetColor(const Vector3 &color);
+		void SetSurfaceMixWeight(float weight);
+	private:
+		ccl::TranslucentBsdfNode *m_node = nullptr;
+	};
 	struct DLLRTUTIL DiffuseBsdfNode
 		: public Node
 	{
@@ -504,8 +539,12 @@ namespace raytracing
 
 		enum class SubsurfaceMethod : uint8_t
 		{
-			Burley = 0u,
-			RandomWalk
+			Cubic = 0,
+			Gaussian,
+			Principled,
+			Burley,
+			RandomWalk,
+			PrincipledRandomWalk
 		};
 
 		PrincipledBSDFNode(CCLShader &shader,const std::string &nodeName,ccl::PrincipledBsdfNode &principledBSDF);

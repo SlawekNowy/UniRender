@@ -56,12 +56,14 @@ namespace raytracing
 		SeparateXYZNode AddSeparateXYZNode(const Socket &srcSocket);
 		CombineXYZNode AddCombineXYZNode(const std::optional<const NumberSocket> &x={},const std::optional<const NumberSocket> &y={},const std::optional<const NumberSocket> &z={});
 		SeparateRGBNode AddSeparateRGBNode(const Socket &srcSocket);
+		SeparateRGBNode AddSeparateRGBNode();
 		CombineRGBNode AddCombineRGBNode(const std::optional<const NumberSocket> &r={},const std::optional<const NumberSocket> &g={},const std::optional<const NumberSocket> &b={});
 		GeometryNode AddGeometryNode();
 		CameraDataNode AddCameraDataNode();
 		NormalMapNode AddNormalMapNode();
 		LightPathNode AddLightPathNode();
 		MixClosureNode AddMixClosureNode();
+		AddClosureNode AddAddClosureNode();
 		ScatterVolumeNode AddScatterVolumeNode();
 		HSVNode AddHSVNode();
 		MixNode AddMixNode(const Socket &socketColor1,const Socket &socketColor2,MixNode::Type type=MixNode::Type::Mix,const std::optional<const NumberSocket> &fac={});
@@ -79,6 +81,7 @@ namespace raytracing
 		ToonBSDFNode AddToonBSDFNode();
 		GlassBSDFNode AddGlassBSDFNode();
 		TransparentBsdfNode AddTransparentBSDFNode();
+		TranslucentBsdfNode AddTranslucentBSDFNode();
 		DiffuseBsdfNode AddDiffuseBSDFNode();
 		MixClosureNode AddTransparencyClosure(const Socket &colorSocket,const NumberSocket &alphaSocket,AlphaMode alphaMode,float alphaCutoff=0.5f);
 		NumberSocket ApplyAlphaMode(const NumberSocket &alphaSocket,AlphaMode alphaMode,float alphaCutoff=0.5f);

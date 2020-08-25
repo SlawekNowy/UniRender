@@ -263,6 +263,13 @@ raytracing::MixClosureNode::operator const raytracing::Socket&() const {return o
 
 void raytracing::MixClosureNode::SetFactor(float fac) {m_node->fac = fac;}
 
+raytracing::AddClosureNode::AddClosureNode(CCLShader &shader,const std::string &nodeName,ccl::AddClosureNode &node)
+	: Node{shader},inClosure1{shader,nodeName,"closure1",false},inClosure2{shader,nodeName,"closure2",false},outClosure{shader,nodeName,"closure"},
+	m_node{&node}
+{}
+
+raytracing::AddClosureNode::operator const raytracing::Socket&() const {return outClosure;}
+
 raytracing::BackgroundNode::BackgroundNode(CCLShader &shader,const std::string &nodeName,ccl::BackgroundNode &node)
 	: Node{shader},inColor{shader,nodeName,"color",false},inStrength{Socket{shader,nodeName,"strength",false}},inSurfaceMixWeight{Socket{shader,nodeName,"surface_mix_weight",false}},
 	outBackground{shader,nodeName,"background"},m_node{&node}
@@ -322,12 +329,16 @@ raytracing::ScatterVolumeNode::ScatterVolumeNode(CCLShader &shader,const std::st
 
 raytracing::ScatterVolumeNode::operator const raytracing::Socket&() const {return outVolume;}
 
-raytracing::EmissionNode::EmissionNode(CCLShader &shader,const std::string &nodeName)
+raytracing::EmissionNode::EmissionNode(CCLShader &shader,const std::string &nodeName,ccl::EmissionNode &node)
 	: Node{shader},inColor{shader,nodeName,"color",false},inStrength{Socket{shader,nodeName,"strength",false}},inSurfaceMixWeight{Socket{shader,nodeName,"surface_mix_weight",false}},
-	outEmission{shader,nodeName,"emission"}
-{}
+	outEmission{shader,nodeName,"emission"},m_node{&node}
+{
+	node.strength = 1.f; // Default strength for emission node is 10, which is a bit much for our purposes
+}
 
 raytracing::EmissionNode::operator const raytracing::Socket&() const {return outEmission;}
+void raytracing::EmissionNode::SetColor(const Vector3 &color) {m_node->color = {color.r,color.g,color.b};}
+void raytracing::EmissionNode::SetStrength(float strength) {m_node->strength = strength;}
 
 raytracing::ColorNode::ColorNode(CCLShader &shader,const std::string &nodeName,ccl::ColorNode &node)
 	: Node{shader},outColor{shader,nodeName,"color"},
@@ -435,6 +446,16 @@ raytracing::TransparentBsdfNode::operator const raytracing::Socket&() const {ret
 
 void raytracing::TransparentBsdfNode::SetColor(const Vector3 &color) {m_node->color = {color.r,color.g,color.b};}
 void raytracing::TransparentBsdfNode::SetSurfaceMixWeight(float weight) {m_node->surface_mix_weight = weight;}
+
+raytracing::TranslucentBsdfNode::TranslucentBsdfNode(CCLShader &shader,const std::string &nodeName,ccl::TranslucentBsdfNode &node)
+	: Node{shader},inColor{shader,nodeName,"color",false},inNormal{shader,nodeName,"normal",false},inSurfaceMixWeight{Socket{shader,nodeName,"surface_mix_weight",false}},outBsdf{shader,nodeName,"bsdf"},
+	m_node{&node}
+{}
+
+raytracing::TranslucentBsdfNode::operator const raytracing::Socket&() const {return outBsdf;}
+
+void raytracing::TranslucentBsdfNode::SetColor(const Vector3 &color) {m_node->color = {color.r,color.g,color.b};}
+void raytracing::TranslucentBsdfNode::SetSurfaceMixWeight(float weight) {m_node->surface_mix_weight = weight;}
 
 raytracing::DiffuseBsdfNode::DiffuseBsdfNode(CCLShader &shader,const std::string &nodeName,ccl::DiffuseBsdfNode &node)
 	: Node{shader},inColor{shader,nodeName,"color",false},inNormal{shader,nodeName,"normal",false},inSurfaceMixWeight{Socket{shader,nodeName,"surface_mix_weight",false}},
@@ -544,11 +565,23 @@ void raytracing::PrincipledBSDFNode::SetSubsurfaceMethod(SubsurfaceMethod method
 {
 	switch(method)
 	{
+	case SubsurfaceMethod::Cubic:
+		m_node->subsurface_method = ccl::CLOSURE_BSSRDF_CUBIC_ID;
+		break;
+	case SubsurfaceMethod::Gaussian:
+		m_node->subsurface_method = ccl::CLOSURE_BSSRDF_GAUSSIAN_ID;
+		break;
+	case SubsurfaceMethod::Principled:
+		m_node->subsurface_method = ccl::CLOSURE_BSDF_BSSRDF_PRINCIPLED_ID;
+		break;
 	case SubsurfaceMethod::Burley:
-		m_node->distribution = ccl::CLOSURE_BSSRDF_PRINCIPLED_ID;
+		m_node->subsurface_method = ccl::CLOSURE_BSSRDF_BURLEY_ID;
 		break;
 	case SubsurfaceMethod::RandomWalk:
-		m_node->distribution = ccl::CLOSURE_BSSRDF_PRINCIPLED_RANDOM_WALK_ID;
+		m_node->subsurface_method = ccl::CLOSURE_BSSRDF_RANDOM_WALK_ID;
+		break;
+	case SubsurfaceMethod::PrincipledRandomWalk:
+		m_node->subsurface_method = ccl::CLOSURE_BSSRDF_PRINCIPLED_RANDOM_WALK_ID;
 		break;
 	}
 }

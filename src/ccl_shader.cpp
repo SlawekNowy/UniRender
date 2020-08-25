@@ -277,7 +277,7 @@ raytracing::NormalMapNode raytracing::CCLShader::AddNormalMapImageTextureNode(co
 	auto nodeImgNormal = AddGradientImageTextureNode(fileName,uvSocket);
 	auto nodeNormalMap = AddNormalMapNode();
 	nodeNormalMap.SetSpace(space);
-	nodeNormalMap.SetAttribute(meshName);
+	// nodeNormalMap.SetAttribute(meshName);
 
 	constexpr auto flipYAxis = false;
 	if(flipYAxis)
@@ -338,6 +338,13 @@ raytracing::SeparateRGBNode raytracing::CCLShader::AddSeparateRGBNode(const Sock
 	Link(srcSocket,nodeSeparateRGB.inColor);
 	return nodeSeparateRGB;
 }
+raytracing::SeparateRGBNode raytracing::CCLShader::AddSeparateRGBNode()
+{
+	auto name = GetCurrentInternalNodeName();
+	auto &cclNode = *static_cast<ccl::SeparateRGBNode*>(**AddNode("separate_rgb",name));
+	raytracing::SeparateRGBNode nodeSeparateRGB {*this,name,cclNode};
+	return nodeSeparateRGB;
+}
 raytracing::CombineRGBNode raytracing::CCLShader::AddCombineRGBNode(const std::optional<const NumberSocket> &x,const std::optional<const NumberSocket> &y,const std::optional<const NumberSocket> &z)
 {
 	auto name = GetCurrentInternalNodeName();
@@ -386,6 +393,13 @@ raytracing::MixClosureNode raytracing::CCLShader::AddMixClosureNode()
 	auto name = GetCurrentInternalNodeName();
 	auto &nodeMixClosure = *static_cast<ccl::MixClosureNode*>(**AddNode("mix_closure",name));
 	return {*this,name,nodeMixClosure};
+}
+
+raytracing::AddClosureNode raytracing::CCLShader::AddAddClosureNode()
+{
+	auto name = GetCurrentInternalNodeName();
+	auto &nodeAddClosure = *static_cast<ccl::AddClosureNode*>(**AddNode("add_closure",name));
+	return {*this,name,nodeAddClosure};
 }
 
 raytracing::ScatterVolumeNode raytracing::CCLShader::AddScatterVolumeNode()
@@ -448,7 +462,7 @@ raytracing::EmissionNode raytracing::CCLShader::AddEmissionNode()
 {
 	auto name = GetCurrentInternalNodeName();
 	auto &nodeEmission = *static_cast<ccl::EmissionNode*>(**AddNode("emission",name));
-	return {*this,name};
+	return {*this,name,nodeEmission};
 }
 
 raytracing::MixNode raytracing::CCLShader::AddMixNode(MixNode::Type type)
@@ -498,6 +512,13 @@ raytracing::TransparentBsdfNode raytracing::CCLShader::AddTransparentBSDFNode()
 	auto name = GetCurrentInternalNodeName();
 	auto &nodeTransparentBsdf = *static_cast<ccl::TransparentBsdfNode*>(**AddNode("transparent_bsdf",name));
 	return {*this,name,nodeTransparentBsdf};
+}
+
+raytracing::TranslucentBsdfNode raytracing::CCLShader::AddTranslucentBSDFNode()
+{
+	auto name = GetCurrentInternalNodeName();
+	auto &nodeTranslucentBsdf = *static_cast<ccl::TranslucentBsdfNode*>(**AddNode("translucent_bsdf",name));
+	return {*this,name,nodeTranslucentBsdf};
 }
 
 raytracing::DiffuseBsdfNode raytracing::CCLShader::AddDiffuseBSDFNode()

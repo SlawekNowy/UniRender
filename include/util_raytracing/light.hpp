@@ -60,7 +60,7 @@ namespace raytracing
 	private:
 		Light(Scene &scene,ccl::Light &light);
 		ccl::Light &m_light;
-		float m_size = util::pragma::metres_to_units(0.25f);
+		float m_size = util::pragma::metres_to_units(1.f);
 		Vector3 m_color = {1.f,1.f,1.f};
 		Lumen m_intensity = 1'600.f;
 		Type m_type = Type::Point;

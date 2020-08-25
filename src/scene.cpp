@@ -1245,6 +1245,16 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> raytracing::Scene::Finaliz
 	for(auto &cclShader : m_cclShaders)
 		cclShader->Finalize();
 
+	constexpr auto validate = false;
+	if constexpr(validate)
+	{
+		for(auto &o : m_objects)
+		{
+			auto &mesh = o->GetMesh();
+			mesh.Validate();
+		}
+	}
+
 	auto job = util::create_parallel_job<SceneWorker>(*this);
 	auto &worker = static_cast<SceneWorker&>(job.GetWorker());
 	if(IsRenderSceneMode(m_renderMode))
@@ -1530,7 +1540,7 @@ void raytracing::Scene::SetVerbose(bool verbose) {g_verbose = verbose;}
 bool raytracing::Scene::IsVerbose() {return g_verbose;}
 
 static constexpr std::array<char,3> SERIALIZATION_HEADER = {'R','T','D'};
-static uint32_t SERIALIZATION_VERSION = 1;
+static uint32_t SERIALIZATION_VERSION = 2;
 void raytracing::Scene::Serialize(DataStream &dsOut,const SerializationData &serializationData) const
 {
 	dsOut->Write(reinterpret_cast<const uint8_t*>(SERIALIZATION_HEADER.data()),SERIALIZATION_HEADER.size() *sizeof(SERIALIZATION_HEADER.front()));
@@ -1595,7 +1605,7 @@ bool raytracing::Scene::Deserialize(DataStream &dsIn)
 	auto numShaders = dsIn->Read<uint32_t>();
 	m_shaders.reserve(numShaders);
 	for(auto i=decltype(numShaders){0u};i<numShaders;++i)
-		Shader::Create(*this,dsIn);
+		Shader::Create(*this,dsIn,version);
 
 	auto numMeshes = dsIn->Read<uint32_t>();
 	m_meshes.reserve(numMeshes);

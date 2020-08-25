@@ -68,6 +68,7 @@ namespace raytracing
 		bool AddWrinkleFactor(float wrinkle);
 		bool AddTriangle(uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_t shaderIndex);
 		uint32_t AddSubMeshShader(Shader &shader);
+		void Validate() const;
 		ccl::Mesh *operator->();
 		ccl::Mesh *operator*();
 	private:
