@@ -12,6 +12,8 @@
 #include "world_object.hpp"
 #include <mathutil/transform.hpp>
 #include <memory>
+#include <optional>
+#include <functional>
 
 namespace ccl {class Object;};
 class DataStream;
@@ -22,38 +24,48 @@ namespace raytracing
 	using PMesh = std::shared_ptr<Mesh>;
 	class Object;
 	using PObject = std::shared_ptr<Object>;
+	class ModelCache;
 	class DLLRTUTIL Object
-		: public WorldObject,
+		: public WorldObject,public BaseObject,
 		public std::enable_shared_from_this<Object>
 	{
 	public:
-		static PObject Create(Scene &scene,Mesh &mesh);
-		static PObject Create(Scene &scene,uint32_t version,DataStream &dsIn);
+		enum class Flags : uint8_t
+		{
+			None = 0u,
+			CCLObjectOwnedByScene = 1u
+		};
+		static PObject Create(Mesh &mesh);
+		static PObject Create(uint32_t version,DataStream &dsIn,const std::function<PMesh(uint32_t)> &fGetMesh);
+		virtual ~Object() override;
 		util::WeakHandle<Object> GetHandle();
-		virtual void DoFinalize() override;
+		virtual void DoFinalize(Scene &scene) override;
 
-		uint32_t GetId() const;
 		const Mesh &GetMesh() const;
 		Mesh &GetMesh();
 
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(uint32_t version,DataStream &dsIn);
+		void Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Mesh&)> &fGetMeshIndex) const;
+		void Serialize(DataStream &dsOut,const std::unordered_map<const Mesh*,size_t> &meshToIndexTable) const;
+		void Deserialize(uint32_t version,DataStream &dsIn,const std::function<PMesh(uint32_t)> &fGetMesh);
 
 		const umath::Transform &GetMotionPose() const;
 		void SetMotionPose(const umath::Transform &pose);
 
 		ccl::Object *operator->();
+		const ccl::Object *operator->() const;
 		ccl::Object *operator*();
+		const ccl::Object *operator*() const;
 	private:
-		static PObject Create(Scene &scene,Mesh *mesh);
-		Object(Scene &scene,ccl::Object &object,uint32_t objectId,Mesh *mesh);
+		static PObject Create(Mesh *mesh);
+		Object(ccl::Object &object,Mesh *mesh);
 		ccl::Object &m_object;
-		uint32_t m_id = 0;
 		PMesh m_mesh = nullptr;
+		Flags m_flags = Flags::None;
 
 		// TODO
 		umath::Transform m_motionPose = {};
 	};
 };
+REGISTER_BASIC_BITWISE_OPERATORS(raytracing::Object::Flags)
 
 #endif

@@ -17,6 +17,7 @@
 #include <sharedutils/util_pragma.hpp>
 #include <OpenImageIO/ustring.h>
 
+#if 0
 #pragma optimize("",off)
 static raytracing::NumberSocket get_channel_socket(raytracing::CCLShader &shader,const raytracing::Socket &colorNode,raytracing::Channel channel)
 {
@@ -226,15 +227,21 @@ void raytracing::Shader::Deserialize(DataStream &dsIn,uint32_t version)
 	DoDeserialize(dsIn,version);
 }
 
-std::shared_ptr<raytracing::CCLShader> raytracing::Shader::GenerateCCLShader()
+std::shared_ptr<raytracing::CCLShader> raytracing::Shader::GenerateCCLShader(const ShaderDesc &desc,const std::function<void(const std::string&)> &errorLog)
 {
 	auto cclShader = CCLShader::Create(*this);
-	return SetupCCLShader(*cclShader) ? cclShader : nullptr;
+	if(SetupCCLShader(*cclShader) == false)
+		return nullptr;
+	cclShader->InitializeNodeGraph(desc,errorLog);
+	return cclShader;
 }
-std::shared_ptr<raytracing::CCLShader> raytracing::Shader::GenerateCCLShader(ccl::Shader &shader)
+std::shared_ptr<raytracing::CCLShader> raytracing::Shader::GenerateCCLShader(ccl::Shader &shader,const ShaderDesc &desc,const std::function<void(const std::string&)> &errorLog)
 {
 	auto cclShader = CCLShader::Create(*this,shader);
-	return SetupCCLShader(*cclShader) ? cclShader : nullptr;
+	if(SetupCCLShader(*cclShader) == false)
+		return nullptr;
+	cclShader->InitializeNodeGraph(desc,errorLog);
+	return cclShader;
 }
 bool raytracing::Shader::SetupCCLShader(CCLShader &cclShader)
 {
@@ -1457,3 +1464,4 @@ void raytracing::UVHandlerEye::Deserialize(DataStream &dsIn)
 	m_irisUvRadius = dsIn->Read<decltype(m_irisUvRadius)>();
 }
 #pragma optimize("",on)
+#endif

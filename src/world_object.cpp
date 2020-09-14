@@ -9,8 +9,7 @@
 #include <sharedutils/datastream.h>
 
 #pragma optimize("",off)
-raytracing::WorldObject::WorldObject(Scene &scene)
-	: SceneObject{scene}
+raytracing::WorldObject::WorldObject()
 {}
 
 void raytracing::WorldObject::SetPos(const Vector3 &pos) {m_pose.SetOrigin(pos);}

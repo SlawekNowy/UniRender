@@ -17,6 +17,7 @@
 #include "util_raytracing/baking.hpp"
 #include "util_raytracing/mesh.hpp"
 #include "util_raytracing/object.hpp"
+#include "util_raytracing/scene.hpp"
 #include <render/mesh.h>
 
 #define FILTER_MASK_MARGIN 1
@@ -326,7 +327,7 @@ static void store_bake_pixel(void *handle, int x, int y, float u, float v)
 	pixel->object_id = bd->object_id;
 }
 
-void raytracing::baking::prepare_bake_data(raytracing::Object &o,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs)
+void raytracing::baking::prepare_bake_data(const Scene &scene,raytracing::Object &o,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs)
 {
 	/* initialize all pixel arrays so we know which ones are 'blank' */
 	for(auto i=decltype(numPixels){0u};i<numPixels;++i)
@@ -354,7 +355,9 @@ void raytracing::baking::prepare_bake_data(raytracing::Object &o,BakePixel *pixe
 	auto *uvs = useLightmapUvs ? mesh.GetLightmapUVs() : mesh.GetUVs();
 	if(uvs == nullptr)
 		return;
-	bd.object_id = o.GetId();
+	auto objId = scene.FindCCLObjectId(o);
+	assert(objId.has_value());
+	bd.object_id = *objId;
 	auto *cclMesh = *mesh;
 	auto numTris = cclMesh->triangles.size() /3;
 	for(auto i=decltype(numTris){0u};i<numTris;++i)

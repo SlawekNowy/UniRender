@@ -20,6 +20,7 @@
 #include <sharedutils/util_event_reply.hpp>
 #include <sharedutils/alpha_mode.hpp>
 
+#if 0
 namespace ccl
 {
 	class Scene; class Shader; class ShaderGraph; class ShaderNode; class ShaderInput; class ShaderOutput;
@@ -45,6 +46,7 @@ namespace raytracing
 	using PShader = std::shared_ptr<Shader>;
 	struct Socket;
 	class CCLShader;
+	class ShaderDesc;
 	struct UVHandler;
 	class DLLRTUTIL Shader
 		: public SceneObject,
@@ -101,8 +103,8 @@ namespace raytracing
 		void SetUVHandlers(const std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> &handlers);
 		const std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> &GetUVHandlers() const;
 
-		std::shared_ptr<CCLShader> GenerateCCLShader();
-		std::shared_ptr<CCLShader> GenerateCCLShader(ccl::Shader &cclShader);
+		std::shared_ptr<CCLShader> GenerateCCLShader(const ShaderDesc &desc,const std::function<void(const std::string&)> &errorLog=nullptr);
+		std::shared_ptr<CCLShader> GenerateCCLShader(ccl::Shader &cclShader,const ShaderDesc &desc,const std::function<void(const std::string&)> &errorLog=nullptr);
 	protected:
 		Shader(Scene &scene,const std::string &name);
 		bool SetupCCLShader(CCLShader &cclShader);
@@ -131,7 +133,7 @@ namespace raytracing
 		: public std::enable_shared_from_this<ShaderNode>
 	{
 	public:
-		static PShaderNode Create(CCLShader &shader,ccl::ShaderNode &shaderNode);
+		static PShaderNode Create(const std::string &name);
 		util::WeakHandle<ShaderNode> GetHandle();
 		ccl::ShaderNode *operator->();
 		ccl::ShaderNode *operator*();
@@ -140,11 +142,10 @@ namespace raytracing
 			bool SetInputArgument(const std::string &inputName,const T &arg);
 	private:
 		friend CCLShader;
-		ShaderNode(CCLShader &shader,ccl::ShaderNode &shaderNode);
+		ShaderNode(const std::string &name);
 		ccl::ShaderInput *FindInput(const std::string &inputName);
 		ccl::ShaderOutput *FindOutput(const std::string &outputName);
-		CCLShader &m_shader;
-		ccl::ShaderNode &m_shaderNode;
+		std::string m_name;
 	};
 
 	class ShaderModuleAlbedo;
@@ -576,5 +577,6 @@ template<typename T>
 	input->set(arg);
 	return true;
 }
+#endif
 
 #endif

@@ -10,23 +10,37 @@
 
 #include "definitions.hpp"
 #include <sharedutils/util_weak_handle.hpp>
+#include <sharedutils/util.h>
 #include <memory>
 
 namespace raytracing
 {
 	class Scene;
+	class DLLRTUTIL BaseObject
+	{
+	public:
+		virtual ~BaseObject()=default;
+		void Finalize(Scene &scene,bool force=false);
+
+		void SetHash(const util::MurmurHash3 &hash) {m_hash = hash;}
+		void SetHash(util::MurmurHash3 &&hash) {m_hash = std::move(hash);}
+		const util::MurmurHash3 &GetHash() const {return m_hash;}
+	protected:
+		virtual void DoFinalize(Scene &scene);
+	private:
+		bool m_bFinalized = false;
+		util::MurmurHash3 m_hash {};
+	};
 	class DLLRTUTIL SceneObject
+		: public BaseObject
 	{
 	public:
 		virtual ~SceneObject()=default;
-		void Finalize();
 		Scene &GetScene() const;
 	protected:
-		virtual void DoFinalize();
 		SceneObject(Scene &scene);
 	private:
 		Scene &m_scene;
-		bool m_bFinalized = false;
 	};
 };
 

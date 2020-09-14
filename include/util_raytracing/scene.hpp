@@ -9,8 +9,11 @@
 #define __UTIL_RAYTRACING_SCENE_HPP__
 
 #include "definitions.hpp"
+#include "util_raytracing/tilemanager.hpp"
 #include <sharedutils/util_weak_handle.hpp>
 #include <sharedutils/util_parallel_job.hpp>
+#include <sharedutils/util.h>
+#include <condition_variable>
 #include <memory>
 #include <mathutil/uvec.h>
 #include <functional>
@@ -53,6 +56,7 @@ namespace raytracing
 
 		None = std::numeric_limits<uint8_t>::max()
 	};
+	class GroupNodeDesc;
 	class SceneObject;
 	class Scene;
 	class Shader;
@@ -85,19 +89,16 @@ namespace raytracing
 		friend util::ParallelJob<typename TJob::RESULT_TYPE> util::create_parallel_job(TARGS&& ...args);
 	};
 
+	class ModelCache;
+	class ShaderCache;
+	class NodeManager;
 	class CCLShader;
+	class TileManager;
 	class DLLRTUTIL Scene
 		: public std::enable_shared_from_this<Scene>
 	{
 	public:
-		struct DenoiseInfo
-		{
-			uint32_t numThreads = 16;
-			uint32_t width = 0;
-			uint32_t height = 0;
-			bool hdr = false;
-			bool lightmap = false;
-		};
+		static constexpr uint32_t SERIALIZATION_VERSION = 3;
 		struct SerializationData
 		{
 			std::string outputFileName;
@@ -144,23 +145,32 @@ namespace raytracing
 		enum class StateFlags : uint16_t
 		{
 			None = 0u,
-			DenoiseResult = 1u,
-			OutputResultWithHDRColors = DenoiseResult<<1u,
-			SkyInitialized = OutputResultWithHDRColors<<1u
+			OutputResultWithHDRColors = 1u,
+			SkyInitialized = OutputResultWithHDRColors<<1u,
+			HasRenderingStarted = SkyInitialized<<1u
+		};
+
+		enum class DenoiseMode : uint8_t
+		{
+			None = 0,
+			Fast,
+			Detailed
 		};
 
 		struct CreateInfo
 		{
 			std::optional<uint32_t> samples = {};
 			bool hdrOutput = false;
-			bool denoise = true;
+			DenoiseMode denoiseMode = DenoiseMode::Detailed;
+			bool progressive = false;
+			bool progressiveRefine = false;
 			DeviceType deviceType = DeviceType::GPU;
 		};
 		static bool IsRenderSceneMode(RenderMode renderMode);
 		static void SetKernelPath(const std::string &kernelPath);
-		static std::shared_ptr<Scene> Create(RenderMode renderMode,const CreateInfo &createInfo={});
-		static std::shared_ptr<Scene> Create(DataStream &ds,RenderMode renderMode,const CreateInfo &createInfo={});
-		static std::shared_ptr<Scene> Create(DataStream &ds);
+		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,RenderMode renderMode,const CreateInfo &createInfo={});
+		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,DataStream &ds,RenderMode renderMode,const CreateInfo &createInfo={});
+		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,DataStream &ds);
 		static bool ReadHeaderInfo(DataStream &ds,RenderMode &outRenderMode,CreateInfo &outCreateInfo,SerializationData &outSerializationData,uint32_t &outVersion,SceneInfo *optOutSceneInfo=nullptr);
 		//
 		static Vector3 ToPragmaPosition(const ccl::float3 &pos);
@@ -172,11 +182,6 @@ namespace raytracing
 		static float ToCyclesLength(float len);
 		static std::string ToRelativePath(const std::string &absPath);
 		static std::string ToAbsolutePath(const std::string &relPath);
-		static bool Denoise(
-			const DenoiseInfo &denoise,float *inOutData,
-			float *optAlbedoData=nullptr,float *optInNormalData=nullptr,
-			const std::function<bool(float)> &fProgressCallback=nullptr
-		);
 
 		static constexpr uint32_t INPUT_CHANNEL_COUNT = 4u;
 		static constexpr uint32_t OUTPUT_CHANNEL_COUNT = 4u;
@@ -184,19 +189,17 @@ namespace raytracing
 		~Scene();
 		void AddSkybox(const std::string &texture);
 		Camera &GetCamera();
+		bool IsValid() const;
 		float GetProgress() const;
 		RenderMode GetRenderMode() const;
+		bool IsProgressive() const;
+		bool IsProgressiveRefine() const;
+		void StopRendering();
 		ccl::Scene *operator->();
 		ccl::Scene *operator*();
 
-		const std::vector<PShader> &GetShaders() const;
-		std::vector<PShader> &GetShaders();
-		const std::vector<PObject> &GetObjects() const;
-		std::vector<PObject> &GetObjects();
 		const std::vector<PLight> &GetLights() const;
 		std::vector<PLight> &GetLights();
-		const std::vector<PMesh> &GetMeshes() const;
-		std::vector<PMesh> &GetMeshes();
 
 		void SetLightIntensityFactor(float f);
 		float GetLightIntensityFactor() const;
@@ -208,6 +211,9 @@ namespace raytracing
 		void Serialize(DataStream &dsOut,const SerializationData &serializationData) const;
 		bool Deserialize(DataStream &dsIn);
 
+		void HandleError(const std::string &errMsg) const;
+
+		NodeManager &GetShaderNodeManager() const;
 		void SetSky(const std::string &skyPath);
 		void SetSkyAngles(const EulerAngles &angSky);
 		void SetSkyStrength(float strength);
@@ -220,15 +226,34 @@ namespace raytracing
 		void SetMaxTransmissionBounces(uint32_t bounces);
 		void SetMotionBlurStrength(float strength);
 		void SetAOBakeTarget(Object &o);
+		std::vector<raytracing::TileManager::TileData> GetRenderedTileBatch();
+		const TileManager &GetTileManager() const {return m_tileManager;}
+		Vector2i GetTileSize() const;
+		Vector2i GetResolution() const;
 
+		const std::vector<std::shared_ptr<ModelCache>> &GetModelCaches() const {return m_mdlCaches;}
+		void AddModelsFromCache(const ModelCache &cache);
+		void AddLight(Light &light);
+		
+		void Reset();
+		void Restart();
 		util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> Finalize();
 
-		void AddShader(CCLShader &shader);
+		DenoiseMode GetDenoiseMode() const {return m_createInfo.denoiseMode;}
+		bool ShouldDenoise() const {return GetDenoiseMode() != DenoiseMode::None;}
+
+		PMesh FindRenderMeshByHash(const util::MurmurHash3 &hash) const;
+		PObject FindRenderObjectByHash(const util::MurmurHash3 &hash) const;
+
+		std::shared_ptr<CCLShader> GetCachedShader(const GroupNodeDesc &desc) const;
+		void AddShader(CCLShader &shader,const GroupNodeDesc *optDesc=nullptr);
 		ccl::Session *GetCCLSession();
+		std::optional<uint32_t> FindCCLObjectId(const Object &o) const;
 	private:
 		enum class ImageRenderStage : uint8_t
 		{
-			Lighting = 0,
+			InitializeScene = 0,
+			Lighting,
 			Albedo,
 			Normal,
 			Denoise,
@@ -238,6 +263,8 @@ namespace raytracing
 			SceneAlbedo,
 			SceneNormals,
 			SceneDepth,
+
+			Bake,
 
 			Finalize
 		};
@@ -249,22 +276,20 @@ namespace raytracing
 		friend Shader;
 		friend Object;
 		friend Light;
-		Scene(std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode,DeviceType deviceType);
+		Scene(NodeManager &nodeManager,std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode,DeviceType deviceType);
+		void PrepareCyclesSceneForRendering();
+		void StartTextureBaking(SceneWorker &worker);
 		static ccl::ShaderOutput *FindShaderNodeOutput(ccl::ShaderNode &node,const std::string &output);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const std::string &nodeName);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const OpenImageIO_v2_1::ustring &name);
+		void SetCancelled(const std::string &msg="Cancelled by application.");
 		void WaitForRenderStage(SceneWorker &worker,float baseProgress,float progressMultiplier,const std::function<RenderStageResult()> &fOnComplete);
 		RenderStageResult StartNextRenderImageStage(SceneWorker &worker,ImageRenderStage stage,StereoEye eyeStage);
 		void InitializeAlbedoPass(bool reloadShaders);
 		void InitializeNormalPass(bool reloadShaders);
+		void InitializePassShaders(const std::function<std::shared_ptr<GroupNodeDesc>(const Shader&)> &fGetPassDesc);
 		void ApplyPostProcessing(uimg::ImageBuffer &imgBuffer,RenderMode renderMode);
 		void DenoiseHDRImageArea(uimg::ImageBuffer &imgBuffer,uint32_t imgWidth,uint32_t imgHeight,uint32_t x,uint32_t y,uint32_t w,uint32_t h) const;
-		bool Denoise(
-			const DenoiseInfo &denoise,uimg::ImageBuffer &imgBuffer,
-			uimg::ImageBuffer *optImgBufferAlbedo=nullptr,
-			uimg::ImageBuffer *optImgBufferNormal=nullptr,
-			const std::function<bool(float)> &fProgressCallback=nullptr
-		) const;
 		bool UpdateStereo(raytracing::SceneWorker &worker,ImageRenderStage stage,raytracing::StereoEye &eyeStage);
 		bool IsValidTexture(const std::string &filePath) const;
 		void CloseCyclesScene();
@@ -281,12 +306,18 @@ namespace raytracing
 		void Wait();
 		friend SceneWorker;
 
+		std::atomic<bool> m_progressiveRunning = false;
+		std::condition_variable m_progressiveCondition {};
+		std::mutex m_progressiveMutex {};
+
+		std::atomic<uint32_t> m_restartState = 0;
+		TileManager m_tileManager {};
+		std::shared_ptr<NodeManager> m_nodeManager = nullptr;
 		SceneInfo m_sceneInfo {};
 		DeviceType m_deviceType = DeviceType::GPU;
-		std::vector<PShader> m_shaders = {};
 		std::vector<std::shared_ptr<CCLShader>> m_cclShaders = {};
-		std::vector<PMesh> m_meshes = {};
-		std::vector<PObject> m_objects = {};
+		std::unordered_map<const GroupNodeDesc*,size_t> m_shaderCache {};
+		std::vector<std::shared_ptr<ModelCache>> m_mdlCaches {};
 		std::vector<PLight> m_lights = {};
 		std::unique_ptr<ccl::Session> m_session = nullptr;
 		ccl::Scene &m_scene;
@@ -295,6 +326,11 @@ namespace raytracing
 		StateFlags m_stateFlags = StateFlags::None;
 		RenderMode m_renderMode = RenderMode::RenderImage;
 		std::weak_ptr<Object> m_bakeTarget = {};
+
+		struct {
+			std::shared_ptr<ShaderCache> shaderCache;
+			std::shared_ptr<ModelCache> modelCache;
+		} m_renderData;
 
 		std::shared_ptr<uimg::ImageBuffer> &GetResultImageBuffer(StereoEye eye=StereoEye::Left);
 		std::shared_ptr<uimg::ImageBuffer> &GetAlbedoImageBuffer(StereoEye eye=StereoEye::Left);

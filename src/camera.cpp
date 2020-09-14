@@ -21,7 +21,7 @@ PCamera Camera::Create(Scene &scene)
 }
 
 Camera::Camera(Scene &scene,ccl::Camera &cam)
-	: WorldObject{scene},m_camera{cam}
+	: WorldObject{},SceneObject{scene},m_camera{cam}
 {
 	cam.type = ccl::CameraType::CAMERA_PERSPECTIVE;
 	cam.matrix = ccl::transform_identity();
@@ -206,7 +206,7 @@ void Camera::SetRollingShutterDuration(float duration)
 	m_camera.rolling_shutter_duration = duration;
 }
 
-void Camera::DoFinalize()
+void Camera::DoFinalize(Scene &scene)
 {
 #ifdef ENABLE_MOTION_BLUR_TEST
 	SetShutterTime(1.f);
@@ -236,7 +236,7 @@ void Camera::DoFinalize()
 	m_camera.matrix = Scene::ToCyclesTransform(GetPose());
 	m_camera.compute_auto_viewplane();
 
-	m_camera.need_update = true;
+	m_camera.tag_update();
 	m_camera.update(*GetScene());
 }
 

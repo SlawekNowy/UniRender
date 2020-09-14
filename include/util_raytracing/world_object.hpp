@@ -19,7 +19,6 @@ namespace raytracing
 	class WorldObject;
 	using PWorldObject = std::shared_ptr<WorldObject>;
 	class DLLRTUTIL WorldObject
-		: public SceneObject
 	{
 	public:
 		void SetPos(const Vector3 &pos);
@@ -37,7 +36,7 @@ namespace raytracing
 		void Serialize(DataStream &dsOut) const;
 		void Deserialize(uint32_t version,DataStream &dsIn);
 	protected:
-		WorldObject(Scene &scene);
+		WorldObject();
 	private:
 		umath::ScaledTransform m_pose = {};
 	};

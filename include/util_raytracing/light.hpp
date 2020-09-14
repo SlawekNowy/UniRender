@@ -22,10 +22,15 @@ namespace raytracing
 	class Light;
 	using PLight = std::shared_ptr<Light>;
 	class DLLRTUTIL Light
-		: public WorldObject,
+		: public WorldObject,public BaseObject,
 		public std::enable_shared_from_this<Light>
 	{
 	public:
+		enum class Flags : uint8_t
+		{
+			None = 0u,
+			CCLObjectOwnedByScene = 1u
+		};
 		enum class Type : uint8_t
 		{
 			Point = 0u,
@@ -36,8 +41,9 @@ namespace raytracing
 			Background,
 			Triangle
 		};
-		static PLight Create(Scene &scene);
-		static PLight Create(Scene &scene,uint32_t version,DataStream &dsIn);
+		static PLight Create();
+		static PLight Create(uint32_t version,DataStream &dsIn);
+		virtual ~Light() override;
 		util::WeakHandle<Light> GetHandle();
 
 		void SetType(Type type);
@@ -45,7 +51,7 @@ namespace raytracing
 		void SetColor(const Color &color);
 		void SetIntensity(Lumen intensity);
 		void SetSize(float size);
-		virtual void DoFinalize() override;
+		virtual void DoFinalize(Scene &scene) override;
 
 		void SetAxisU(const Vector3 &axisU);
 		void SetAxisV(const Vector3 &axisV);
@@ -58,7 +64,7 @@ namespace raytracing
 		ccl::Light *operator->();
 		ccl::Light *operator*();
 	private:
-		Light(Scene &scene,ccl::Light &light);
+		Light(ccl::Light &light);
 		ccl::Light &m_light;
 		float m_size = util::pragma::metres_to_units(1.f);
 		Vector3 m_color = {1.f,1.f,1.f};
@@ -72,7 +78,9 @@ namespace raytracing
 		float m_sizeU = util::pragma::metres_to_units(1.f);
 		float m_sizeV = util::pragma::metres_to_units(1.f);
 		bool m_bRound = false;
+		Flags m_flags = Flags::None;
 	};
 };
+REGISTER_BASIC_BITWISE_OPERATORS(raytracing::Light::Flags)
 
 #endif

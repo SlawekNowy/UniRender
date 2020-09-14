@@ -9,8 +9,13 @@
 #define __PR_CYCLES_NODES_HPP__
 
 #include "definitions.hpp"
-#include <mathutil/uvec.h>
+#include "data_value.hpp"
+#include "exception.hpp"
+#include <sharedutils/util_hash.hpp>
+#include <mathutil/color.h>
+#include <render/nodes.h>
 #include <optional>
+#include <functional>
 
 namespace ccl
 {
@@ -18,662 +23,438 @@ namespace ccl
 	class SeparateXYZNode; class CombineXYZNode; class SeparateRGBNode; class CombineRGBNode; class BackgroundNode; class TextureCoordinateNode; class MappingNode;
 	class EnvironmentTextureNode; class ImageTextureNode; class ColorNode; class EmissionNode; class MathNode; class AttributeNode; class LightPathNode; class DiffuseBsdfNode;
 	class CameraNode; class HSVNode; class ScatterVolumeNode;
+	class ShaderNode;
 	enum AttributeStandard : int32_t;
 	enum NodeMathType : int32_t;
 };
-namespace raytracing {struct NumberSocket;};
-raytracing::NumberSocket operator+(float value,const raytracing::NumberSocket &socket);
-raytracing::NumberSocket operator-(float value,const raytracing::NumberSocket &socket);
-raytracing::NumberSocket operator*(float value,const raytracing::NumberSocket &socket);
-raytracing::NumberSocket operator/(float value,const raytracing::NumberSocket &socket);
 namespace raytracing
 {
 	class Shader;
-	class CCLShader;
+	class NodeDesc;
+	class GroupNodeDesc;
 	struct MathNode;
 	struct DLLRTUTIL Socket
 	{
-		Socket();
-		Socket(CCLShader &shader,const std::string &nodeName="",const std::string &socketName="",bool output=true);
+		Socket()=default;
+		Socket(const DataValue &value);
+		Socket(float value);
+		Socket(const Vector3 &value);
+		Socket(NodeDesc &node,const std::string &socketName,bool output);
 		Socket(const Socket &other)=default;
 		Socket &operator=(const Socket &other)=default;
-		CCLShader &GetShader() const;
-		bool IsOutput() const;
-		bool IsInput() const;
-		std::string nodeName;
-		std::string socketName;
+		Socket &operator=(Socket &&other)=default;
 
-		MathNode operator+(float value) const;
-		MathNode operator+(const Socket &socket) const;
+		bool operator==(const Socket &other) const;
+		bool operator!=(const Socket &other) const;
 
-		MathNode operator-(float value) const;
-		MathNode operator-(const Socket &socket) const;
+		std::string ToString() const;
+		void Link(const Socket &other);
 
-		MathNode operator*(float value) const;
-		MathNode operator*(const Socket &socket) const;
+		bool IsValid() const;
+		bool IsConcreteValue() const;
+		bool IsNodeSocket() const;
+		bool IsOutputSocket() const;
+		SocketType GetType() const;
 
-		MathNode operator/(float value) const;
-		MathNode operator/(const Socket &socket) const;
+		NodeDesc *GetNode(std::string &outSocketName) const;
+		NodeDesc *GetNode() const;
+		std::optional<DataValue> GetValue() const;
+
+		void Serialize(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const;
+		void Deserialize(GroupNodeDesc &parentGroupNode,DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable);
+		
+		Socket operator-() const;
+		Socket operator+(float f) const;
+		Socket operator-(float f) const;
+		Socket operator*(float f) const;
+		Socket operator/(float f) const;
+		Socket operator%(float f) const;
+		Socket operator^(float f) const;
+		Socket operator<(float f) const;
+		Socket operator<=(float f) const;
+		Socket operator>(float f) const;
+		Socket operator>=(float f) const;
+		Socket operator+(const Socket &socket) const;
+		Socket operator-(const Socket &socket) const;
+		Socket operator*(const Socket &socket) const;
+		Socket operator/(const Socket &socket) const;
+		Socket operator%(const Socket &socket) const;
+		Socket operator^(const Socket &socket) const;
+		Socket operator<(const Socket &socket) const;
+		Socket operator<=(const Socket &socket) const;
+		Socket operator>(const Socket &socket) const;
+		Socket operator>=(const Socket &socket) const;
 	private:
-		CCLShader *m_shader = nullptr;
-		bool m_bOutput = false;
+		Socket ApplyOperator(const Socket &other,ccl::NodeMathType opType,std::optional<ccl::NodeVectorMathType> opTypeVec,float(*applyValue)(float,float)) const;
+		Socket ApplyComparisonOperator(const Socket &other,bool(*op)(float,float),Socket(*opNode)(GroupNodeDesc&,const Socket&,const Socket&)) const;
+		// Socket can either be a concrete value (e.g. float), OR an input or output of a node
+		std::optional<DataValue> m_value {};
+		struct {
+			std::weak_ptr<NodeDesc> node {};
+			std::string socketName;
+			bool output = false;
+		} m_nodeSocketRef;
 	};
 
-	struct DLLRTUTIL Node
+	struct SocketHasher
 	{
-		// Note: An instance of this type should never be created manually
-		Node(CCLShader &shader);
-		CCLShader &GetShader() const;
-	private:
-		CCLShader *m_shader = nullptr;
+		std::size_t operator()(const Socket& k) const;
 	};
-	// Special socket type for numeric types
-	struct DLLRTUTIL NumberSocket
+
+	namespace nodes
 	{
-		NumberSocket();
-		NumberSocket(const Socket &socket);
-		NumberSocket(float value);
-
-		CCLShader &GetShader() const;
-		NumberSocket operator+(const NumberSocket &value) const;
-		NumberSocket operator-(const NumberSocket &value) const;
-		NumberSocket operator*(const NumberSocket &value) const;
-		NumberSocket operator/(const NumberSocket &value) const;
-		NumberSocket operator-() const;
-
-		NumberSocket pow(const NumberSocket &exponent) const;
-		NumberSocket sqrt() const;
-		NumberSocket clamp(const NumberSocket &min,const NumberSocket &max) const;
-		NumberSocket lerp(const NumberSocket &to,const NumberSocket &by) const;
-		NumberSocket min(const NumberSocket &other) const;
-		NumberSocket max(const NumberSocket &other) const;
-
-		static NumberSocket len(const std::array<const NumberSocket,2> &v);
-		static NumberSocket dot(
-			const std::array<const NumberSocket,4> &v0,
-			const std::array<const NumberSocket,4> &v1
-		);
-	protected:
-		friend CCLShader;
-		friend MathNode;
-		friend NumberSocket (::operator+)(float value,const NumberSocket &socket);
-		friend NumberSocket (::operator-)(float value,const NumberSocket &socket);
-		friend NumberSocket (::operator*)(float value,const NumberSocket &socket);
-		friend NumberSocket (::operator/)(float value,const NumberSocket &socket);
-		mutable CCLShader *m_shader = nullptr;
-		std::optional<Socket> m_socket = {};
-		float m_value = 0.f;
-	};
-	struct DLLRTUTIL MathNode
-		: public Node,
-		public NumberSocket
-	{
-		MathNode(CCLShader &shader,const std::string &nodeName,ccl::MathNode &node);
-		Socket inValue1;
-		Socket inValue2;
-
-		NumberSocket outValue;
-
-		operator const NumberSocket&() const;
-
-		void SetValue1(float value);
-		void SetValue2(float value);
-		void SetType(ccl::NodeMathType type);
-	private:
-		ccl::MathNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL HSVNode
-		: public Node
-	{
-		HSVNode(CCLShader &shader,const std::string &nodeName,ccl::HSVNode &hsvNode);
-		NumberSocket inHue;
-		NumberSocket inSaturation;
-		NumberSocket inValue;
-		NumberSocket inFac;
-		Socket inColor;
-
-		Socket outColor;
-
-		operator const Socket&() const;
-	private:
-		ccl::HSVNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL SeparateXYZNode
-		: public Node
-	{
-		SeparateXYZNode(CCLShader &shader,const std::string &nodeName,ccl::SeparateXYZNode &node);
-		Socket inVector;
-
-		NumberSocket outX;
-		NumberSocket outY;
-		NumberSocket outZ;
-
-		void SetVector(const Vector3 &v);
-	private:
-		ccl::SeparateXYZNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL CombineXYZNode
-		: public Node
-	{
-		CombineXYZNode(CCLShader &shader,const std::string &nodeName,ccl::CombineXYZNode &node);
-		Socket inX;
-		Socket inY;
-		Socket inZ;
-
-		Socket outVector;
-
-		operator const Socket&() const;
-
-		void SetX(float x);
-		void SetY(float y);
-		void SetZ(float Z);
-	private:
-		ccl::CombineXYZNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL SeparateRGBNode
-		: public Node
-	{
-		SeparateRGBNode(CCLShader &shader,const std::string &nodeName,ccl::SeparateRGBNode &node);
-		Socket inColor;
-
-		NumberSocket outR;
-		NumberSocket outG;
-		NumberSocket outB;
-
-		void SetColor(const Vector3 &c);
-	private:
-		ccl::SeparateRGBNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL CombineRGBNode
-		: public Node
-	{
-		CombineRGBNode(CCLShader &shader,const std::string &nodeName,ccl::CombineRGBNode &node);
-		Socket inR;
-		Socket inG;
-		Socket inB;
-
-		Socket outColor;
-
-		operator const Socket&() const;
-
-		void SetR(float r);
-		void SetG(float g);
-		void SetB(float b);
-	private:
-		ccl::CombineRGBNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL GeometryNode
-		: public Node
-	{
-		GeometryNode(CCLShader &shader,const std::string &nodeName);
-		Socket inNormal;
-
-		Socket outPosition;
-		Socket outNormal;
-		Socket outTangent;
-		Socket outTrueNormal;
-		Socket outIncoming;
-		Socket outParametric;
-		NumberSocket outBackfacing;
-		NumberSocket outPointiness;
-	};
-	struct DLLRTUTIL CameraDataNode
-		: public Node
-	{
-		CameraDataNode(CCLShader &shader,const std::string &nodeName,ccl::CameraNode &node);
-
-		Socket outViewVector;
-		NumberSocket outViewZDepth;
-		NumberSocket outViewDistance;
-	private:
-		ccl::CameraNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL ImageTextureNode
-		: public Node
-	{
-		ImageTextureNode(CCLShader &shader,const std::string &nodeName);
-		Socket inUVW;
-
-		Socket outColor;
-		NumberSocket outAlpha;
-
-		operator const Socket&() const;
-	};
-	struct DLLRTUTIL EnvironmentTextureNode
-		: public Node
-	{
-		EnvironmentTextureNode(CCLShader &shader,const std::string &nodeName);
-		Socket inVector;
-		Socket outColor;
-		NumberSocket outAlpha;
-
-		operator const Socket&() const;
-	};
-	struct DLLRTUTIL MixClosureNode
-		: public Node
-	{
-		MixClosureNode(CCLShader &shader,const std::string &nodeName,ccl::MixClosureNode &node);
-		NumberSocket inFac;
-		Socket inClosure1;
-		Socket inClosure2;
-
-		Socket outClosure;
-
-		operator const Socket&() const;
-
-		void SetFactor(float fac);
-	private:
-		ccl::MixClosureNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL AddClosureNode
-		: public Node
-	{
-		AddClosureNode(CCLShader &shader,const std::string &nodeName,ccl::AddClosureNode &node);
-		Socket inClosure1;
-		Socket inClosure2;
-
-		Socket outClosure;
-
-		operator const Socket&() const;
-	private:
-		ccl::AddClosureNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL BackgroundNode
-		: public Node
-	{
-		BackgroundNode(CCLShader &shader,const std::string &nodeName,ccl::BackgroundNode &node);
-		Socket inColor;
-		NumberSocket inStrength;
-		NumberSocket inSurfaceMixWeight;
-
-		Socket outBackground;
-
-		operator const Socket&() const;
-
-		void SetColor(const Vector3 &color);
-		void SetStrength(float strength);
-		void SetSurfaceMixWeight(float surfaceMixWeight);
-	private:
-		ccl::BackgroundNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL TextureCoordinateNode
-		: public Node
-	{
-		TextureCoordinateNode(CCLShader &shader,const std::string &nodeName,ccl::TextureCoordinateNode &node);
-		Socket inNormal;
-		Socket outGenerated;
-		Socket outNormal;
-		Socket outUv;
-		Socket outObject;
-		Socket outCamera;
-		Socket outWindow;
-		Socket outReflection;
-	private:
-		ccl::TextureCoordinateNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL MappingNode
-		: public Node
-	{
-		enum class Type : uint8_t
+		namespace math
 		{
-			Point = 0u,
-			Texture,
-			Vector,
-			Normal
+			constexpr auto *IN_TYPE = "type";
+			constexpr auto *IN_USE_CLAMP = "use_clamp";
+			constexpr auto *IN_VALUE1 = "value1";
+			constexpr auto *IN_VALUE2 = "value2";
+			constexpr auto *IN_VALUE3 = "value3";
+
+			constexpr auto *OUT_VALUE = "value";
 		};
-
-		MappingNode(CCLShader &shader,const std::string &nodeName,ccl::MappingNode &node);
-		Socket inVector;
-		Socket outVector;
-
-		operator const Socket&() const;
-
-		void SetType(Type type);
-		void SetRotation(const EulerAngles &ang);
-	private:
-		ccl::MappingNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL ScatterVolumeNode
-		: public Node
-	{
-		ScatterVolumeNode(CCLShader &shader,const std::string &nodeName,ccl::ScatterVolumeNode &node);
-		Socket inColor;
-		NumberSocket inDensity;
-		NumberSocket inAnisotropy;
-		NumberSocket inVolumeMixWeight;
-
-		Socket outVolume;
-
-		operator const Socket&() const;
-	private:
-		ccl::ScatterVolumeNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL EmissionNode
-		: public Node
-	{
-		EmissionNode(CCLShader &shader,const std::string &nodeName,ccl::EmissionNode &node);
-		Socket inColor;
-		NumberSocket inStrength;
-		NumberSocket inSurfaceMixWeight;
-		Socket outEmission;
-
-		void SetColor(const Vector3 &color);
-		void SetStrength(float strength);
-
-		operator const Socket&() const;
-	private:
-		ccl::EmissionNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL ColorNode
-		: public Node
-	{
-		ColorNode(CCLShader &shader,const std::string &nodeName,ccl::ColorNode &node);
-		Socket outColor;
-
-		operator const Socket&() const;
-
-		void SetColor(const Vector3 &color);
-	private:
-		ccl::ColorNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL AttributeNode
-		: public Node
-	{
-		AttributeNode(CCLShader &shader,const std::string &nodeName,ccl::AttributeNode &node);
-		Socket outColor;
-		Socket outVector;
-		Socket outFactor;
-
-		void SetAttribute(ccl::AttributeStandard attrType);
-	private:
-		ccl::AttributeNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL LightPathNode
-		: public Node
-	{
-		LightPathNode(CCLShader &shader,const std::string &nodeName,ccl::LightPathNode &node);
-		NumberSocket outIsCameraRay;
-		NumberSocket outIsShadowRay;
-		NumberSocket outIsDiffuseRay;
-		NumberSocket outIsGlossyRay;
-		NumberSocket outIsSingularRay;
-		NumberSocket outIsReflectionRay;
-		NumberSocket outIsTransmissionRay;
-		NumberSocket outIsVolumeScatterRay;
-		NumberSocket outRayLength;
-		NumberSocket outRayDepth;
-		NumberSocket outDiffuseDepth;
-		NumberSocket outGlossyDepth;
-		NumberSocket outTransparentDepth;
-		NumberSocket outTransmissionDepth;
-	};
-	struct DLLRTUTIL MixNode
-		: public Node
-	{
-		enum class Type : uint8_t
+		namespace hsv
 		{
-			Mix = 0u,
-			Add,
-			Multiply,
-			Screen,
-			Overlay,
-			Subtract,
-			Divide,
-			Difference,
-			Darken,
-			Lighten,
-			Dodge,
-			Burn,
-			Hue,
-			Saturation,
-			Value,
-			Color,
-			SoftLight,
-			LinearLight
+			constexpr auto *IN_HUE = "hue";
+			constexpr auto *IN_SATURATION = "saturation";
+			constexpr auto *IN_VALUE = "value";
+			constexpr auto *IN_FAC = "fac";
+			constexpr auto *IN_COLOR = "color";
+
+			constexpr auto *OUT_COLOR = "color";
 		};
-
-		MixNode(CCLShader &shader,const std::string &nodeName,ccl::MixNode &node);
-		NumberSocket inFac;
-		Socket inColor1;
-		Socket inColor2;
-
-		Socket outColor;
-
-		operator const Socket&() const;
-
-		void SetType(Type type);
-		void SetUseClamp(bool useClamp);
-		void SetFactor(float fac);
-		void SetColor1(const Vector3 &color1);
-		void SetColor2(const Vector3 &color2);
-	private:
-		ccl::MixNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL TransparentBsdfNode
-		: public Node
-	{
-		TransparentBsdfNode(CCLShader &shader,const std::string &nodeName,ccl::TransparentBsdfNode &node);
-		Socket inColor;
-		NumberSocket inSurfaceMixWeight;
-
-		Socket outBsdf;
-
-		operator const Socket&() const;
-
-		void SetColor(const Vector3 &color);
-		void SetSurfaceMixWeight(float weight);
-	private:
-		ccl::TransparentBsdfNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL TranslucentBsdfNode
-		: public Node
-	{
-		TranslucentBsdfNode(CCLShader &shader,const std::string &nodeName,ccl::TranslucentBsdfNode &node);
-		Socket inColor;
-		Socket inNormal;
-		NumberSocket inSurfaceMixWeight;
-
-		Socket outBsdf;
-
-		operator const Socket&() const;
-
-		void SetColor(const Vector3 &color);
-		void SetSurfaceMixWeight(float weight);
-	private:
-		ccl::TranslucentBsdfNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL DiffuseBsdfNode
-		: public Node
-	{
-		DiffuseBsdfNode(CCLShader &shader,const std::string &nodeName,ccl::DiffuseBsdfNode &node);
-		Socket inColor;
-		Socket inNormal;
-		NumberSocket inSurfaceMixWeight;
-		NumberSocket inRoughness;
-
-		Socket outBsdf;
-
-		operator const Socket&() const;
-
-		void SetColor(const Vector3 &color);
-		void SetNormal(const Vector3 &normal);
-		void SetSurfaceMixWeight(float weight);
-		void SetRoughness(float roughness);
-	private:
-		ccl::DiffuseBsdfNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL NormalMapNode
-		: public Node
-	{
-		enum class Space : uint8_t
+		namespace separate_xyz
 		{
-			Tangent = 0u,
-			Object,
-			World
+			constexpr auto *IN_VECTOR = "vector";
+			
+			constexpr auto *OUT_X = "x";
+			constexpr auto *OUT_Y = "y";
+			constexpr auto *OUT_Z = "z";
 		};
-
-		NormalMapNode(CCLShader &shader,const std::string &nodeName,ccl::NormalMapNode &normalMapNode);
-
-		NumberSocket inStrength;
-		Socket inColor;
-
-		Socket outNormal;
-
-		operator const Socket&() const;
-
-		void SetStrength(float strength);
-		void SetColor(const Vector3 &color);
-		void SetSpace(Space space);
-		void SetAttribute(const std::string &attribute);
-	private:
-		ccl::NormalMapNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL PrincipledBSDFNode
-		: public Node
-	{
-		enum class Distribution : uint8_t
+		namespace combine_xyz
 		{
-			GGX = 0u,
-			MultiscaterGGX
-		};
+			constexpr auto *IN_X = "x";
+			constexpr auto *IN_Y = "Y";
+			constexpr auto *IN_Z = "Z";
 
-		enum class SubsurfaceMethod : uint8_t
+			constexpr auto *OUT_VECTOR = "vector";
+		};
+		namespace separate_rgb
 		{
-			Cubic = 0,
-			Gaussian,
-			Principled,
-			Burley,
-			RandomWalk,
-			PrincipledRandomWalk
+			constexpr auto *IN_COLOR = "color";
+
+			constexpr auto *OUT_R = "r";
+			constexpr auto *OUT_G = "g";
+			constexpr auto *OUT_B = "b";
 		};
-
-		PrincipledBSDFNode(CCLShader &shader,const std::string &nodeName,ccl::PrincipledBsdfNode &principledBSDF);
-		Socket inBaseColor;
-		Socket inSubsurfaceColor;	
-		NumberSocket inMetallic;
-		NumberSocket inSubsurface;
-		Socket inSubsurfaceRadius;
-		NumberSocket inSpecular;
-		NumberSocket inRoughness;
-		NumberSocket inSpecularTint;
-		NumberSocket inAnisotropic;
-		NumberSocket inSheen;
-		NumberSocket inSheenTint;
-		NumberSocket inClearcoat;
-		NumberSocket inClearcoatRoughness;
-		NumberSocket inIOR;
-		NumberSocket inTransmission;
-		NumberSocket inTransmissionRoughness;
-		NumberSocket inAnisotropicRotation;
-		Socket inEmission;
-		NumberSocket inAlpha;
-		Socket inNormal;
-		Socket inClearcoatNormal;
-		Socket inTangent;
-		NumberSocket inSurfaceMixWeight;
-
-		Socket outBSDF;
-
-		operator const Socket&() const;
-
-		void SetBaseColor(const Vector3 &color);
-		void SetSubsurfaceColor(const Vector3 &color);
-		void SetMetallic(float metallic);
-		void SetSubsurface(float subsurface);
-		void SetSubsurfaceRadius(const Vector3 &subsurfaceRadius);
-		void SetSpecular(float specular);
-		void SetRoughness(float roughness);
-		void SetSpecularTint(float specularTint);
-		void SetAnisotropic(float anisotropic);
-		void SetSheen(float sheen);
-		void SetSheenTint(float sheenTint);
-		void SetClearcoat(float clearcoat);
-		void SetClearcoatRoughness(float clearcoatRoughness);
-		void SetIOR(float ior);
-		void SetTransmission(float transmission);
-		void SetTransmissionRoughness(float transmissionRoughness);
-		void SetAnisotropicRotation(float anisotropicRotation);
-		void SetEmission(const Vector3 &emission);
-		void SetAlpha(float alpha);
-		void SetNormal(const Vector3 &normal);
-		void SetClearcoatNormal(const Vector3 &normal);
-		void SetTangent(const Vector3 &tangent);
-		void SetSurfaceMixWeight(float weight);
-
-		void SetDistribution(Distribution distribution);
-		void SetSubsurfaceMethod(SubsurfaceMethod method);
-	private:
-		ccl::PrincipledBsdfNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL ToonBSDFNode
-		: public Node
-	{
-		enum class Component : uint8_t
+		namespace combine_rgb
 		{
-			Diffuse = 0u,
-			Glossy
+			constexpr auto *IN_R = "r";
+			constexpr auto *IN_G = "g";
+			constexpr auto *IN_B = "b";
+
+			constexpr auto *OUT_IMAGE = "image";
 		};
-
-		ToonBSDFNode(CCLShader &shader,const std::string &nodeName,ccl::ToonBsdfNode &toonBsdf);
-		Socket inColor;
-		Socket inNormal;
-		NumberSocket inSurfaceMixWeight;
-		NumberSocket inSize;
-		NumberSocket inSmooth;
-
-		Socket outBSDF;
-
-		operator const Socket&() const;
-
-		void SetColor(const Vector3 &color);
-		void SetNormal(const Vector3 &normal);
-		void SetSurfaceMixWeight(float weight);
-		void SetSize(float size);
-		void SetSmooth(float smooth);
-		void SetComponent(Component component);
-	private:
-		ccl::ToonBsdfNode *m_node = nullptr;
-	};
-	struct DLLRTUTIL GlassBSDFNode
-		: public Node
-	{
-		enum class Distribution : uint8_t
+		namespace geometry
 		{
-			Sharp = 0u,
-			Beckmann,
-			GGX,
-			MultiscatterGGX
+			constexpr auto *IN_NORMAL_OSL = "normal_osl";
+
+			constexpr auto *OUT_POSITION = "position";
+			constexpr auto *OUT_NORMAL = "normal";
+			constexpr auto *OUT_TANGENT = "tangent";
+			constexpr auto *OUT_TRUE_NORMAL = "true_normal";
+			constexpr auto *OUT_INCOMING = "incoming";
+			constexpr auto *OUT_PARAMETRIC = "parametric";
+			constexpr auto *OUT_BACKFACING = "backfacing";
+			constexpr auto *OUT_POINTINESS = "pointiness";
+			constexpr auto *OUT_RANDOM_PER_ISLAND = "random_per_island";
 		};
+		namespace camera_info
+		{
+			constexpr auto *OUT_VIEW_VECTOR = "view_vector";
+			constexpr auto *OUT_VIEW_Z_DEPTH = "view_z_depth";
+			constexpr auto *OUT_VIEW_DISTANCE = "view_distance";
+		};
+		namespace image_texture
+		{
+			constexpr auto *IN_FILENAME = "filename";
+			constexpr auto *IN_COLORSPACE = "colorspace";
+			constexpr auto *IN_ALPHA_TYPE = "alpha_type";
+			constexpr auto *IN_INTERPOLATION = "interpolation";
+			constexpr auto *IN_EXTENSION = "extension";
+			constexpr auto *IN_PROJECTION = "projection";
+			constexpr auto *IN_PROJECTION_BLEND = "projection_blend";
+			constexpr auto *IN_VECTOR = "vector";
 
-		GlassBSDFNode(CCLShader &shader,const std::string &nodeName,ccl::GlassBsdfNode &toonBsdf);
-		Socket inColor;
-		Socket inNormal;
-		NumberSocket inSurfaceMixWeight;
-		NumberSocket inRoughness;
-		NumberSocket inIOR;
+			constexpr auto *OUT_COLOR = "color";
+			constexpr auto *OUT_ALPHA = "alpha";
+		};
+		namespace environment_texture
+		{
+			constexpr auto *IN_FILENAME = "filename";
+			constexpr auto *IN_COLORSPACE = "colorspace";
+			constexpr auto *IN_ALPHA_TYPE = "alpha_type";
+			constexpr auto *IN_INTERPOLATION = "interpolation";
+			constexpr auto *IN_PROJECTION = "projection";
+			constexpr auto *IN_VECTOR = "vector";
 
-		Socket outBSDF;
+			constexpr auto *OUT_COLOR = "color";
+			constexpr auto *OUT_ALPHA = "alpha";
+		};
+		namespace mix_closure
+		{
+			constexpr auto *IN_FAC = "fac";
+			constexpr auto *IN_CLOSURE1 = "closure1";
+			constexpr auto *IN_CLOSURE2 = "closure2";
 
-		operator const Socket&() const;
+			constexpr auto *OUT_CLOSURE = "closure";
+		};
+		namespace add_closure
+		{
+			constexpr auto *IN_CLOSURE1 = "closure1";
+			constexpr auto *IN_CLOSURE2 = "closure2";
 
-		void SetColor(const Vector3 &color);
-		void SetNormal(const Vector3 &normal);
-		void SetSurfaceMixWeight(float weight);
-		void SetRoughness(float roughness);
-		void SetIOR(float ior);
-		void SetDistribution(Distribution distribution);
-	private:
-		ccl::GlassBsdfNode *m_node = nullptr;
+			constexpr auto *OUT_CLOSURE = "closure";
+		};
+		namespace background_shader
+		{
+			constexpr auto *IN_COLOR = "color";
+			constexpr auto *IN_STRENGTH = "strength";
+			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
+
+			constexpr auto *OUT_BACKGROUND = "background";
+		};
+		namespace texture_coordinate
+		{
+			constexpr auto *IN_FROM_DUPLI = "from_dupli";
+			constexpr auto *IN_USE_TRANSFORM = "use_transform";
+			constexpr auto *IN_OB_TFM = "ob_tfm";
+			constexpr auto *IN_NORMAL_OSL = "normal_osl";
+
+			constexpr auto *OUT_GENERATED = "generated";
+			constexpr auto *OUT_NORMAL = "normal";
+			constexpr auto *OUT_UV = "UV";
+			constexpr auto *OUT_OBJECT = "object";
+			constexpr auto *OUT_CAMERA = "camera";
+			constexpr auto *OUT_WINDOW = "window";
+			constexpr auto *OUT_REFLECTION = "reflection";
+		};
+		namespace mapping
+		{
+			constexpr auto *IN_TYPE = "type";
+			constexpr auto *IN_VECTOR = "vector";
+			constexpr auto *IN_LOCATION = "location";
+			constexpr auto *IN_ROTATION = "rotation";
+			constexpr auto *IN_SCALE = "scale";
+
+			constexpr auto *OUT_VECTOR = "vector";
+		};
+		namespace scatter_volume
+		{
+			constexpr auto *IN_COLOR = "color";
+			constexpr auto *IN_DENSITY = "density";
+			constexpr auto *IN_ANISOTROPY = "anisotropy";
+			constexpr auto *IN_VOLUME_MIX_WEIGHT = "volume_mix_weight";
+
+			constexpr auto *OUT_VOLUME = "volume";
+		};
+		namespace emission
+		{
+			constexpr auto *IN_COLOR = "color";
+			constexpr auto *IN_STRENGTH = "strength";
+			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
+
+			constexpr auto *OUT_EMISSION = "emission";
+		};
+		namespace color
+		{
+			constexpr auto *IN_VALUE = "value";
+
+			constexpr auto *OUT_COLOR = "color";
+		};
+		namespace attribute
+		{
+			constexpr auto *IN_ATTRIBUTE = "attribute";
+
+			constexpr auto *OUT_COLOR = "color";
+			constexpr auto *OUT_VECTOR = "vector";
+			constexpr auto *OUT_FAC = "fac";
+		};
+		namespace light_path
+		{
+			constexpr auto *OUT_IS_CAMERA_RAY = "is_camera_ray";
+			constexpr auto *OUT_IS_SHADOW_RAY = "is_shadow_ray";
+			constexpr auto *OUT_IS_DIFFUSE_RAY = "is_diffuse_ray";
+			constexpr auto *OUT_IS_GLOSSY_RAY = "is_glossy_ray";
+			constexpr auto *OUT_IS_SINGULAR_RAY = "is_singular_ray";
+			constexpr auto *OUT_IS_REFLECTION_RAY = "is_reflection_ray";
+			constexpr auto *OUT_IS_TRANSMISSION_RAY = "is_transmission_ray";
+			constexpr auto *OUT_IS_VOLUME_SCATTER_RAY = "is_volume_scatter_ray";
+
+			constexpr auto *OUT_RAY_LENGTH = "ray_length";
+			constexpr auto *OUT_RAY_DEPTH = "ray_depth";
+			constexpr auto *OUT_DIFFUSE_DEPTH = "diffuse_depth";
+			constexpr auto *OUT_GLOSSY_DEPTH = "glossy_depth";
+			constexpr auto *OUT_TRANSPARENT_DEPTH = "transparent_depth";
+			constexpr auto *OUT_TRANSMISSION_DEPTH = "transmission_depth";
+		};
+		namespace transparent_bsdf
+		{
+			constexpr auto *IN_COLOR = "color";
+			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
+
+			constexpr auto *OUT_BSDF = "BSDF";
+		};
+		namespace translucent_bsdf
+		{
+			constexpr auto *IN_COLOR = "color";
+			constexpr auto *IN_NORMAL = "normal";
+			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
+
+			constexpr auto *OUT_BSDF = "BSDF";
+		};
+		namespace diffuse_bsdf
+		{
+			constexpr auto *IN_COLOR = "color";
+			constexpr auto *IN_NORMAL = "normal";
+			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
+			constexpr auto *IN_ROUGHNESS = "roughness";
+
+			constexpr auto *OUT_BSDF = "BSDF";
+		};
+		namespace normal_map
+		{
+			constexpr auto *IN_SPACE = "space";
+			constexpr auto *IN_ATTRIBUTE = "attribute";
+			constexpr auto *IN_NORMAL_OSL = "normal_osl";
+			constexpr auto *IN_STRENGTH = "strength";
+			constexpr auto *IN_COLOR = "color";
+
+			constexpr auto *OUT_NORMAL = "normal";
+		};
+		namespace principled_bsdf
+		{
+			constexpr auto *IN_DISTRIBUTION = "distribution";
+			constexpr auto *IN_SUBSURFACE_METHOD = "subsurface_method";
+			constexpr auto *IN_BASE_COLOR = "base_color";
+			constexpr auto *IN_SUBSURFACE_COLOR = "subsurface_color";
+			constexpr auto *IN_METALLIC = "metallic";
+			constexpr auto *IN_SUBSURFACE = "subsurface";
+			constexpr auto *IN_SUBSURFACE_RADIUS = "subsurface_radius";
+			constexpr auto *IN_SPECULAR = "specular";
+			constexpr auto *IN_ROUGHNESS = "roughness";
+			constexpr auto *IN_SPECULAR_TINT = "specular_tint";
+			constexpr auto *IN_ANISOTROPIC = "anisotropic";
+			constexpr auto *IN_SHEEN = "sheen";
+			constexpr auto *IN_SHEEN_TINT = "sheen_tint";
+			constexpr auto *IN_CLEARCOAT = "clearcoat";
+			constexpr auto *IN_CLEARCOAT_ROUGHNESS = "clearcoat_roughness";
+			constexpr auto *IN_IOR = "ior";
+			constexpr auto *IN_TRANSMISSION = "transmission";
+			constexpr auto *IN_TRANSMISSION_ROUGHNESS = "transmission_roughness";
+			constexpr auto *IN_ANISOTROPIC_ROTATION = "anisotropic_rotation";
+			constexpr auto *IN_EMISSION = "emission";
+			constexpr auto *IN_ALPHA = "alpha";
+			constexpr auto *IN_NORMAL = "normal";
+			constexpr auto *IN_CLEARCOAT_NORMAL = "clearcoat_normal";
+			constexpr auto *IN_TANGENT = "tangent";
+			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
+
+			constexpr auto *OUT_BSDF = "BSDF";
+		};
+		namespace toon_bsdf
+		{
+			constexpr auto *IN_COMPONENT = "component";
+			constexpr auto *IN_COLOR = "color";
+			constexpr auto *IN_NORMAL = "normal";
+			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
+			constexpr auto *IN_SIZE = "size";
+			constexpr auto *IN_SMOOTH = "smooth";
+
+			constexpr auto *OUT_BSDF = "BSDF";
+		};
+		namespace glass_bsdf
+		{
+			constexpr auto *IN_DISTRIBUTION = "distribution";
+			constexpr auto *IN_COLOR = "color";
+			constexpr auto *IN_NORMAL = "normal";
+			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
+			constexpr auto *IN_ROUGHNESS = "roughness";
+			constexpr auto *IN_IOR = "IOR";
+
+			constexpr auto *OUT_BSDF = "BSDF";
+		};
+		namespace output
+		{
+			constexpr auto *IN_SURFACE = "surface";
+			constexpr auto *IN_VOLUME = "volume";
+			constexpr auto *IN_DISPLACEMENT = "displacement";
+			constexpr auto *IN_NORMAL = "normal";
+		};
+		namespace vector_math
+		{
+			constexpr auto *IN_TYPE = "type";
+			constexpr auto *IN_VECTOR1 = "vector1";
+			constexpr auto *IN_VECTOR2 = "vector2";
+			constexpr auto *IN_SCALE = "scale";
+
+			constexpr auto *OUT_VALUE = "value";
+			constexpr auto *OUT_VECTOR = "vector";
+		};
+		namespace mix
+		{
+			constexpr auto *IN_TYPE = "type";
+			constexpr auto *IN_USE_CLAMP = "use_clamp";
+			constexpr auto *IN_FAC = "fac";
+			constexpr auto *IN_COLOR1 = "color1";
+			constexpr auto *IN_COLOR2 = "color2";
+
+			constexpr auto *OUT_COLOR = "color";
+		};
+		namespace rgb_to_bw
+		{
+			constexpr auto *IN_COLOR = "color";
+
+			constexpr auto *OUT_VAL = "val";
+		};
+		namespace invert
+		{
+			constexpr auto *IN_COLOR = "color";
+			constexpr auto *IN_FAC = "fac";
+
+			constexpr auto *OUT_COLOR = "color";
+		};
+		namespace vector_transform
+		{
+			constexpr auto *IN_TYPE = "type";
+			constexpr auto *IN_CONVERT_FROM = "convert_from";
+			constexpr auto *IN_CONVERT_TO = "convert_to";
+			constexpr auto *IN_VECTOR = "vector";
+
+			constexpr auto *OUT_VECTOR = "vector";
+		};
+		namespace rgb_ramp
+		{
+			constexpr auto *IN_RAMP = "ramp";
+			constexpr auto *IN_RAMP_ALPHA = "ramp_alpha";
+			constexpr auto *IN_INTERPOLATE = "interpolate";
+			constexpr auto *IN_FAC = "fac";
+
+			constexpr auto *OUT_COLOR = "color";
+			constexpr auto *OUT_ALPHA = "alpha";
+		};
+		namespace layer_weight
+		{
+			constexpr auto *IN_NORMAL = "normal";
+			constexpr auto *IN_BLEND = "blend";
+
+			constexpr auto *OUT_FRESNEL = "fresnel";
+			constexpr auto *OUT_FACING = "facing";
+		};
 	};
-	struct DLLRTUTIL OutputNode
-		: public Node
-	{
-		OutputNode(CCLShader &shader,const std::string &nodeName);
-		Socket inSurface;
-		Socket inVolume;
-		Socket inDisplacement;
-		Socket inNormal;
-	};
+	constexpr uint32_t NODE_COUNT = 35;
 };
+
+DLLRTUTIL std::ostream& operator<<(std::ostream &os,const raytracing::Socket &socket);
 
 #endif

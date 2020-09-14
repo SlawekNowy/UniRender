@@ -23,7 +23,7 @@ namespace raytracing
 	using PCamera = std::shared_ptr<Camera>;
 	class Scene;
 	class DLLRTUTIL Camera
-		: public WorldObject,
+		: public WorldObject,public SceneObject,
 		public std::enable_shared_from_this<Camera>
 	{
 	public:
@@ -76,7 +76,7 @@ namespace raytracing
 		float GetAspectRatio() const;
 		float GetNearZ() const;
 		float GetFarZ() const;
-		virtual void DoFinalize() override;
+		virtual void DoFinalize(Scene &scene) override;
 
 		ccl::Camera *operator->();
 		ccl::Camera *operator*();

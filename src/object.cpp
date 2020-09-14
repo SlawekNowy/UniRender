@@ -9,68 +9,75 @@
 #include "util_raytracing/mesh.hpp"
 #include "util_raytracing/scene.hpp"
 #include "util_raytracing/shader.hpp"
+#include "util_raytracing/model_cache.hpp"
 #include <sharedutils/datastream.h>
 #include <render/object.h>
 #include <render/scene.h>
 #include <render/mesh.h>
 
 #pragma optimize("",off)
-raytracing::PObject raytracing::Object::Create(Scene &scene,Mesh *mesh)
+raytracing::PObject raytracing::Object::Create(Mesh *mesh)
 {
 	auto *object = new ccl::Object{}; // Object will be removed automatically by cycles
 	if(mesh)
 		object->mesh = **mesh;
 	object->tfm = ccl::transform_identity();
-	scene->objects.push_back(object);
-	auto pObject = PObject{new Object{scene,*object,static_cast<uint32_t>(scene->objects.size() -1),mesh}};
-	scene.m_objects.push_back(pObject);
-	return pObject;
+	return PObject{new Object{*object,mesh}};
 }
-raytracing::PObject raytracing::Object::Create(Scene &scene,Mesh &mesh) {return Create(scene,&mesh);}
+raytracing::PObject raytracing::Object::Create(Mesh &mesh) {return Create(&mesh);}
 
-raytracing::PObject raytracing::Object::Create(Scene &scene,uint32_t version,DataStream &dsIn)
+raytracing::PObject raytracing::Object::Create(uint32_t version,DataStream &dsIn,const std::function<PMesh(uint32_t)> &fGetMesh)
 {
-	auto o = Create(scene,nullptr);
-	o->Deserialize(version,dsIn);
+	auto o = Create(nullptr);
+	o->Deserialize(version,dsIn,fGetMesh);
 	return o;
 }
 
-raytracing::Object::Object(Scene &scene,ccl::Object &object,uint32_t objectId,Mesh *mesh)
-	: WorldObject{scene},m_object{object},m_mesh{mesh ? mesh->shared_from_this() : nullptr},
-	m_id{objectId}
+raytracing::Object::Object(ccl::Object &object,Mesh *mesh)
+	: WorldObject{},BaseObject{},m_object{object},m_mesh{mesh ? mesh->shared_from_this() : nullptr}
 {}
 
-void raytracing::Object::Serialize(DataStream &dsOut) const
+raytracing::Object::~Object()
+{
+	if(umath::is_flag_set(m_flags,Flags::CCLObjectOwnedByScene) == false)
+		delete &m_object;
+}
+
+void raytracing::Object::Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Mesh&)> &fGetMeshIndex) const
 {
 	WorldObject::Serialize(dsOut);
-	auto &scene = GetScene();
-	auto &meshes = scene.GetMeshes();
-	auto it = std::find(meshes.begin(),meshes.end(),m_mesh);
-	assert(it != meshes.end());
-	dsOut->Write<uint32_t>(it -meshes.begin());
+	auto idx = fGetMeshIndex(*m_mesh);
+	assert(idx.has_value());
+	dsOut->Write<uint32_t>(*idx);
 }
-void raytracing::Object::Deserialize(uint32_t version,DataStream &dsIn)
+void raytracing::Object::Serialize(DataStream &dsOut,const std::unordered_map<const Mesh*,size_t> &meshToIndexTable) const
+{
+	Serialize(dsOut,[&meshToIndexTable](const Mesh &mesh) -> std::optional<uint32_t> {
+		auto it = meshToIndexTable.find(&mesh);
+		return (it != meshToIndexTable.end()) ? it->second : std::optional<uint32_t>{};
+	});
+}
+void raytracing::Object::Deserialize(uint32_t version,DataStream &dsIn,const std::function<PMesh(uint32_t)> &fGetMesh)
 {
 	WorldObject::Deserialize(version,dsIn);
 	auto meshIdx = dsIn->Read<uint32_t>();
-	auto &scene = GetScene();
-	auto &meshes = scene.GetMeshes();
-	assert(meshIdx < meshes.size());
-	m_mesh = meshes.at(meshIdx);
+	auto mesh = fGetMesh(meshIdx);
+	assert(mesh);
+	m_mesh = mesh;
 	m_object.mesh = **m_mesh;
 }
-
-uint32_t raytracing::Object::GetId() const {return m_id;}
 
 util::WeakHandle<raytracing::Object> raytracing::Object::GetHandle()
 {
 	return util::WeakHandle<raytracing::Object>{shared_from_this()};
 }
 
-void raytracing::Object::DoFinalize()
+void raytracing::Object::DoFinalize(Scene &scene)
 {
-	m_mesh->Finalize();
+	m_mesh->Finalize(scene);
 	m_object.tfm = Scene::ToCyclesTransform(GetPose());
+	m_flags |= Flags::CCLObjectOwnedByScene;
+	// m_object.tag_update(*scene);
 
 #ifdef ENABLE_MOTION_BLUR_TEST
 	m_motionPose.SetOrigin(Vector3{100.f,100.f,100.f});
@@ -85,5 +92,7 @@ const umath::Transform &raytracing::Object::GetMotionPose() const {return m_moti
 void raytracing::Object::SetMotionPose(const umath::Transform &pose) {m_motionPose = pose;}
 
 ccl::Object *raytracing::Object::operator->() {return &m_object;}
+const ccl::Object *raytracing::Object::operator->() const {return const_cast<Object*>(this)->operator->();}
 ccl::Object *raytracing::Object::operator*() {return &m_object;}
+const ccl::Object *raytracing::Object::operator*() const {return const_cast<Object*>(this)->operator*();}
 #pragma optimize("",on)

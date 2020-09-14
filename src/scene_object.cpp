@@ -13,12 +13,12 @@ raytracing::SceneObject::SceneObject(Scene &scene)
 	: m_scene{scene}
 {}
 
-void raytracing::SceneObject::Finalize()
+void raytracing::BaseObject::Finalize(Scene &scene,bool force)
 {
-	if(m_bFinalized)
+	if(m_bFinalized && force == false)
 		return;
 	m_bFinalized = true;
-	DoFinalize();
+	DoFinalize(scene);
 }
-void raytracing::SceneObject::DoFinalize() {}
+void raytracing::BaseObject::DoFinalize(Scene &scene) {}
 #pragma optimize("",on)

@@ -9,6 +9,7 @@
 #include "util_raytracing/scene.hpp"
 #include "util_raytracing/shader.hpp"
 #include "util_raytracing/ccl_shader.hpp"
+#include "util_raytracing/model_cache.hpp"
 #include <sharedutils/datastream.h>
 #include <render/mesh.h>
 #include <render/scene.h>
@@ -16,7 +17,7 @@
 #pragma optimize("",off)
 static const std::string TANGENT_POSTFIX = ".tangent";
 static const std::string TANGENT_SIGN_POSTIFX = ".tangent_sign";
-raytracing::PMesh raytracing::Mesh::Create(Scene &scene,const std::string &name,uint64_t numVerts,uint64_t numTris,Flags flags)
+raytracing::PMesh raytracing::Mesh::Create(const std::string &name,uint64_t numVerts,uint64_t numTris,Flags flags)
 {
 	auto *mesh = new ccl::Mesh{}; // Object will be removed automatically by cycles
 	mesh->name = name;
@@ -51,33 +52,35 @@ raytracing::PMesh raytracing::Mesh::Create(Scene &scene,const std::string &name,
 	// TODO: Add support for hair/curves
 
 	mesh->reserve_mesh(numVerts,numTris);
-	scene->meshes.push_back(mesh);
-	auto meshWrapper = PMesh{new Mesh{scene,*mesh,numVerts,numTris,flags}};
+	auto meshWrapper = PMesh{new Mesh{*mesh,numVerts,numTris,flags}};
 	meshWrapper->m_perVertexUvs.reserve(numVerts);
 	meshWrapper->m_perVertexTangents.reserve(numVerts);
 	meshWrapper->m_perVertexTangentSigns.reserve(numVerts);
 	meshWrapper->m_perVertexAlphas.reserve(numVerts);
-
-	auto &meshes = scene.GetMeshes();
-	if(meshes.size() == meshes.capacity())
-		meshes.reserve(meshes.size() +100);
-	meshes.push_back(meshWrapper);
 	return meshWrapper;
 }
 
-raytracing::PMesh raytracing::Mesh::Create(Scene &scene,DataStream &dsIn)
+raytracing::PMesh raytracing::Mesh::Create(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader)
 {
 	auto name = dsIn->ReadString();
 	auto flags = dsIn->Read<decltype(m_flags)>();
 	auto numVerts = dsIn->Read<decltype(m_numVerts)>();
 	auto numTris = dsIn->Read<decltype(m_numTris)>();
-	auto mesh = Create(scene,name,numVerts,numTris,flags);
-	mesh->Deserialize(dsIn);
+	auto mesh = Create(name,numVerts,numTris,flags);
+	mesh->Deserialize(dsIn,fGetShader);
 	return mesh;
 }
 
-raytracing::Mesh::Mesh(Scene &scene,ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTris,Flags flags)
-	: SceneObject{scene},m_mesh{mesh},m_numVerts{numVerts},
+raytracing::PMesh raytracing::Mesh::Create(DataStream &dsIn,const ShaderCache &cache)
+{
+	auto &shaders = cache.GetShaders();
+	return Create(dsIn,[&shaders](uint32_t idx) -> PShader {
+		return (idx < shaders.size()) ? shaders.at(idx) : nullptr;
+	});
+}
+
+raytracing::Mesh::Mesh(ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTris,Flags flags)
+	: m_mesh{mesh},m_numVerts{numVerts},
 	m_numTris{numTris},m_flags{flags}
 {
 	auto *normals = m_mesh.attributes.find(ccl::ATTR_STD_VERTEX_NORMAL);
@@ -107,6 +110,12 @@ raytracing::Mesh::Mesh(Scene &scene,ccl::Mesh &mesh,uint64_t numVerts,uint64_t n
 	}
 }
 
+raytracing::Mesh::~Mesh()
+{
+	if(umath::is_flag_set(m_flags,Flags::CCLObjectOwnedByScene) == false)
+		delete &m_mesh;
+}
+
 util::WeakHandle<raytracing::Mesh> raytracing::Mesh::GetHandle()
 {
 	return util::WeakHandle<raytracing::Mesh>{shared_from_this()};
@@ -119,7 +128,7 @@ enum class SerializationFlags : uint8_t
 	UseSubdivFaces = UseAlphas<<1u
 };
 REGISTER_BASIC_BITWISE_OPERATORS(SerializationFlags)
-void raytracing::Mesh::Serialize(DataStream &dsOut) const
+void raytracing::Mesh::Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Shader&)> &fGetShaderIndex) const
 {
 	auto numVerts = umath::min(m_numVerts,m_mesh.verts.size());
 	auto numTris = umath::min(m_numTris,m_mesh.triangles.size());
@@ -166,16 +175,22 @@ void raytracing::Mesh::Serialize(DataStream &dsOut) const
 	dsOut->Write<size_t>(m_subMeshShaders.size());
 	for(auto &shader : m_subMeshShaders)
 	{
-		auto &shaders = GetScene().GetShaders();
-		auto it = std::find(shaders.begin(),shaders.end(),shader);
-		assert(it != shaders.end());
-		dsOut->Write<uint32_t>(it -shaders.begin());
+		auto idx = fGetShaderIndex(*shader);
+		assert(idx.has_value());
+		dsOut->Write<uint32_t>(*idx);
 	}
 
 	dsOut->Write<size_t>(m_lightmapUvs.size());
 	dsOut->Write(reinterpret_cast<const uint8_t*>(m_lightmapUvs.data()),m_lightmapUvs.size() *sizeof(m_lightmapUvs.front()));
 }
-void raytracing::Mesh::Deserialize(DataStream &dsIn)
+void raytracing::Mesh::Serialize(DataStream &dsOut,const std::unordered_map<const Shader*,size_t> shaderToIndexTable) const
+{
+	Serialize(dsOut,[&shaderToIndexTable](const Shader &shader) -> std::optional<uint32_t> {
+		auto it = shaderToIndexTable.find(&shader);
+		return (it != shaderToIndexTable.end()) ? it->second : std::optional<uint32_t>{};
+	});
+}
+void raytracing::Mesh::Deserialize(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader)
 {
 	auto flags = dsIn->Read<SerializationFlags>();
 
@@ -238,9 +253,9 @@ void raytracing::Mesh::Deserialize(DataStream &dsIn)
 	for(auto i=decltype(m_subMeshShaders.size()){0u};i<m_subMeshShaders.size();++i)
 	{
 		auto shaderIdx = dsIn->Read<uint32_t>();
-		auto &shaders = GetScene().GetShaders();
-		assert(shaderIdx < shaders.size());
-		m_subMeshShaders.at(i) = shaders.at(shaderIdx);
+		auto shader = fGetShader(shaderIdx);
+		assert(shader);
+		m_subMeshShaders.at(i) = shader;
 	}
 
 	auto numLightmapUvs = dsIn->Read<size_t>();
@@ -248,19 +263,24 @@ void raytracing::Mesh::Deserialize(DataStream &dsIn)
 	dsIn->Read(m_lightmapUvs.data(),m_lightmapUvs.size() *sizeof(m_lightmapUvs.front()));
 }
 
-void raytracing::Mesh::DoFinalize()
+void raytracing::Mesh::DoFinalize(Scene &scene)
 {
-	SceneObject::DoFinalize();
+	BaseObject::DoFinalize(scene);
 	auto &shaders = GetSubMeshShaders();
 	(*this)->used_shaders.resize(shaders.size());
 	for(auto i=decltype(shaders.size()){0u};i<shaders.size();++i)
 	{
-		auto cclShader = shaders.at(i)->GenerateCCLShader();
+		auto desc = shaders.at(i)->GetActivePassNode();
+		if(desc == nullptr)
+			desc = GroupNodeDesc::Create(scene.GetShaderNodeManager()); // Just create a dummy node
+		auto cclShader = CCLShader::Create(scene,*desc);
 		if(cclShader == nullptr)
 			throw std::logic_error{"Mesh shader must never be NULL!"};
 		if(cclShader)
 			(*this)->used_shaders.at(i) = **cclShader;
 	}
+	m_flags |= Flags::CCLObjectOwnedByScene;
+	// m_mesh.tag_update(*scene,true);
 }
 
 const ccl::float4 *raytracing::Mesh::GetNormals() const {return m_normals;}
@@ -361,7 +381,7 @@ bool raytracing::Mesh::AddTriangle(uint32_t idx0,uint32_t idx1,uint32_t idx2,uin
 
 uint32_t raytracing::Mesh::AddSubMeshShader(Shader &shader)
 {
-	m_subMeshShaders.push_back(shader.shared_from_this());
+	m_subMeshShaders.push_back(std::static_pointer_cast<Shader>(shader.shared_from_this()));
 	return m_subMeshShaders.size() -1;
 }
 

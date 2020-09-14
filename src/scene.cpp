@@ -13,6 +13,8 @@
 #include "util_raytracing/object.hpp"
 #include "util_raytracing/light.hpp"
 #include "util_raytracing/baking.hpp"
+#include "util_raytracing/denoise.hpp"
+#include "util_raytracing/model_cache.hpp"
 #include <render/buffers.h>
 #include <render/scene.h>
 #include <render/session.h>
@@ -156,15 +158,15 @@ bool raytracing::Scene::ReadHeaderInfo(DataStream &ds,RenderMode &outRenderMode,
 {
 	return ReadSerializationHeader(ds,outRenderMode,outCreateInfo,outSerializationData,outVersion,optOutSceneInfo);
 }
-std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(DataStream &ds,RenderMode renderMode,const CreateInfo &createInfo)
+std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeManager,DataStream &ds,RenderMode renderMode,const CreateInfo &createInfo)
 {
-	auto scene = Create(renderMode,createInfo);
+	auto scene = Create(nodeManager,renderMode,createInfo);
 	ds->SetOffset(0);
 	if(scene == nullptr || scene->Deserialize(ds) == false)
 		return nullptr;
 	return scene;
 }
-std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(DataStream &ds)
+std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeManager,DataStream &ds)
 {
 	RenderMode renderMode;
 	CreateInfo createInfo;
@@ -172,9 +174,10 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(DataStream &ds)
 	uint32_t version;
 	if(ReadSerializationHeader(ds,renderMode,createInfo,serializationData,version) == false)
 		return nullptr;
-	return Create(ds,renderMode,createInfo);
+	return Create(nodeManager,ds,renderMode,createInfo);
 }
-std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(RenderMode renderMode,const CreateInfo &createInfo)
+
+std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeManager,RenderMode renderMode,const CreateInfo &createInfo)
 {
 	init_cycles();
 
@@ -227,9 +230,9 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(RenderMode renderMo
 	ccl::SessionParams sessionParams {};
 	sessionParams.shadingsystem = ccl::SHADINGSYSTEM_SVM;
 	sessionParams.device = *device;
-	sessionParams.progressive = true; // TODO: This should be set to false, but doing so causes a crash during rendering
+	sessionParams.progressive = true; // TODO: This should be set to false(?), but doing so causes a crash during rendering
 	sessionParams.background = true;
-	sessionParams.progressive_refine = false;
+	sessionParams.progressive_refine = createInfo.progressiveRefine;
 	sessionParams.display_buffer_linear = createInfo.hdrOutput;
 
 	switch(deviceType)
@@ -243,11 +246,15 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(RenderMode renderMo
 	}
 	sessionParams.tile_order = ccl::TileOrder::TILE_HILBERT_SPIRAL;
 
-	if(createInfo.denoise && renderMode == RenderMode::RenderImage)
+	/*if(createInfo.denoiseMode != DenoiseMode::None && renderMode == RenderMode::RenderImage)
 	{
 		sessionParams.full_denoising = true;
 		sessionParams.run_denoising = true;
-	}
+	}*/
+	// We'll handle denoising ourselves
+	sessionParams.full_denoising = false;
+	sessionParams.run_denoising = false;
+
 	sessionParams.start_resolution = 64;
 	if(createInfo.samples.has_value())
 		sessionParams.samples = *createInfo.samples;
@@ -266,7 +273,13 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(RenderMode renderMo
 		}
 	}
 
-	if(IsRenderSceneMode(renderMode))
+	if(createInfo.progressive)
+	{
+		sessionParams.write_render_cb = nullptr;
+		if(createInfo.progressiveRefine)
+			sessionParams.samples = 50'000;
+	}
+	else if(IsRenderSceneMode(renderMode))
 	{
 		// We need to define a write callback, otherwise the session's display object will not be initialized.
 		sessionParams.write_render_cb = [](const ccl::uchar *pixels,int w,int h,int channels) -> bool {return true;};
@@ -303,17 +316,27 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(RenderMode renderMo
 	cclScene->params.persistent_data = true;
 
 	auto *pSession = session.get();
-	auto scene = std::shared_ptr<Scene>{new Scene{std::move(session),*cclScene,renderMode,deviceType}};
+	auto scene = std::shared_ptr<Scene>{new Scene{nodeManager,std::move(session),*cclScene,renderMode,deviceType}};
+
+	auto *pScene = scene.get();
+	if(createInfo.progressive)
+	{
+		pSession->update_render_tile_cb = [pScene](ccl::RenderTile tile,bool param) {
+			pScene->m_tileManager.UpdateRenderTile(tile,param);
+		};
+		pSession->write_render_tile_cb = [pScene](ccl::RenderTile &tile) {
+			pScene->m_tileManager.WriteRenderTile(tile);
+		};
+	}
 
 	scene->m_camera = Camera::Create(*scene);
 	scene->m_createInfo = createInfo;
 	umath::set_flag(scene->m_stateFlags,StateFlags::OutputResultWithHDRColors,createInfo.hdrOutput);
-	umath::set_flag(scene->m_stateFlags,StateFlags::DenoiseResult,createInfo.denoise);
 	return scene;
 }
 
-raytracing::Scene::Scene(std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode,DeviceType deviceType)
-	: m_session{std::move(session)},m_scene{scene},m_renderMode{renderMode},m_deviceType{deviceType}
+raytracing::Scene::Scene(NodeManager &nodeManager,std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode,DeviceType deviceType)
+	: m_session{std::move(session)},m_scene{scene},m_renderMode{renderMode},m_deviceType{deviceType},m_nodeManager{nodeManager.shared_from_this()}
 {}
 
 raytracing::Scene::~Scene()
@@ -330,7 +353,7 @@ std::shared_ptr<uimg::ImageBuffer> raytracing::Scene::FinalizeCyclesScene()
 		: ccl::Session
 	{
 	public:
-		void Finalize(bool hdr)
+		void Finalize(bool hdr,bool progressive)
 		{
 			// This part is the same code as the respective part in Session::~Session()
 			if (session_thread) {
@@ -350,45 +373,53 @@ std::shared_ptr<uimg::ImageBuffer> raytracing::Scene::FinalizeCyclesScene()
 			}
 			//
 
-			/* tonemap and write out image if requested */
-			delete display;
+			if(progressive == false)
+			{
+				/* tonemap and write out image if requested */
+				delete display;
 
-			display = new ccl::DisplayBuffer(device, hdr);
-			display->reset(buffers->params);
-			copy_to_display_buffer(params.samples);
+				display = new ccl::DisplayBuffer(device, hdr);
+				display->reset(buffers->params);
+				copy_to_display_buffer(params.samples);
+			}
 		}
 	};
 	auto &session = reinterpret_cast<SessionWrapper&>(*m_session);
 	auto outputWithHDR = umath::is_flag_set(m_stateFlags,StateFlags::OutputResultWithHDRColors);
-	session.Finalize(outputWithHDR);
+	session.Finalize(outputWithHDR,m_createInfo.progressive);
 
-	auto w = m_session->display->draw_width;
-	auto h = m_session->display->draw_height;
 	std::shared_ptr<uimg::ImageBuffer> imgBuffer = nullptr;
-	if(outputWithHDR)
+	if(m_createInfo.progressive == false)
 	{
-		auto *pixels = m_session->display->rgba_half.copy_from_device(0, w, h);
-		imgBuffer = uimg::ImageBuffer::Create(pixels,w,h,uimg::ImageBuffer::Format::RGBA_HDR,false);
+		auto w = m_session->display->draw_width;
+		auto h = m_session->display->draw_height;
+		if(outputWithHDR)
+		{
+			auto *pixels = m_session->display->rgba_half.copy_from_device(0, w, h);
+			imgBuffer = uimg::ImageBuffer::Create(pixels,w,h,uimg::ImageBuffer::Format::RGBA_HDR,false);
+		}
+		else
+		{
+			auto *pixels = m_session->display->rgba_byte.copy_from_device(0, w, h);
+			imgBuffer = uimg::ImageBuffer::Create(pixels,w,h,uimg::ImageBuffer::Format::RGBA_LDR,false);
+		}
 	}
 	else
-	{
-		auto *pixels = m_session->display->rgba_byte.copy_from_device(0, w, h);
-		imgBuffer = uimg::ImageBuffer::Create(pixels,w,h,uimg::ImageBuffer::Format::RGBA_LDR,false);
-	}
+		imgBuffer = m_tileManager.UpdateFinalImage()->Copy();
 	return imgBuffer;
 }
 
 void raytracing::Scene::FinalizeAndCloseCyclesScene()
 {
-	if(m_session && IsRenderSceneMode(m_renderMode))
+	if(m_session && IsRenderSceneMode(m_renderMode) && umath::is_flag_set(m_stateFlags,StateFlags::HasRenderingStarted))
 		GetResultImageBuffer() = FinalizeCyclesScene();
 	CloseCyclesScene();
 }
 
 void raytracing::Scene::CloseCyclesScene()
 {
-	m_objects.clear();
-	m_shaders.clear();
+	m_mdlCaches.clear();
+	m_renderData = {};
 	m_camera = nullptr;
 
 	if(m_session == nullptr)
@@ -397,6 +428,7 @@ void raytracing::Scene::CloseCyclesScene()
 }
 
 raytracing::Camera &raytracing::Scene::GetCamera() {return *m_camera;}
+bool raytracing::Scene::IsValid() const {return m_session != nullptr;}
 
 bool raytracing::Scene::IsValidTexture(const std::string &filePath) const
 {
@@ -406,7 +438,39 @@ bool raytracing::Scene::IsValidTexture(const std::string &filePath) const
 	return FileManager::Exists(filePath,fsys::SearchFlags::Local);
 }
 
-void raytracing::Scene::AddShader(CCLShader &shader) {m_cclShaders.push_back(shader.shared_from_this());}
+raytracing::PMesh raytracing::Scene::FindRenderMeshByHash(const util::MurmurHash3 &hash) const
+{
+	// TODO: Do this via a lookup table
+	for(auto &chunk : m_renderData.modelCache->GetChunks())
+	{
+		for(auto &mesh : chunk.GetMeshes())
+		{
+			if(mesh->GetHash() == hash)
+				return mesh;
+		}
+	}
+	return nullptr;
+}
+raytracing::PObject raytracing::Scene::FindRenderObjectByHash(const util::MurmurHash3 &hash) const
+{
+	return nullptr;
+}
+
+std::shared_ptr<raytracing::CCLShader> raytracing::Scene::GetCachedShader(const GroupNodeDesc &desc) const
+{
+	auto it = m_shaderCache.find(&desc);
+	if(it == m_shaderCache.end())
+		return nullptr;
+	auto idx = it->second;
+	return m_cclShaders.at(idx);
+}
+
+void raytracing::Scene::AddShader(CCLShader &shader,const GroupNodeDesc *optDesc)
+{
+	m_cclShaders.push_back(shader.shared_from_this());
+	if(optDesc)
+		m_shaderCache[optDesc] = m_cclShaders.size() -1;
+}
 
 static std::optional<std::string> get_abs_sky_path(const std::string &skyTex)
 {
@@ -421,15 +485,19 @@ void raytracing::Scene::AddSkybox(const std::string &texture)
 	if(umath::is_flag_set(m_stateFlags,StateFlags::SkyInitialized))
 		return;
 	umath::set_flag(m_stateFlags,StateFlags::SkyInitialized);
+
 	if(m_renderMode == RenderMode::SceneDepth)
 	{
-		auto shader = raytracing::Shader::Create<ShaderGeneric>(*this,"background");
-		auto cclShader = shader->GenerateCCLShader(*m_scene.default_background);
-		auto nodeBg = cclShader->AddBackgroundNode();
-		nodeBg.SetStrength(1'000.f);
-		auto col = cclShader->AddCombineRGBNode(1.f,1.f,1.f);
-		cclShader->Link(col,nodeBg.inColor);
-		cclShader->Link(nodeBg,cclShader->GetOutputNode().inSurface);
+		auto desc = raytracing::GroupNodeDesc::Create(*m_nodeManager);
+		auto &nodeOutput = desc->AddNode(NODE_OUTPUT);
+		auto &nodeBg = desc->AddNode(NODE_BACKGROUND_SHADER);
+		nodeBg.SetProperty(nodes::background_shader::IN_STRENGTH,1'000.f);
+
+		auto col = desc->CombineRGB(1.f,1.f,1.f);
+		desc->Link(col,nodeBg.GetInputSocket(nodes::background_shader::IN_COLOR));
+		desc->Link(nodeBg,nodes::background_shader::OUT_BACKGROUND,nodeOutput,nodes::output::IN_SURFACE);
+		
+		AddShader(*CCLShader::Create(*this,*m_scene.default_background,*desc));
 		return;
 	}
 
@@ -441,22 +509,31 @@ void raytracing::Scene::AddSkybox(const std::string &texture)
 		return;
 
 	// Setup the skybox as a background shader
-	auto shader = raytracing::Shader::Create<ShaderGeneric>(*this,"background");
-	auto cclShader = shader->GenerateCCLShader(*m_scene.default_background);
-	auto nodeBg = cclShader->AddBackgroundNode();
-	nodeBg.SetStrength(m_sceneInfo.skyStrength);
+	auto desc = raytracing::GroupNodeDesc::Create(*m_nodeManager);
+	auto &nodeOutput = desc->AddNode(NODE_OUTPUT);
+	auto &nodeBg = desc->AddNode(NODE_BACKGROUND_SHADER);
+	nodeBg.SetProperty(nodes::background_shader::IN_STRENGTH,m_sceneInfo.skyStrength);
+	
+	auto &nodeTex = desc->AddImageTextureNode(*absPath,TextureType::EquirectangularImage);
+	desc->Link(nodeTex,nodes::environment_texture::OUT_COLOR,nodeBg,nodes::background_shader::IN_COLOR);
+	desc->Link(nodeBg,nodes::background_shader::OUT_BACKGROUND,nodeOutput,nodes::output::IN_SURFACE);
 
-	auto nodeTex = cclShader->AddEnvironmentTextureNode(*absPath);
-	cclShader->Link(nodeTex,nodeBg.inColor);
-	cclShader->Link(nodeBg,cclShader->GetOutputNode().inSurface);
+	auto skyAngles = m_sceneInfo.skyAngles;
+	skyAngles.p -= 90.f;
+	skyAngles = {
+		-skyAngles.p,
+		skyAngles.r,
+		-skyAngles.y
+	};
 
-	auto nodeTexCoord = cclShader->AddTextureCoordinateNode();
-	auto nodeMapping = cclShader->AddMappingNode();
-	nodeMapping.SetType(MappingNode::Type::Point);
-	nodeMapping.SetRotation(m_sceneInfo.skyAngles);
-	cclShader->Link(nodeTexCoord.outGenerated,nodeMapping.inVector);
+	auto &nodeTexCoord = desc->AddNode(NODE_TEXTURE_COORDINATE);
+	auto &nodeMapping = desc->AddNode(NODE_MAPPING);
+	nodeMapping.SetProperty(nodes::mapping::IN_TYPE,ccl::NodeMappingType::NODE_MAPPING_TYPE_POINT);
+	nodeMapping.SetProperty(nodes::mapping::IN_ROTATION,skyAngles);
+	desc->Link(nodeTexCoord,nodes::texture_coordinate::OUT_GENERATED,nodeMapping,nodes::mapping::IN_VECTOR);
 
-	cclShader->Link(nodeMapping.outVector,nodeTex.inVector);
+	desc->Link(nodeMapping,nodes::mapping::OUT_VECTOR,nodeTex,nodes::environment_texture::IN_VECTOR);
+	AddShader(*CCLShader::Create(*this,*m_scene.default_background,*desc));
 
 	// Add the light source for the background
 	auto *light = new ccl::Light{}; // Object will be removed automatically by cycles
@@ -588,7 +665,7 @@ void raytracing::Scene::DenoiseHDRImageArea(uimg::ImageBuffer &imgBuffer,uint32_
 	denoiseInfo.hdr = true;
 	denoiseInfo.width = w;
 	denoiseInfo.height = h;
-	Denoise(denoiseInfo,imgAreaData.data());
+	denoise(denoiseInfo,imgAreaData.data());
 
 	// Copy the denoised area back into the original image
 	for(auto y=decltype(h){0u};y<h;++y)
@@ -693,34 +770,34 @@ void raytracing::Scene::SetupRenderSettings(
 	case raytracing::Scene::RenderMode::SceneAlbedo:
 		// Note: PASS_DIFFUSE_COLOR would probably make more sense but does not seem to work
 		// (just creates a black output).
-		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes);
-		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
+		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
+		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
 		displayPass = ccl::PassType::PASS_COMBINED;
 		break;
 	case raytracing::Scene::RenderMode::SceneNormals:
-		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes);
-		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
+		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
+		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
 		displayPass = ccl::PassType::PASS_COMBINED;
 		break;
 	case raytracing::Scene::RenderMode::SceneDepth:
-		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes); // TODO: Why do we need this?
-		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
+		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined"); // TODO: Why do we need this?
+		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
 		displayPass = ccl::PassType::PASS_COMBINED;
 		break;
 	case raytracing::Scene::RenderMode::RenderImage:
-		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes);
-		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
+		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
+		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
 		displayPass = ccl::PassType::PASS_COMBINED;
 		break;
 	case raytracing::Scene::RenderMode::BakeAmbientOcclusion:
-		ccl::Pass::add(ccl::PassType::PASS_AO,passes);
-		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
+		ccl::Pass::add(ccl::PassType::PASS_AO,passes,"ao");
+		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
 		displayPass = ccl::PassType::PASS_AO;
 		break;
 	case raytracing::Scene::RenderMode::BakeDiffuseLighting:
-		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_DIRECT,passes);
-		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_INDIRECT,passes);
-		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes);
+		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_DIRECT,passes,"diffuse_direct");
+		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_INDIRECT,passes,"diffuse_indirect");
+		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
 		displayPass = ccl::PassType::PASS_COMBINED; // TODO: Is this correct?
 		break;
 	}
@@ -846,10 +923,47 @@ ccl::BufferParams raytracing::Scene::GetBufferParameters() const
 	return bufferParams;
 }
 
+void raytracing::Scene::InitializePassShaders(const std::function<std::shared_ptr<GroupNodeDesc>(const Shader&)> &fGetPassDesc)
+{
+	std::unordered_map<Shader*,std::shared_ptr<CCLShader>> shaderCache;
+	for(auto &chunk : m_renderData.modelCache->GetChunks())
+	{
+		for(auto &o : chunk.GetObjects())
+		{
+			auto &mesh = o->GetMesh();
+			auto &subMeshShaders = mesh.GetSubMeshShaders();
+			auto numShaders = subMeshShaders.size();
+			std::unordered_map<uint32_t,uint32_t> oldShaderIndexToNewIndex {};
+			for(auto i=decltype(numShaders){0u};i<numShaders;++i)
+			{
+				auto &shader = subMeshShaders.at(i);
+				auto albedoPass = fGetPassDesc(*shader);
+				if(albedoPass == nullptr)
+					continue;
+
+				std::shared_ptr<CCLShader> cclShader = nullptr;
+				auto it = shaderCache.find(shader.get());
+				if(it != shaderCache.end())
+					cclShader = it->second;
+				else
+				{
+					cclShader = CCLShader::Create(*this,*albedoPass);
+					cclShader->Finalize(*this);
+					shaderCache[shader.get()] = cclShader;
+				}
+				mesh->used_shaders.at(i) = **cclShader;
+			}
+			mesh->tag_update(&m_scene,false);
+		}
+	}
+}
+
 void raytracing::Scene::InitializeAlbedoPass(bool reloadShaders)
 {
 	auto bufferParams = GetBufferParameters();
 	uint32_t sampleCount = 1;
+	if(m_createInfo.progressive)
+		sampleCount = 4; // TODO: We should only need one sample, but for whatever reason some tiles will not get rendered properly if the sample count is too low. The reason for this is unknown
 	m_session->params.samples = sampleCount;
 	m_session->reset(bufferParams,sampleCount); // We only need the normals and albedo colors for the first sample
 
@@ -857,6 +971,8 @@ void raytracing::Scene::InitializeAlbedoPass(bool reloadShaders)
 
 	if(reloadShaders == false)
 		return;
+	InitializePassShaders([](const Shader &shader) -> std::shared_ptr<GroupNodeDesc> {return shader.albedoPass;});
+#if 0
 	// Note: For denoising the scene has to be rendered three times:
 	// 1) With lighting
 	// 2) Albedo colors only
@@ -866,54 +982,63 @@ void raytracing::Scene::InitializeAlbedoPass(bool reloadShaders)
 	// we have to replace the shaders, which is also impossible to do with Cycles.
 	// Instead, we have to create an additional set of shaders for each object and
 	// re-assign the shader indices of the mesh.
-	for(auto &o : m_objects)
+	std::unordered_map<Shader*,std::shared_ptr<CCLShader>> shaderCache;
+	for(auto &chunk : m_renderData.modelCache->GetChunks())
 	{
-		auto &mesh = o->GetMesh();
-		auto &subMeshShaders = mesh.GetSubMeshShaders();
-		auto numShaders = subMeshShaders.size();
-		std::unordered_map<uint32_t,uint32_t> oldShaderIndexToNewIndex {};
-		for(auto i=decltype(numShaders){0u};i<numShaders;++i)
+		for(auto &o : chunk.GetObjects())
 		{
-			auto &shader = subMeshShaders.at(i);
-			auto *albedoModule = dynamic_cast<ShaderModuleAlbedo*>(shader.get());
-			if(albedoModule == nullptr)
-				continue;
-			auto &albedoMap = albedoModule->GetAlbedoSet().GetAlbedoMap();
-			if(albedoMap.has_value() == false)
-				continue;
-			auto albedoShader = Shader::Create<ShaderAlbedo>(*this,mesh.GetName() +"_albedo");
-			albedoShader->SetUVHandlers(shader->GetUVHandlers());
-			albedoShader->SetAlphaMode(shader->GetAlphaMode(),shader->GetAlphaCutoff());
-			albedoShader->GetAlbedoSet().SetAlbedoMap(*albedoMap);
-
-			auto *spriteSheetModule = dynamic_cast<ShaderModuleSpriteSheet*>(shader.get());
-			if(spriteSheetModule && spriteSheetModule->GetSpriteSheetData().has_value())
-				albedoShader->SetSpriteSheetData(*spriteSheetModule->GetSpriteSheetData());
-
-			if(albedoModule->GetAlbedoSet2().GetAlbedoMap().has_value())
+			auto &mesh = o->GetMesh();
+			auto &subMeshShaders = mesh.GetSubMeshShaders();
+			auto numShaders = subMeshShaders.size();
+			std::unordered_map<uint32_t,uint32_t> oldShaderIndexToNewIndex {};
+			for(auto i=decltype(numShaders){0u};i<numShaders;++i)
 			{
-				albedoShader->GetAlbedoSet2().SetAlbedoMap(*albedoModule->GetAlbedoSet2().GetAlbedoMap());
-				albedoShader->SetUseVertexAlphasForBlending(albedoModule->ShouldUseVertexAlphasForBlending());
+				auto &shader = subMeshShaders.at(i);
+				auto &albedoPass = shader->albedoPass;
+				if(albedoPass == nullptr)
+					continue;
+
+				std::shared_ptr<CCLShader> cclShader = nullptr;
+				auto it = shaderCache.find(shader.get());
+				if(it != shaderCache.end())
+					cclShader = it->second;
+				else
+				{
+					cclShader = CCLShader::Create(*this,*albedoPass);
+					cclShader->Finalize(*this);
+					shaderCache[shader.get()] = cclShader;
+				}
+
+				if(mesh->used_shaders.size() == mesh->used_shaders.capacity())
+					mesh->used_shaders.reserve(mesh->used_shaders.size() *1.1 +50);
+				mesh->used_shaders.push_back(**cclShader);
+				oldShaderIndexToNewIndex[i] = mesh->used_shaders.size() -1;
 			}
+			auto &origShaderIndexTable = mesh.GetOriginalShaderIndexTable();
+			if(origShaderIndexTable.empty())
+			{
+				// Note: The albedo and normal pass need to overwrite the original shaders for each mesh.
+				// We keep a table with the original shader indices so the next pass (usually the normal pass)
+				// has a reference to the original shader.
 
-			auto cclShader = albedoShader->GenerateCCLShader();
-			cclShader->Finalize();
-
-			if(mesh->used_shaders.size() == mesh->used_shaders.capacity())
-				mesh->used_shaders.reserve(mesh->used_shaders.size() *1.1 +50);
-			mesh->used_shaders.push_back(**cclShader);
-			oldShaderIndexToNewIndex[i] = mesh->used_shaders.size() -1;
+				// TODO: There's no need to store ALL shader indices, this can be optimized!
+				origShaderIndexTable.resize(mesh->shader.size());
+				for(auto i=decltype(mesh->shader.size()){0};i<mesh->shader.size();++i)
+					origShaderIndexTable[i] = mesh->shader[i];
+			}
+			for(auto i=decltype(mesh->shader.size()){0};i<mesh->shader.size();++i)
+			{
+				auto &shaderIdx = mesh->shader[i];
+				auto it = oldShaderIndexToNewIndex.find(shaderIdx);
+				if(it == oldShaderIndexToNewIndex.end())
+					continue;
+				auto oldShaderIdx = shaderIdx;
+				shaderIdx = it->second;
+			}
+			mesh->tag_update(&m_scene,false);
 		}
-		for(auto i=decltype(mesh->shader.size()){0};i<mesh->shader.size();++i)
-		{
-			auto &shaderIdx = mesh->shader[i];
-			auto it = oldShaderIndexToNewIndex.find(shaderIdx);
-			if(it == oldShaderIndexToNewIndex.end())
-				continue;
-			shaderIdx = it->second;
-		}
-		mesh->tag_update(&m_scene,false);
 	}
+#endif
 }
 
 void raytracing::Scene::InitializeNormalPass(bool reloadShaders)
@@ -921,22 +1046,31 @@ void raytracing::Scene::InitializeNormalPass(bool reloadShaders)
 	// Also see raytracing::Scene::CreateShader
 	auto bufferParams = GetBufferParameters();
 	uint32_t sampleCount = 1;
+	if(m_createInfo.progressive)
+		sampleCount = 4; // TODO: We should only need one sample, but for whatever reason some tiles will not get rendered properly if the sample count is too low. The reason for this is unknown
 	m_session->params.samples = sampleCount;
 	m_session->reset(bufferParams,sampleCount); // We only need the normals and albedo colors for the first sample
 
-												// Disable the sky (by making it black)
-	auto shader = raytracing::Shader::Create<ShaderGeneric>(*this,"clear_sky");
-	auto cclShader = shader->GenerateCCLShader();
+	// Disable the sky (by making it black)
+	auto shader = raytracing::GroupNodeDesc::Create(GetShaderNodeManager());
 
-	auto nodeColor = cclShader->AddColorNode();
-	nodeColor.SetColor({0.f,0.f,0.f});
-	cclShader->Link(nodeColor.outColor,cclShader->GetOutputNode().inSurface);
-	cclShader->Finalize();
+	auto &nodeOutput = shader->AddNode(NODE_OUTPUT);
+	auto &nodeBg = shader->AddNode(NODE_BACKGROUND_SHADER);
+	nodeBg.SetProperty(nodes::background_shader::IN_STRENGTH,0.f);
+
+	auto col = shader->CombineRGB(0.f,0.f,0.f);
+	shader->Link(col,nodeBg.GetInputSocket(nodes::background_shader::IN_COLOR));
+	shader->Link(nodeBg,nodes::background_shader::OUT_BACKGROUND,nodeOutput,nodes::output::IN_SURFACE);
+
+	auto cclShader = CCLShader::Create(*this,*shader);
+	cclShader->Finalize(*this);
 	m_scene.default_background = **cclShader;
 	(*cclShader)->tag_update(&m_scene);
 
 	if(reloadShaders == false)
 		return;
+	InitializePassShaders([](const Shader &shader) -> std::shared_ptr<GroupNodeDesc> {return shader.normalPass;});
+#if 0
 	// Note: For denoising the scene has to be rendered three times:
 	// 1) With lighting
 	// 2) Albedo colors only
@@ -946,66 +1080,40 @@ void raytracing::Scene::InitializeNormalPass(bool reloadShaders)
 	// we have to replace the shaders, which is also impossible to do with Cycles.
 	// Instead, we have to create an additional set of shaders for each object and
 	// re-assign the shader indices of the mesh.
-	for(auto &o : m_objects)
+	for(auto &chunk : m_renderData.modelCache->GetChunks())
 	{
-		auto &mesh = o->GetMesh();
-		auto &subMeshShaders = mesh.GetSubMeshShaders();
-		auto numShaders = subMeshShaders.size();
-		std::unordered_map<uint32_t,uint32_t> oldShaderIndexToNewIndex {};
-		for(auto i=decltype(numShaders){0u};i<numShaders;++i)
+		for(auto &o : chunk.GetObjects())
 		{
-			auto &shader = subMeshShaders.at(i);
-			auto *normalModule = dynamic_cast<ShaderModuleNormal*>(shader.get());
-			if(normalModule == nullptr)
-				continue;
-			auto &albedoMap = normalModule->GetAlbedoSet().GetAlbedoMap();
-			auto &normalMap = normalModule->GetNormalMap();
-
-			auto normalShader = Shader::Create<ShaderNormal>(*this,mesh.GetName() +"_normal");
-			normalShader->SetUVHandlers(shader->GetUVHandlers());
-			normalShader->SetAlphaMode(shader->GetAlphaMode(),shader->GetAlphaCutoff());
-			if(albedoMap.has_value())
+			auto &mesh = o->GetMesh();
+			auto &subMeshShaders = mesh.GetSubMeshShaders();
+			auto numShaders = subMeshShaders.size();
+			std::unordered_map<uint32_t,uint32_t> oldShaderIndexToNewIndex {};
+			for(auto i=decltype(numShaders){0u};i<numShaders;++i)
 			{
-				normalShader->GetAlbedoSet().SetAlbedoMap(*albedoMap);
-				if(normalModule->GetAlbedoSet2().GetAlbedoMap().has_value())
-				{
-					normalShader->GetAlbedoSet2().SetAlbedoMap(*normalModule->GetAlbedoSet2().GetAlbedoMap());
-					normalShader->SetUseVertexAlphasForBlending(normalModule->ShouldUseVertexAlphasForBlending());
-				}
-				auto *spriteSheetModule = dynamic_cast<ShaderModuleSpriteSheet*>(shader.get());
-				if(spriteSheetModule && spriteSheetModule->GetSpriteSheetData().has_value())
-					normalShader->SetSpriteSheetData(*spriteSheetModule->GetSpriteSheetData());
+				auto &shader = subMeshShaders.at(i);
+				if(shader->normalPass == nullptr)
+					continue;
+				auto cclShader = CCLShader::Create(*this,*shader->normalPass);
+				cclShader->Finalize(*this);
+
+				if(mesh->used_shaders.size() == mesh->used_shaders.capacity())
+					mesh->used_shaders.reserve(mesh->used_shaders.size() *1.1 +50);
+				mesh->used_shaders.push_back(**cclShader);
+				oldShaderIndexToNewIndex[i] = mesh->used_shaders.size() -1;
 			}
-			if(normalMap.has_value())
+			auto &origShaderIndexTable = mesh.GetOriginalShaderIndexTable();
+			for(auto i=decltype(mesh->shader.size()){0};i<mesh->shader.size();++i)
 			{
-				normalShader->SetNormalMap(*normalMap);
-				normalShader->SetNormalMapSpace(normalModule->GetNormalMapSpace());
+				auto shaderIdx = (i < origShaderIndexTable.size()) ? origShaderIndexTable.at(i) : mesh->shader[i];
+				auto it = oldShaderIndexToNewIndex.find(shaderIdx);
+				if(it == oldShaderIndexToNewIndex.end())
+					continue;
+				mesh->shader[i] = it->second;
 			}
-
-			auto cclShader = normalShader->GenerateCCLShader();
-			cclShader->Finalize();
-
-			if(mesh->used_shaders.size() == mesh->used_shaders.capacity())
-				mesh->used_shaders.reserve(mesh->used_shaders.size() *1.1 +50);
-			mesh->used_shaders.push_back(**cclShader);
-			oldShaderIndexToNewIndex[i] = mesh->used_shaders.size() -1;
+			mesh->tag_update(&m_scene,false);
 		}
-		for(auto i=decltype(mesh->shader.size()){0};i<mesh->shader.size();++i)
-		{
-			auto &shaderIdx = mesh->shader[i];
-			auto it = oldShaderIndexToNewIndex.find(shaderIdx);
-			if(it == oldShaderIndexToNewIndex.end())
-				continue;
-			shaderIdx = it->second;
-		}
-		mesh->tag_update(&m_scene,false);
 	}
-}
-
-static void update_cancel(raytracing::SceneWorker &worker,ccl::Session &session)
-{
-	if(worker.IsCancelled())
-		session.progress.set_cancel("Cancelled by application.");
+#endif
 }
 
 bool raytracing::Scene::UpdateStereo(raytracing::SceneWorker &worker,ImageRenderStage stage,raytracing::StereoEye &eyeStage)
@@ -1026,270 +1134,109 @@ bool raytracing::Scene::UpdateStereo(raytracing::SceneWorker &worker,ImageRender
 	return false;
 }
 
-raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStage(SceneWorker &worker,ImageRenderStage stage,StereoEye eyeStage)
+void raytracing::Scene::Reset()
 {
-	switch(stage)
-	{
-	case ImageRenderStage::Lighting:
-	{
-		worker.AddThread([this,&worker,stage,eyeStage]() {
-			m_session->start();
+	m_restartState = 1;
+	SetCancelled("Cancelled by user");
+	m_session->wait();
+	m_session->progress.reset();
+}
+void raytracing::Scene::Restart()
+{
+	if(m_createInfo.progressive)
+		m_tileManager.Reload();
 
-			// Render image with lighting
-			auto denoise = umath::is_flag_set(m_stateFlags,StateFlags::DenoiseResult);
-			auto progressMultiplier = denoise ? 0.95f : 1.f;
-			WaitForRenderStage(worker,0.f,progressMultiplier,[this,&worker,denoise,stage,eyeStage]() mutable -> RenderStageResult {
-				m_session->wait();
-				auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
-				resultImageBuffer = FinalizeCyclesScene();
-				ApplyPostProcessing(*resultImageBuffer,m_renderMode);
-
-				if(UpdateStereo(worker,stage,eyeStage))
-				{
-					worker.Start(); // Lighting stage for the left eye is triggered by the user, but we have to start it manually for the right eye
-					return RenderStageResult::Continue;
-				}
-
-				if(denoise == false)
-					return StartNextRenderImageStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
-				return StartNextRenderImageStage(worker,ImageRenderStage::Albedo,eyeStage);
-			});
-		});
-		break;
-	}
-	case ImageRenderStage::Albedo:
-	{
-		// Render albedo colors (required for denoising)
-		m_renderMode = RenderMode::SceneAlbedo;
-		if(eyeStage == StereoEye::Left || eyeStage == StereoEye::None)
-			InitializeAlbedoPass(true);
-		worker.AddThread([this,&worker,eyeStage,stage]() {
-			m_session->start();
-			WaitForRenderStage(worker,0.95f,0.025f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
-				m_session->wait();
-				auto &albedoImageBuffer = GetAlbedoImageBuffer(eyeStage);
-				albedoImageBuffer = FinalizeCyclesScene();
-				ApplyPostProcessing(*albedoImageBuffer,m_renderMode);
-
-				if(UpdateStereo(worker,stage,eyeStage))
-					return RenderStageResult::Continue;
-
-				return StartNextRenderImageStage(worker,ImageRenderStage::Normal,eyeStage);
-			});
-		});
-		worker.Start();
-		break;
-	}
-	case ImageRenderStage::Normal:
-	{
-		// Render normals (required for denoising)
-		m_renderMode = RenderMode::SceneNormals;
-		if(eyeStage == StereoEye::Left || eyeStage == StereoEye::None)
-			InitializeNormalPass(true);
-		worker.AddThread([this,&worker,eyeStage,stage]() {
-			m_session->start();
-			WaitForRenderStage(worker,0.975f,0.025f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
-				m_session->wait();
-				auto &normalImageBuffer = GetAlbedoImageBuffer(eyeStage);
-				normalImageBuffer = FinalizeCyclesScene();
-				ApplyPostProcessing(*normalImageBuffer,m_renderMode);
-
-				if(UpdateStereo(worker,stage,eyeStage))
-					return RenderStageResult::Continue;
-
-				return StartNextRenderImageStage(worker,ImageRenderStage::Denoise,eyeStage);
-			});
-		});
-		worker.Start();
-		break;
-	}
-	case ImageRenderStage::Denoise:
-	{
-		// Denoise
-		raytracing::Scene::DenoiseInfo denoiseInfo {};
-		auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
-		denoiseInfo.hdr = resultImageBuffer->IsHDRFormat();
-		denoiseInfo.width = resultImageBuffer->GetWidth();
-		denoiseInfo.height = resultImageBuffer->GetHeight();
-
-		static auto dbgAlbedo = false;
-		static auto dbgNormals = false;
-		if(dbgAlbedo)
-			m_resultImageBuffer = m_albedoImageBuffer;
-		else if(dbgNormals)
-			m_resultImageBuffer = m_normalImageBuffer;
-		else
-		{
-			auto &albedoImageBuffer = GetAlbedoImageBuffer(eyeStage);
-			auto &normalImageBuffer = GetNormalImageBuffer(eyeStage);
-			Denoise(denoiseInfo,*resultImageBuffer,albedoImageBuffer.get(),normalImageBuffer.get(),[this,&worker](float progress) -> bool {
-				return !worker.IsCancelled();
-			});
-		}
-
-		if(UpdateStereo(worker,stage,eyeStage))
-			return RenderStageResult::Continue;
-
-		return StartNextRenderImageStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
-	}
-	case ImageRenderStage::FinalizeImage:
-	{
-		if(eyeStage == StereoEye::Left)
-			return StartNextRenderImageStage(worker,ImageRenderStage::MergeStereoscopic,StereoEye::None);
-		return StartNextRenderImageStage(worker,ImageRenderStage::Finalize,StereoEye::None);
-	}
-	case ImageRenderStage::MergeStereoscopic:
-	{
-		auto &imgLeft = m_resultImageBuffer.at(umath::to_integral(StereoEye::Left));
-		auto &imgRight = m_resultImageBuffer.at(umath::to_integral(StereoEye::Right));
-		auto w = imgLeft->GetWidth();
-		auto h = imgLeft->GetHeight();
-		auto imgComposite = uimg::ImageBuffer::Create(w,h *2,imgLeft->GetFormat());
-		auto *dataSrcLeft = imgLeft->GetData();
-		auto *dataSrcRight = imgRight->GetData();
-		auto *dataDst = imgComposite->GetData();
-		memcpy(dataDst,dataSrcLeft,imgLeft->GetSize());
-		memcpy(static_cast<uint8_t*>(dataDst) +imgLeft->GetSize(),dataSrcRight,imgRight->GetSize());
-		m_resultImageBuffer.at(umath::to_integral(StereoEye::Left)) = imgComposite;
-		m_resultImageBuffer.at(umath::to_integral(StereoEye::Right)) = nullptr;
-		return StartNextRenderImageStage(worker,ImageRenderStage::Finalize,StereoEye::None);
-	}
-	case ImageRenderStage::Finalize:
-		// We're done here
-		CloseCyclesScene();
-		return RenderStageResult::Complete;
-	case ImageRenderStage::SceneAlbedo:
-	case ImageRenderStage::SceneNormals:
-	case ImageRenderStage::SceneDepth:
-	{
-		if(eyeStage != StereoEye::Right)
-		{
-			if(stage == ImageRenderStage::SceneAlbedo)
-				InitializeAlbedoPass(false);
-			else if(stage == ImageRenderStage::SceneNormals)
-				InitializeNormalPass(false);
-		}
-		worker.AddThread([this,&worker,eyeStage,stage]() {
-			m_session->start();
-			WaitForRenderStage(worker,0.f,1.f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
-				m_session->wait();
-				auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
-				resultImageBuffer = FinalizeCyclesScene();
-				ApplyPostProcessing(*resultImageBuffer,m_renderMode);
-
-				if(UpdateStereo(worker,stage,eyeStage))
-				{
-					worker.Start(); // Initial stage for the left eye is triggered by the user, but we have to start it manually for the right eye
-					return RenderStageResult::Continue;
-				}
-
-				return StartNextRenderImageStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
-			});
-		});
-		break;
-	}
-	}
-	return RenderStageResult::Continue;
+	m_session->start();
+	m_restartState = 2;
 }
 
-void raytracing::Scene::WaitForRenderStage(SceneWorker &worker,float baseProgress,float progressMultiplier,const std::function<RenderStageResult()> &fOnComplete)
-{
-	for(;;)
-	{
-		worker.UpdateProgress(baseProgress +m_session->progress.get_progress() *progressMultiplier);
-		update_cancel(worker,*m_session);
-		if(m_session->progress.get_cancel())
-		{
-			std::cerr<<"WARNING: Cycles rendering has been cancelled: "<<m_session->progress.get_cancel_message()<<std::endl;
-			worker.Cancel(m_session->progress.get_cancel_message());
-			break;
-		}
-		if(m_session->progress.get_error())
-		{
-			std::string status;
-			std::string subStatus;
-			m_session->progress.get_status(status,subStatus);
-			std::cerr<<"WARNING: Cycles rendering has failed at status '"<<status<<"' ("<<subStatus<<") with error: "<<m_session->progress.get_error_message()<<std::endl;
-			worker.SetStatus(util::JobStatus::Failed,m_session->progress.get_error_message());
-			break;
-		}
-		if(m_session->progress.get_progress() == 1.f)
-			break;
-		std::this_thread::sleep_for(std::chrono::seconds{1});
-	}
-	if(worker.GetStatus() == util::JobStatus::Pending && fOnComplete != nullptr && fOnComplete() == RenderStageResult::Continue)
-		return;
-	if(worker.GetStatus() == util::JobStatus::Pending)
-		worker.SetStatus(util::JobStatus::Successful);
-}
-
-util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> raytracing::Scene::Finalize()
+void raytracing::Scene::PrepareCyclesSceneForRendering()
 {
 	if(m_sceneInfo.sky.empty() == false)
 		AddSkybox(m_sceneInfo.sky);
 
+	m_stateFlags |= StateFlags::HasRenderingStarted;
 	auto bufferParams = GetBufferParameters();
 
 	m_session->scene = &m_scene;
 	m_session->reset(bufferParams,m_session->params.samples);
-	m_camera->Finalize();
+	m_camera->Finalize(*this);
+
+	m_renderData.shaderCache = ShaderCache::Create();
+	m_renderData.modelCache = ModelCache::Create();
+
+	for(auto &mdlCache : m_mdlCaches)
+		m_renderData.modelCache->Merge(*mdlCache);
+	m_renderData.modelCache->Bake();
+	
+	auto &mdlCache = m_renderData.modelCache;
+	mdlCache->GenerateData();
+	uint32_t numObjects = 0;
+	uint32_t numMeshes = 0;
+	for(auto &chunk : mdlCache->GetChunks())
+	{
+		numObjects += chunk.GetObjects().size();
+		numMeshes += chunk.GetMeshes().size();
+	}
+	m_scene.objects.reserve(m_scene.objects.size() +numObjects);
+	m_scene.meshes.reserve(m_scene.meshes.size() +numMeshes);
+
+	for(auto &chunk : mdlCache->GetChunks())
+	{
+		for(auto &o : chunk.GetObjects())
+			m_scene.objects.push_back(**o);
+		for(auto &m : chunk.GetMeshes())
+			m_scene.meshes.push_back(**m);
+	}
 
 	// Note: Lights and objects have to be initialized before shaders, because they may
 	// create additional shaders.
+	m_scene.lights.reserve(m_lights.size());
 	for(auto &light : m_lights)
-		light->Finalize();
-	for(auto &o : m_objects)
-		o->Finalize();
-	for(auto &shader : m_shaders)
+	{
+		light->Finalize(*this);
+		m_scene.lights.push_back(**light);
+	}
+	for(auto &chunk : mdlCache->GetChunks())
+	{
+		for(auto &o : chunk.GetObjects())
+			o->Finalize(*this);
+	}
+	for(auto &shader : m_renderData.shaderCache->GetShaders())
 		shader->Finalize();
 	for(auto &cclShader : m_cclShaders)
-		cclShader->Finalize();
+		cclShader->Finalize(*this);
 
 	constexpr auto validate = false;
 	if constexpr(validate)
 	{
-		for(auto &o : m_objects)
+		for(auto &chunk : m_renderData.modelCache->GetChunks())
 		{
-			auto &mesh = o->GetMesh();
-			mesh.Validate();
+			for(auto &o : chunk.GetObjects())
+			{
+				auto &mesh = o->GetMesh();
+				mesh.Validate();
+			}
 		}
 	}
 
-	auto job = util::create_parallel_job<SceneWorker>(*this);
-	auto &worker = static_cast<SceneWorker&>(job.GetWorker());
-	if(IsRenderSceneMode(m_renderMode))
+	if(m_createInfo.progressive)
 	{
-		auto stereoscopic = m_camera->IsStereoscopic();
-		if(stereoscopic)
-			m_camera->SetStereoscopicEye(raytracing::StereoEye::Left);
-		ImageRenderStage initialRenderStage;
-		switch(m_renderMode)
-		{
-		case RenderMode::RenderImage:
-			initialRenderStage = ImageRenderStage::Lighting;
-			break;
-		case RenderMode::SceneAlbedo:
-			initialRenderStage = ImageRenderStage::SceneAlbedo;
-			break;
-		case RenderMode::SceneNormals:
-			initialRenderStage = ImageRenderStage::SceneNormals;
-			break;
-		case RenderMode::SceneDepth:
-			initialRenderStage = ImageRenderStage::SceneDepth;
-			break;
-		default:
-			throw std::invalid_argument{"Invalid render mode " +std::to_string(umath::to_integral(m_renderMode))};
-		}
-		StartNextRenderImageStage(worker,initialRenderStage,stereoscopic ? StereoEye::Left : StereoEye::None);
-		return job;
+		auto w = m_scene.camera->width;
+		auto h = m_scene.camera->height;
+		m_tileManager.Initialize(w,h,GetTileSize().x,GetTileSize().y,m_deviceType == DeviceType::CPU);
 	}
+}
 
+void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
+{
 	// Baking cannot be done with cycles directly, we will have to
 	// do some additional steps first.
-
-	worker.AddThread([this,&worker,bufferParams]() {
-		auto imgWidth = bufferParams.width;
-		auto imgHeight = bufferParams.height;
+	worker.AddThread([this,&worker]() {
+		auto bufferParams = m_session->buffers->params;
+		auto resolution = GetResolution();
+		auto imgWidth = resolution.x;
+		auto imgHeight = resolution.y;
 		m_scene.bake_manager->set_baking(true);
 		m_session->load_kernels();
 
@@ -1342,12 +1289,13 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> raytracing::Scene::Finaliz
 		std::vector<raytracing::baking::BakePixel> pixelArray;
 		pixelArray.resize(numPixels);
 		auto bakeLightmaps = (m_renderMode == RenderMode::BakeDiffuseLighting);
-		raytracing::baking::prepare_bake_data(*obj,pixelArray.data(),numPixels,imgWidth,imgHeight,bakeLightmaps);
+		raytracing::baking::prepare_bake_data(*this,*obj,pixelArray.data(),numPixels,imgWidth,imgHeight,bakeLightmaps);
 
 		if(worker.IsCancelled())
 			return;
 
-		auto objectId = obj->GetId();
+		auto objectId = FindCCLObjectId(*obj);
+		assert(objectId.has_value());
 		ccl::BakeData *bake_data = NULL;
 		uint32_t triOffset = 0u;
 		// Note: This has been commented because it can cause crashes in some cases. To fix the underlying issue, the mesh for
@@ -1357,8 +1305,8 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> raytracing::Scene::Finaliz
 		/// before this one.
 		///for(auto i=decltype(objectId){0u};i<objectId;++i)
 		///	triOffset += m_objects.at(i)->GetMesh().GetTriangleCount();
-		bake_data = m_scene.bake_manager->init(objectId,triOffset /* triOffset */,numPixels);
-		populate_bake_data(bake_data,objectId,pixelArray.data(),numPixels);
+		bake_data = m_scene.bake_manager->init(*objectId,triOffset /* triOffset */,numPixels);
+		populate_bake_data(bake_data,*objectId,pixelArray.data(),numPixels);
 
 		if(worker.IsCancelled())
 			return;
@@ -1405,7 +1353,7 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> raytracing::Scene::Finaliz
 
 		// Note: Denoising may not work well with baked images, since we can't supply any geometry information,
 		// but the result is decent enough as long as the sample count is high.
-		if(umath::is_flag_set(m_stateFlags,StateFlags::DenoiseResult))
+		if(ShouldDenoise())
 		{
 			/*if(m_renderMode == RenderMode::BakeDiffuseLighting)
 			{
@@ -1450,17 +1398,17 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> raytracing::Scene::Finaliz
 				denoiseInfo.lightmap = bakeLightmaps;
 				denoiseInfo.width = imgWidth;
 				denoiseInfo.height = imgHeight;
-				Denoise(denoiseInfo,*imgBuffer,nullptr,nullptr,[this,&worker](float progress) -> bool {
+				denoise(denoiseInfo,*imgBuffer,nullptr,nullptr,[this,&worker](float progress) -> bool {
 					worker.UpdateProgress(0.95f +progress *0.2f);
 					return !worker.IsCancelled();
-					});
+				});
 			}
 		}
 
 		if(worker.IsCancelled())
 			return;
 
-		ApplyPostProcessing(*imgBuffer,m_renderMode);
+		// ApplyPostProcessing(*imgBuffer,m_renderMode);
 
 		if(worker.IsCancelled())
 			return;
@@ -1504,10 +1452,318 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> raytracing::Scene::Finaliz
 		m_session->params.write_render_cb = nullptr; // Make sure it's not called on destruction
 		worker.SetStatus(util::JobStatus::Successful,"Baking has been completed successfully!");
 		worker.UpdateProgress(1.f);
+	});
+}
+
+raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStage(SceneWorker &worker,ImageRenderStage stage,StereoEye eyeStage)
+{
+	switch(stage)
+	{
+	case ImageRenderStage::InitializeScene:
+	{
+		worker.AddThread([this,&worker]() {
+			PrepareCyclesSceneForRendering();
+
+			if(IsRenderSceneMode(m_renderMode))
+			{
+				auto stereoscopic = m_camera->IsStereoscopic();
+				if(stereoscopic)
+					m_camera->SetStereoscopicEye(raytracing::StereoEye::Left);
+				ImageRenderStage initialRenderStage;
+				switch(m_renderMode)
+				{
+				case RenderMode::RenderImage:
+					initialRenderStage = ImageRenderStage::Lighting;
+					break;
+				case RenderMode::SceneAlbedo:
+					initialRenderStage = ImageRenderStage::SceneAlbedo;
+					break;
+				case RenderMode::SceneNormals:
+					initialRenderStage = ImageRenderStage::SceneNormals;
+					break;
+				case RenderMode::SceneDepth:
+					initialRenderStage = ImageRenderStage::SceneDepth;
+					break;
+				default:
+					throw std::invalid_argument{"Invalid render mode " +std::to_string(umath::to_integral(m_renderMode))};
+				}
+				StartNextRenderImageStage(worker,initialRenderStage,stereoscopic ? StereoEye::Left : StereoEye::None);
+				worker.Start();
+			}
+			else
+			{
+				StartNextRenderImageStage(worker,ImageRenderStage::Bake,StereoEye::None);
+				worker.Start();
+			}
+			return RenderStageResult::Continue;
 		});
+		break;
+	}
+	case ImageRenderStage::Bake:
+	{
+		StartTextureBaking(worker);
+		break;
+	}
+	case ImageRenderStage::Lighting:
+	{
+		if(IsProgressiveRefine())
+			m_progressiveRunning = true;
+		worker.AddThread([this,&worker,stage,eyeStage]() {
+			m_session->start();
+
+			// Render image with lighting
+			auto progressMultiplier = (GetDenoiseMode() == DenoiseMode::Detailed) ? 0.95f : 1.f;
+			WaitForRenderStage(worker,0.f,progressMultiplier,[this,&worker,stage,eyeStage]() mutable -> RenderStageResult {
+				if(IsProgressiveRefine() == false)
+					m_session->wait();
+				else if(m_progressiveRunning)
+				{
+					std::unique_lock<std::mutex> lock {m_progressiveMutex};
+					m_progressiveCondition.wait(lock);
+				}
+				auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
+				resultImageBuffer = FinalizeCyclesScene();
+				// ApplyPostProcessing(*resultImageBuffer,m_renderMode);
+
+				if(UpdateStereo(worker,stage,eyeStage))
+				{
+					worker.Start(); // Lighting stage for the left eye is triggered by the user, but we have to start it manually for the right eye
+					return RenderStageResult::Continue;
+				}
+
+				if(ShouldDenoise() == false)
+					return StartNextRenderImageStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
+				if(GetDenoiseMode() == DenoiseMode::Fast)
+				{
+					// Skip albedo/normal render passes and just go straight to denoising
+					return StartNextRenderImageStage(worker,ImageRenderStage::Denoise,eyeStage);
+				}
+				return StartNextRenderImageStage(worker,ImageRenderStage::Albedo,eyeStage);
+			});
+		});
+		break;
+	}
+	case ImageRenderStage::Albedo:
+	{
+		if(m_createInfo.progressive)
+		{
+			m_tileManager.Reload();
+			m_createInfo.progressiveRefine = false;
+			m_session->progress.reset();
+		}
+		// Render albedo colors (required for denoising)
+		m_renderMode = RenderMode::SceneAlbedo;
+		if(eyeStage == StereoEye::Left || eyeStage == StereoEye::None)
+			InitializeAlbedoPass(true);
+		worker.AddThread([this,&worker,eyeStage,stage]() {
+			m_session->start();
+			WaitForRenderStage(worker,0.95f,0.025f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
+				m_session->wait();
+				auto &albedoImageBuffer = GetAlbedoImageBuffer(eyeStage);
+				albedoImageBuffer = FinalizeCyclesScene();
+				// ApplyPostProcessing(*albedoImageBuffer,m_renderMode);
+
+				if(UpdateStereo(worker,stage,eyeStage))
+					return RenderStageResult::Continue;
+
+				return StartNextRenderImageStage(worker,ImageRenderStage::Normal,eyeStage);
+			});
+		});
+		worker.Start();
+		break;
+	}
+	case ImageRenderStage::Normal:
+	{
+		if(m_createInfo.progressive)
+		{
+			m_tileManager.Reload();
+			m_createInfo.progressiveRefine = false;
+			m_session->progress.reset();
+		}
+		// Render normals (required for denoising)
+		m_renderMode = RenderMode::SceneNormals;
+		if(eyeStage == StereoEye::Left || eyeStage == StereoEye::None)
+			InitializeNormalPass(true);
+		worker.AddThread([this,&worker,eyeStage,stage]() {
+			m_session->start();
+			WaitForRenderStage(worker,0.975f,0.025f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
+				m_session->wait();
+				auto &normalImageBuffer = GetNormalImageBuffer(eyeStage);
+				normalImageBuffer = FinalizeCyclesScene();
+				// ApplyPostProcessing(*normalImageBuffer,m_renderMode);
+
+				if(UpdateStereo(worker,stage,eyeStage))
+					return RenderStageResult::Continue;
+
+				return StartNextRenderImageStage(worker,ImageRenderStage::Denoise,eyeStage);
+			});
+		});
+		worker.Start();
+		break;
+	}
+	case ImageRenderStage::Denoise:
+	{
+		// Denoise
+		DenoiseInfo denoiseInfo {};
+		auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
+		denoiseInfo.hdr = resultImageBuffer->IsHDRFormat();
+		denoiseInfo.width = resultImageBuffer->GetWidth();
+		denoiseInfo.height = resultImageBuffer->GetHeight();
+
+		static auto dbgAlbedo = false;
+		static auto dbgNormals = false;
+		if(dbgAlbedo)
+			m_resultImageBuffer = m_albedoImageBuffer;
+		else if(dbgNormals)
+			m_resultImageBuffer = m_normalImageBuffer;
+		else
+		{
+			auto &albedoImageBuffer = GetAlbedoImageBuffer(eyeStage);
+			auto &normalImageBuffer = GetNormalImageBuffer(eyeStage);
+			denoise(denoiseInfo,*resultImageBuffer,albedoImageBuffer.get(),normalImageBuffer.get(),[this,&worker](float progress) -> bool {
+				return !worker.IsCancelled();
+			});
+		}
+
+		if(UpdateStereo(worker,stage,eyeStage))
+			return RenderStageResult::Continue;
+
+		return StartNextRenderImageStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
+	}
+	case ImageRenderStage::FinalizeImage:
+	{
+		if(eyeStage == StereoEye::Left)
+			return StartNextRenderImageStage(worker,ImageRenderStage::MergeStereoscopic,StereoEye::None);
+		return StartNextRenderImageStage(worker,ImageRenderStage::Finalize,StereoEye::None);
+	}
+	case ImageRenderStage::MergeStereoscopic:
+	{
+		auto &imgLeft = m_resultImageBuffer.at(umath::to_integral(StereoEye::Left));
+		auto &imgRight = m_resultImageBuffer.at(umath::to_integral(StereoEye::Right));
+		auto w = imgLeft->GetWidth();
+		auto h = imgLeft->GetHeight();
+		auto imgComposite = uimg::ImageBuffer::Create(w,h *2,imgLeft->GetFormat());
+		auto *dataSrcLeft = imgLeft->GetData();
+		auto *dataSrcRight = imgRight->GetData();
+		auto *dataDst = imgComposite->GetData();
+		memcpy(dataDst,dataSrcLeft,imgLeft->GetSize());
+		memcpy(static_cast<uint8_t*>(dataDst) +imgLeft->GetSize(),dataSrcRight,imgRight->GetSize());
+		m_resultImageBuffer.at(umath::to_integral(StereoEye::Left)) = imgComposite;
+		m_resultImageBuffer.at(umath::to_integral(StereoEye::Right)) = nullptr;
+		return StartNextRenderImageStage(worker,ImageRenderStage::Finalize,StereoEye::None);
+	}
+	case ImageRenderStage::Finalize:
+		// We're done here
+		CloseCyclesScene();
+		return RenderStageResult::Complete;
+	case ImageRenderStage::SceneAlbedo:
+	case ImageRenderStage::SceneNormals:
+	case ImageRenderStage::SceneDepth:
+	{
+		if(eyeStage != StereoEye::Right)
+		{
+			if(stage == ImageRenderStage::SceneAlbedo)
+				InitializeAlbedoPass(false);
+			else if(stage == ImageRenderStage::SceneNormals)
+				InitializeNormalPass(false);
+		}
+		worker.AddThread([this,&worker,eyeStage,stage]() {
+			m_session->start();
+			WaitForRenderStage(worker,0.f,1.f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
+				m_session->wait();
+				auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
+				resultImageBuffer = FinalizeCyclesScene();
+				// ApplyPostProcessing(*resultImageBuffer,m_renderMode);
+
+				if(UpdateStereo(worker,stage,eyeStage))
+				{
+					worker.Start(); // Initial stage for the left eye is triggered by the user, but we have to start it manually for the right eye
+					return RenderStageResult::Continue;
+				}
+
+				return StartNextRenderImageStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
+			});
+		});
+		break;
+	}
+	}
+	return RenderStageResult::Continue;
+}
+
+void raytracing::Scene::SetCancelled(const std::string &msg)
+{
+	m_session->progress.set_cancel(msg);
+	m_tileManager.Cancel();
+}
+
+void raytracing::Scene::WaitForRenderStage(SceneWorker &worker,float baseProgress,float progressMultiplier,const std::function<RenderStageResult()> &fOnComplete)
+{
+	for(;;)
+	{
+		worker.UpdateProgress(baseProgress +m_session->progress.get_progress() *progressMultiplier);
+
+		if(worker.IsCancelled())
+			SetCancelled("Cancelled by application.");
+
+		if(m_restartState != 0)
+		{
+			while(m_restartState != 2);
+			m_restartState = 0;
+			continue;
+		}
+		if(IsProgressiveRefine() && m_progressiveRunning == false)
+			break;
+		if(m_session->progress.get_cancel())
+		{
+			if(m_restartState != 0)
+				continue;
+			std::cerr<<"WARNING: Cycles rendering has been cancelled: "<<m_session->progress.get_cancel_message()<<std::endl;
+			worker.Cancel(m_session->progress.get_cancel_message());
+			break;
+		}
+		if(m_session->progress.get_error())
+		{
+			std::string status;
+			std::string subStatus;
+			m_session->progress.get_status(status,subStatus);
+			std::cerr<<"WARNING: Cycles rendering has failed at status '"<<status<<"' ("<<subStatus<<") with error: "<<m_session->progress.get_error_message()<<std::endl;
+			worker.SetStatus(util::JobStatus::Failed,m_session->progress.get_error_message());
+			break;
+		}
+		if(m_session->progress.get_progress() == 1.f)
+			break;
+		std::this_thread::sleep_for(std::chrono::seconds{1});
+	}
+	if(worker.GetStatus() == util::JobStatus::Pending && fOnComplete != nullptr && fOnComplete() == RenderStageResult::Continue)
+		return;
+	if(worker.GetStatus() == util::JobStatus::Pending)
+		worker.SetStatus(util::JobStatus::Successful);
+}
+
+std::optional<uint32_t> raytracing::Scene::FindCCLObjectId(const Object &o) const
+{
+	auto it = std::find(m_scene.objects.begin(),m_scene.objects.end(),*o);
+	return (it != m_scene.objects.end()) ? (it -m_scene.objects.begin()) : std::optional<uint32_t>{};
+}
+
+const std::vector<raytracing::PLight> &raytracing::Scene::GetLights() const {return const_cast<Scene*>(this)->GetLights();}
+std::vector<raytracing::PLight> &raytracing::Scene::GetLights() {return m_lights;}
+
+util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> raytracing::Scene::Finalize()
+{
+	auto job = util::create_parallel_job<SceneWorker>(*this);
+	auto &worker = static_cast<SceneWorker&>(job.GetWorker());
+	StartNextRenderImageStage(worker,ImageRenderStage::InitializeScene,StereoEye::None);
 	return job;
 }
 
+bool raytracing::Scene::IsProgressive() const {return m_createInfo.progressive;}
+bool raytracing::Scene::IsProgressiveRefine() const {return m_createInfo.progressiveRefine;}
+void raytracing::Scene::StopRendering()
+{
+	m_progressiveCondition.notify_one();
+	m_progressiveRunning = false;
+}
 raytracing::Scene::RenderMode raytracing::Scene::GetRenderMode() const {return m_renderMode;}
 float raytracing::Scene::GetProgress() const
 {
@@ -1515,22 +1771,15 @@ float raytracing::Scene::GetProgress() const
 }
 void raytracing::Scene::OnParallelWorkerCancelled()
 {
-	m_session->set_pause(true);
+	SetCancelled();
+	// m_session->set_pause(true);
+	// StopRendering();
 }
 void raytracing::Scene::Wait()
 {
 	if(m_session)
 		m_session->wait();
 }
-
-const std::vector<raytracing::PShader> &raytracing::Scene::GetShaders() const {return const_cast<Scene*>(this)->GetShaders();}
-std::vector<raytracing::PShader> &raytracing::Scene::GetShaders() {return m_shaders;}
-const std::vector<raytracing::PObject> &raytracing::Scene::GetObjects() const {return const_cast<Scene*>(this)->GetObjects();}
-std::vector<raytracing::PObject> &raytracing::Scene::GetObjects() {return m_objects;}
-const std::vector<raytracing::PLight> &raytracing::Scene::GetLights() const {return const_cast<Scene*>(this)->GetLights();}
-std::vector<raytracing::PLight> &raytracing::Scene::GetLights() {return m_lights;}
-const std::vector<raytracing::PMesh> &raytracing::Scene::GetMeshes() const {return const_cast<Scene*>(this)->GetMeshes();}
-std::vector<raytracing::PMesh> &raytracing::Scene::GetMeshes() {return m_meshes;}
 
 void raytracing::Scene::SetLightIntensityFactor(float f) {m_sceneInfo.lightIntensityFactor = f;}
 float raytracing::Scene::GetLightIntensityFactor() const {return m_sceneInfo.lightIntensityFactor;}
@@ -1540,7 +1789,6 @@ void raytracing::Scene::SetVerbose(bool verbose) {g_verbose = verbose;}
 bool raytracing::Scene::IsVerbose() {return g_verbose;}
 
 static constexpr std::array<char,3> SERIALIZATION_HEADER = {'R','T','D'};
-static uint32_t SERIALIZATION_VERSION = 2;
 void raytracing::Scene::Serialize(DataStream &dsOut,const SerializationData &serializationData) const
 {
 	dsOut->Write(reinterpret_cast<const uint8_t*>(SERIALIZATION_HEADER.data()),SERIALIZATION_HEADER.size() *sizeof(SERIALIZATION_HEADER.front()));
@@ -1555,17 +1803,9 @@ void raytracing::Scene::Serialize(DataStream &dsOut,const SerializationData &ser
 
 	dsOut->Write(m_stateFlags);
 
-	dsOut->Write<uint32_t>(m_shaders.size());
-	for(auto &shader : m_shaders)
-		shader->Serialize(dsOut);
-
-	dsOut->Write<uint32_t>(m_meshes.size());
-	for(auto &mesh : m_meshes)
-		mesh->Serialize(dsOut);
-
-	dsOut->Write<uint32_t>(m_objects.size());
-	for(auto &obj : m_objects)
-		obj->Serialize(dsOut);
+	dsOut->Write<uint32_t>(m_mdlCaches.size());
+	for(auto &mdlCache : m_mdlCaches)
+		mdlCache->Serialize(dsOut);
 
 	dsOut->Write<uint32_t>(m_lights.size());
 	for(auto &light : m_lights)
@@ -1579,8 +1819,8 @@ bool raytracing::Scene::ReadSerializationHeader(DataStream &dsIn,RenderMode &out
 	dsIn->Read(reinterpret_cast<uint8_t*>(&header),sizeof(header));
 	if(header != SERIALIZATION_HEADER)
 		return false;
-	auto version = dsIn->Read<decltype(SERIALIZATION_VERSION)>();
-	if(version > SERIALIZATION_VERSION)
+	auto version = dsIn->Read<uint32_t>();
+	if(version > SERIALIZATION_VERSION || version < 3)
 		return false;
 	outVersion = version;
 	outCreateInfo = dsIn->Read<CreateInfo>();
@@ -1598,33 +1838,30 @@ bool raytracing::Scene::Deserialize(DataStream &dsIn)
 {
 	SerializationData serializationData;
 	uint32_t version;
-	if(ReadSerializationHeader(dsIn,m_renderMode,m_createInfo,serializationData,version,&m_sceneInfo) == false)
+	CreateInfo createInfo {};
+	if(ReadSerializationHeader(dsIn,m_renderMode,createInfo,serializationData,version,&m_sceneInfo) == false)
 		return false;
 	m_stateFlags = dsIn->Read<decltype(m_stateFlags)>();
 
-	auto numShaders = dsIn->Read<uint32_t>();
-	m_shaders.reserve(numShaders);
-	for(auto i=decltype(numShaders){0u};i<numShaders;++i)
-		Shader::Create(*this,dsIn,version);
-
-	auto numMeshes = dsIn->Read<uint32_t>();
-	m_meshes.reserve(numMeshes);
-	for(auto i=decltype(numMeshes){0u};i<numMeshes;++i)
-		Mesh::Create(*this,dsIn);
-
-	auto numObjects = dsIn->Read<uint32_t>();
-	m_objects.reserve(numObjects);
-	for(auto i=decltype(numObjects){0u};i<numObjects;++i)
-		Object::Create(*this,version,dsIn);
+	auto numCaches = dsIn->Read<uint32_t>();
+	m_mdlCaches.resize(numCaches);
+	for(auto i=decltype(numCaches){0u};i<numCaches;++i)
+		m_mdlCaches.at(i) = ModelCache::Create(dsIn,GetShaderNodeManager());
 
 	auto numLights = dsIn->Read<uint32_t>();
 	m_lights.reserve(numLights);
 	for(auto i=decltype(numLights){0u};i<numLights;++i)
-		Light::Create(*this,version,dsIn);
+		m_lights.push_back(Light::Create(version,dsIn));
 
 	m_camera->Deserialize(version,dsIn);
 	return true;
 }
+
+void raytracing::Scene::HandleError(const std::string &errMsg) const
+{
+	std::cerr<<errMsg<<std::endl;
+}
+raytracing::NodeManager &raytracing::Scene::GetShaderNodeManager() const {return *m_nodeManager;}
 
 void raytracing::Scene::SetSky(const std::string &skyPath) {m_sceneInfo.sky = skyPath;}
 void raytracing::Scene::SetSkyAngles(const EulerAngles &angSky) {m_sceneInfo.skyAngles = angSky;}
@@ -1638,6 +1875,15 @@ void raytracing::Scene::SetMaxGlossyBounces(uint32_t bounces) {m_sceneInfo.maxGl
 void raytracing::Scene::SetMaxTransmissionBounces(uint32_t bounces) {m_sceneInfo.maxTransmissionBounces = bounces;}
 void raytracing::Scene::SetMotionBlurStrength(float strength) {m_sceneInfo.motionBlurStrength = strength;}
 void raytracing::Scene::SetAOBakeTarget(Object &o) {m_bakeTarget = o.shared_from_this();}
+std::vector<raytracing::TileManager::TileData> raytracing::Scene::GetRenderedTileBatch() {return m_tileManager.GetRenderedTileBatch();}
+Vector2i raytracing::Scene::GetTileSize() const
+{
+	return {m_session->params.tile_size.x,m_session->params.tile_size.y};
+}
+Vector2i raytracing::Scene::GetResolution() const
+{
+	return {(*m_camera)->width,(*m_camera)->height};
+}
 
 ccl::Session *raytracing::Scene::GetCCLSession() {return m_session.get();}
 
@@ -1741,5 +1987,17 @@ std::string raytracing::Scene::ToAbsolutePath(const std::string &relPath)
 		std::cout<<"WARNING: Unable to locate file '"<<relPath<<"': File not found!"<<std::endl;
 	return result ? rpath : (FileManager::GetRootPath() +relPath);
 }
-#pragma optimize("",on)
 
+void raytracing::Scene::AddModelsFromCache(const ModelCache &cache)
+{
+	if(m_mdlCaches.size() == m_mdlCaches.capacity())
+		m_mdlCaches.reserve(m_mdlCaches.size() *1.5 +10);
+	m_mdlCaches.push_back(const_cast<ModelCache&>(cache).shared_from_this());
+}
+void raytracing::Scene::AddLight(Light &light)
+{
+	if(m_lights.size() == m_lights.capacity())
+		m_lights.reserve(m_lights.size() *1.5 +50);
+	m_lights.push_back(light.shared_from_this());
+}
+#pragma optimize("",on)

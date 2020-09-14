@@ -14,6 +14,7 @@
 #include <memory>
 #include <optional>
 #include <mathutil/uvec.h>
+#include <sharedutils/util.h>
 #include <kernel/kernel_types.h>
 
 namespace ccl {class Mesh; class Attribute; struct float4; struct float3; struct float2;};
@@ -24,10 +25,11 @@ namespace raytracing
 	class CCLShader;
 	class Scene;
 	class Mesh;
+	class ShaderCache;
 	using PMesh = std::shared_ptr<Mesh>;
 	using PShader = std::shared_ptr<Shader>;
 	class DLLRTUTIL Mesh
-		: public SceneObject,
+		: public BaseObject,
 		public std::enable_shared_from_this<Mesh>
 	{
 	public:
@@ -35,16 +37,21 @@ namespace raytracing
 		{
 			None = 0u,
 			HasAlphas = 1u,
-			HasWrinkles = HasAlphas<<1u
+			HasWrinkles = HasAlphas<<1u,
+
+			CCLObjectOwnedByScene = HasWrinkles<<1u
 		};
 		static constexpr ccl::AttributeStandard ALPHA_ATTRIBUTE_TYPE = ccl::AttributeStandard::ATTR_STD_POINTINESS;
 
-		static PMesh Create(Scene &scene,const std::string &name,uint64_t numVerts,uint64_t numTris,Flags flags=Flags::None);
-		static PMesh Create(Scene &scene,DataStream &dsIn);
+		static PMesh Create(const std::string &name,uint64_t numVerts,uint64_t numTris,Flags flags=Flags::None);
+		static PMesh Create(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader);
+		static PMesh Create(DataStream &dsIn,const ShaderCache &cache);
+		virtual ~Mesh() override;
 		util::WeakHandle<Mesh> GetHandle();
 
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
+		void Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Shader&)> &fGetShaderIndex) const;
+		void Serialize(DataStream &dsOut,const std::unordered_map<const Shader*,size_t> shaderToIndexTable) const;
+		void Deserialize(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader);
 
 		const ccl::float4 *GetNormals() const;
 		const ccl::float4 *GetTangents() const;
@@ -71,9 +78,12 @@ namespace raytracing
 		void Validate() const;
 		ccl::Mesh *operator->();
 		ccl::Mesh *operator*();
+
+		// For internal use only
+		std::vector<uint32_t> &GetOriginalShaderIndexTable() {return m_originShaderIndexTable;}
 	private:
-		Mesh(Scene &scene,ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTris,Flags flags=Flags::None);
-		virtual void DoFinalize() override;
+		Mesh(ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTris,Flags flags=Flags::None);
+		virtual void DoFinalize(Scene &scene) override;
 		std::vector<Vector2> m_perVertexUvs = {};
 		std::vector<Vector3> m_perVertexTangents = {};
 		std::vector<float> m_perVertexTangentSigns = {};
@@ -89,6 +99,8 @@ namespace raytracing
 		uint64_t m_numVerts = 0ull;
 		uint64_t m_numTris = 0ull;
 		Flags m_flags = Flags::None;
+
+		std::vector<uint32_t> m_originShaderIndexTable;
 	};
 };
 REGISTER_BASIC_BITWISE_OPERATORS(raytracing::Mesh::Flags)
