@@ -233,7 +233,7 @@ void Camera::DoFinalize(Scene &scene)
 		SetRotation(rot);
 	}
 
-	m_camera.matrix = Scene::ToCyclesTransform(GetPose());
+	m_camera.matrix = Scene::ToCyclesTransform(GetPose(),true);
 	m_camera.compute_auto_viewplane();
 
 	m_camera.tag_update();

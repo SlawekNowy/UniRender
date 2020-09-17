@@ -621,6 +621,13 @@ raytracing::NodeDesc &raytracing::GroupNodeDesc::AddNode(const std::string &type
 	if(node == nullptr)
 		throw Exception{"Invalid node type '" +typeName +"'!"};
 	m_nodes.push_back(node);
+
+	if(typeName == "normal_map")
+	{
+		//node->SetProperty(nodes::normal_map::IN_ATTRIBUTE,"test");
+
+	}
+
 	return *node;
 }
 raytracing::NodeDesc &raytracing::GroupNodeDesc::AddNode(NodeTypeId id)
@@ -650,6 +657,26 @@ raytracing::NodeDesc &raytracing::GroupNodeDesc::AddVectorMathNode(const Socket 
 		Link(socket1,node.GetInputSocket(nodes::vector_math::IN_VECTOR2));
 	return node;
 }
+raytracing::Socket raytracing::GroupNodeDesc::AddNormalMapNode(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,float strength)
+{
+	return AddNormalMapNodeDesc(fileName,fileNameSocket,strength);
+}
+raytracing::NodeDesc &raytracing::GroupNodeDesc::AddNormalMapNodeDesc(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,float strength)
+{
+	auto &node = AddImageTextureNode(fileName,fileNameSocket,TextureType::NonColorImage);
+	auto &nmap = AddNode(NODE_NORMAL_MAP);
+	nmap.SetProperty(nodes::normal_map::IN_SPACE,ccl::NodeNormalMapSpace::NODE_NORMAL_MAP_TANGENT);
+	Link(*node.GetPrimaryOutputSocket(),nmap.GetInputSocket(nodes::normal_map::IN_COLOR));
+	nmap.SetProperty(nodes::normal_map::IN_STRENGTH,strength);
+
+	// The y-component has to be inverted to match the behavior in Blender, but I'm not sure why
+	auto &nComponents = SeparateRGB(nmap.GetOutputSocket(nodes::normal_map::OUT_NORMAL));
+	auto &convertedNormal = AddNode(NODE_COMBINE_RGB);
+	Link(nComponents.GetOutputSocket(nodes::separate_rgb::OUT_R),convertedNormal.GetInputSocket(nodes::combine_rgb::IN_R));
+	Link(-nComponents.GetOutputSocket(nodes::separate_rgb::OUT_G),convertedNormal.GetInputSocket(nodes::combine_rgb::IN_G));
+	Link(nComponents.GetOutputSocket(nodes::separate_rgb::OUT_B),convertedNormal.GetInputSocket(nodes::combine_rgb::IN_B));
+	return convertedNormal;
+}
 raytracing::NodeDesc &raytracing::GroupNodeDesc::AddImageTextureNode(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,TextureType type)
 {
 	raytracing::NodeDesc *desc = nullptr;
@@ -678,13 +705,7 @@ raytracing::NodeDesc &raytracing::GroupNodeDesc::AddImageTextureNode(const std::
 		break;
 	}
 	case TextureType::NormalMap:
-	{
-		auto &node = AddImageTextureNode(fileName,fileNameSocket,TextureType::NonColorImage);
-		auto &nmap = AddNode(NODE_NORMAL_MAP);
-		nmap.SetProperty(nodes::normal_map::IN_SPACE,ccl::NodeNormalMapSpace::NODE_NORMAL_MAP_TANGENT);
-		Link(*node.GetPrimaryOutputSocket(),nmap.GetInputSocket(nodes::normal_map::IN_COLOR));
-		return nmap;
-	}
+		return AddNormalMapNodeDesc(fileName,fileNameSocket);
 	}
 	static_assert(umath::to_integral(TextureType::Count) == 4);
 	assert(nodes::image_texture::IN_FILENAME == nodes::environment_texture::IN_FILENAME);

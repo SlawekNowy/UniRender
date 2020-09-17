@@ -13,13 +13,16 @@
 #include <mutex>
 #include <array>
 #include <queue>
+#include <optional>
 #include <sharedutils/ctpl_stl.h>
 #include <mathutil/uvec.h>
 
 namespace uimg {class ImageBuffer;};
 namespace ccl {class RenderTile;};
+namespace util::ocio {class ColorProcessor;};
 namespace raytracing
 {
+	enum class ColorTransform : uint8_t;
 	class TileManager
 	{
 	public:
@@ -28,7 +31,8 @@ namespace raytracing
 			enum class Flags : uint8_t
 			{
 				None = 0,
-				HDRData = 1
+				HDRData = 1,
+				Initialized = HDRData<<1u
 			};
 			uint16_t x = 0;
 			uint16_t y = 0;
@@ -49,7 +53,7 @@ namespace raytracing
 			Stopped
 		};
 		~TileManager();
-		void Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice);
+		void Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,util::ocio::ColorProcessor *optColorProcessor=nullptr);
 		void Reload();
 		void Cancel();
 		void Wait();
@@ -66,13 +70,16 @@ namespace raytracing
 		void WriteRenderTile(const ccl::RenderTile &tile);
 	private:
 		void ApplyRectData(const TileData &data);
-		void ApplyPostProcessing(TileData &data);
+		void InitializeTileData(TileData &data);
+		void ApplyPostProcessingForProgressiveTile(TileData &data);
 
 		Vector2i m_tileSize;
 		uint32_t m_numTiles = 0;
 		Vector2i m_numTilesPerAxis;
 		std::vector<std::atomic<uint32_t>> m_renderedSampleCountPerTile;
 		std::atomic<uint32_t> m_numTilesWithRenderedSamples = 0;
+
+		std::shared_ptr<util::ocio::ColorProcessor> m_colorTransformProcessor = nullptr;
 
 		bool m_cpuDevice = false;
 		std::atomic<bool> m_hasPendingWork = false;

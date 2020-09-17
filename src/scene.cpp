@@ -15,6 +15,7 @@
 #include "util_raytracing/baking.hpp"
 #include "util_raytracing/denoise.hpp"
 #include "util_raytracing/model_cache.hpp"
+#include "util_raytracing/color_management.hpp"
 #include <render/buffers.h>
 #include <render/scene.h>
 #include <render/session.h>
@@ -44,6 +45,7 @@
 #include <sharedutils/util_path.hpp>
 #include <util_image_buffer.hpp>
 #include <util_texture_info.hpp>
+#include <util_ocio.hpp>
 
 #ifdef ENABLE_CYCLES_LOGGING
 #pragma comment(lib,"shlwapi.lib")
@@ -519,7 +521,7 @@ void raytracing::Scene::AddSkybox(const std::string &texture)
 	desc->Link(nodeBg,nodes::background_shader::OUT_BACKGROUND,nodeOutput,nodes::output::IN_SURFACE);
 
 	auto skyAngles = m_sceneInfo.skyAngles;
-	skyAngles.p -= 90.f;
+	// skyAngles.p -= 90.f;
 	skyAngles = {
 		-skyAngles.p,
 		skyAngles.r,
@@ -1220,11 +1222,19 @@ void raytracing::Scene::PrepareCyclesSceneForRendering()
 		}
 	}
 
+	if(m_createInfo.colorTransform.has_value())
+	{
+		std::string err;
+		m_colorTransformProcessor = create_color_transform_processor(*m_createInfo.colorTransform,err);
+		if(m_colorTransformProcessor == nullptr)
+			HandleError("Unable to initialize color transform processor: " +err);
+	}
+
 	if(m_createInfo.progressive)
 	{
 		auto w = m_scene.camera->width;
 		auto h = m_scene.camera->height;
-		m_tileManager.Initialize(w,h,GetTileSize().x,GetTileSize().y,m_deviceType == DeviceType::CPU);
+		m_tileManager.Initialize(w,h,GetTileSize().x,GetTileSize().y,m_deviceType == DeviceType::CPU,m_colorTransformProcessor.get());
 	}
 }
 
@@ -1620,9 +1630,21 @@ raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStag
 		{
 			auto &albedoImageBuffer = GetAlbedoImageBuffer(eyeStage);
 			auto &normalImageBuffer = GetNormalImageBuffer(eyeStage);
+			resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
+			if(albedoImageBuffer)
+				albedoImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
+			if(normalImageBuffer)
+				normalImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
 			denoise(denoiseInfo,*resultImageBuffer,albedoImageBuffer.get(),normalImageBuffer.get(),[this,&worker](float progress) -> bool {
 				return !worker.IsCancelled();
 			});
+			if(m_colorTransformProcessor)
+			{
+				std::string err;
+				if(m_colorTransformProcessor->Apply(*resultImageBuffer,err,0.f,2.4 /* same gamma as used by Blender */) == false)
+					HandleError("Unable to apply color transform: " +err);
+			}
+			resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGBA_HDR);
 		}
 
 		if(UpdateStereo(worker,stage,eyeStage))
@@ -1914,7 +1936,7 @@ ccl::float3 raytracing::Scene::ToCyclesVector(const Vector3 &v)
 Vector3 raytracing::Scene::ToPragmaPosition(const ccl::float3 &pos)
 {
 	auto scale = util::pragma::units_to_metres(1.f);
-	Vector3 prPos {pos.x,pos.y,pos.z};
+	Vector3 prPos {pos.x,pos.z,-pos.y};
 	prPos /= scale;
 	return prPos;
 }
@@ -1923,7 +1945,7 @@ ccl::float3 raytracing::Scene::ToCyclesPosition(const Vector3 &pos)
 {
 	auto scale = util::pragma::units_to_metres(1.f);
 #ifdef ENABLE_TEST_AMBIENT_OCCLUSION
-	ccl::float3 cpos {pos.x,pos.y,pos.z};
+	ccl::float3 cpos {pos.x,-pos.z,pos.y};
 #else
 	ccl::float3 cpos {-pos.x,pos.y,pos.z};
 #endif
@@ -1934,7 +1956,7 @@ ccl::float3 raytracing::Scene::ToCyclesPosition(const Vector3 &pos)
 ccl::float3 raytracing::Scene::ToCyclesNormal(const Vector3 &n)
 {
 #ifdef ENABLE_TEST_AMBIENT_OCCLUSION
-	return ccl::float3{n.x,n.y,n.z};
+	return ccl::float3{n.x,-n.z,n.y};
 #else
 	return ccl::float3{-n.x,n.y,n.z};
 #endif
@@ -1945,13 +1967,15 @@ ccl::float2 raytracing::Scene::ToCyclesUV(const Vector2 &uv)
 	return ccl::float2{uv.x,1.f -uv.y};
 }
 
-ccl::Transform raytracing::Scene::ToCyclesTransform(const umath::ScaledTransform &t)
+ccl::Transform raytracing::Scene::ToCyclesTransform(const umath::ScaledTransform &t,bool applyRotOffset)
 {
 	Vector3 axis;
 	float angle;
 	uquat::to_axis_angle(t.GetRotation(),axis,angle);
 	auto cclT = ccl::transform_identity();
 	cclT = cclT *ccl::transform_rotate(angle,Scene::ToCyclesNormal(axis));
+	if(applyRotOffset)
+		cclT = cclT *ccl::transform_rotate(umath::deg_to_rad(90.f),ccl::float3{1.f,0.f,0.f});
 	cclT = ccl::transform_translate(Scene::ToCyclesPosition(t.GetOrigin())) *cclT;
 	cclT = cclT *ccl::transform_scale(Scene::ToCyclesVector(t.GetScale()));
 	return cclT;

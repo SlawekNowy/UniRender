@@ -45,6 +45,7 @@ namespace OpenImageIO_v2_1
 };
 namespace umath {class Transform; class ScaledTransform;};
 namespace uimg {class ImageBuffer;};
+namespace util::ocio {class ColorProcessor;};
 class DataStream;
 namespace raytracing
 {
@@ -94,6 +95,7 @@ namespace raytracing
 	class NodeManager;
 	class CCLShader;
 	class TileManager;
+	enum class ColorTransform : uint8_t;
 	class DLLRTUTIL Scene
 		: public std::enable_shared_from_this<Scene>
 	{
@@ -165,6 +167,7 @@ namespace raytracing
 			bool progressive = false;
 			bool progressiveRefine = false;
 			DeviceType deviceType = DeviceType::GPU;
+			std::optional<ColorTransform> colorTransform {};
 		};
 		static bool IsRenderSceneMode(RenderMode renderMode);
 		static void SetKernelPath(const std::string &kernelPath);
@@ -178,7 +181,7 @@ namespace raytracing
 		static ccl::float3 ToCyclesPosition(const Vector3 &pos);
 		static ccl::float3 ToCyclesNormal(const Vector3 &n);
 		static ccl::float2 ToCyclesUV(const Vector2 &uv);
-		static ccl::Transform ToCyclesTransform(const umath::ScaledTransform &t);
+		static ccl::Transform ToCyclesTransform(const umath::ScaledTransform &t,bool applyRotOffset=false);
 		static float ToCyclesLength(float len);
 		static std::string ToRelativePath(const std::string &absPath);
 		static std::string ToAbsolutePath(const std::string &relPath);
@@ -309,6 +312,7 @@ namespace raytracing
 		std::atomic<bool> m_progressiveRunning = false;
 		std::condition_variable m_progressiveCondition {};
 		std::mutex m_progressiveMutex {};
+		std::shared_ptr<util::ocio::ColorProcessor> m_colorTransformProcessor = nullptr;
 
 		std::atomic<uint32_t> m_restartState = 0;
 		TileManager m_tileManager {};

@@ -7,6 +7,8 @@
 
 #include "util_raytracing/tilemanager.hpp"
 #include "util_raytracing/denoise.hpp"
+#include "util_raytracing/color_management.hpp"
+#include <util_ocio.hpp>
 #include <util_image_buffer.hpp>
 #include <render/buffers.h>
 
@@ -35,9 +37,11 @@ void raytracing::TileManager::Wait()
 	}
 }
 
-void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice)
+void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,util::ocio::ColorProcessor *optColorProcessor)
 {
 	m_cpuDevice = cpuDevice;
+	if(optColorProcessor)
+		m_colorTransformProcessor = optColorProcessor->shared_from_this();
 	m_numTilesPerAxis = {
 		(w /wTile) +((w %wTile) > 0 ? 1 : 0),
 		(h /hTile) +((h %hTile) > 0 ? 1 : 0)
@@ -46,7 +50,7 @@ void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,ui
 	m_numTiles = numTiles;
 	m_inputTiles.resize(numTiles);
 	m_completedTiles.resize(numTiles);
-	m_progressiveImage = uimg::ImageBuffer::Create(w,h,uimg::ImageBuffer::Format::RGBA16);
+	m_progressiveImage = uimg::ImageBuffer::Create(w,h,uimg::ImageBuffer::Format::RGBA_FLOAT);
 	m_tileSize = {wTile,hTile};
 	Reload();
 }
@@ -118,15 +122,17 @@ void raytracing::TileManager::Reload()
 					if(m_state == State::Cancelled)
 						break;
 
-					ApplyPostProcessing(tile);
+					InitializeTileData(tile);
 
 					if(m_state == State::Cancelled)
 						break;
 
 					m_completedTileMutex.lock();
-						m_completedTiles[tileIndex] = tile;
+						m_completedTiles[tileIndex] = tile; // Completed tile data is float data WITHOUT color correction (color correction will be applied after denoising)
 					m_completedTileMutex.unlock();
 
+					ApplyPostProcessingForProgressiveTile(tile);
+					// Progressive tile is HDR 16-bit data WITH color correction (tile will be discarded when rendering is complete and 'm_completedTiles' tile will be used instead)
 					m_renderedTileMutex.lock();
 						if(m_state == State::Cancelled)
 						{
@@ -180,7 +186,7 @@ void raytracing::TileManager::ApplyRectData(const TileData &tile)
 	auto *srcData = reinterpret_cast<const uint8_t*>(tile.data.data());
 	auto *dstData = static_cast<uint8_t*>(m_progressiveImage->GetData());
 
-	constexpr auto sizePerPixel = sizeof(uint16_t) *4;
+	constexpr auto sizePerPixel = sizeof(float) *4;
 	auto srcSizePerRow = tile.w *sizePerPixel;
 	auto dstSizePerRow = m_progressiveImage->GetWidth() *sizePerPixel;
 	uint64_t srcOffset = 0;
@@ -208,15 +214,30 @@ int32_t raytracing::TileManager::GetCurrentTileSampleCount(uint32_t tileIndex) c
 	return m_renderedSampleCountPerTile.at(tileIndex);
 }
 
-void raytracing::TileManager::ApplyPostProcessing(TileData &data)
+void raytracing::TileManager::InitializeTileData(TileData &data)
 {
-	if(data.IsHDRData())
+	if(umath::is_flag_set(data.flags,TileData::Flags::Initialized))
 		return;
+	umath::set_flag(data.flags,TileData::Flags::Initialized);
 	data.x = m_progressiveImage->GetWidth() -data.x -data.w;
 	data.y = m_progressiveImage->GetHeight() -data.y -data.h;
 
 	auto img = uimg::ImageBuffer::Create(data.data.data(),data.w,data.h,uimg::ImageBuffer::Format::RGBA_FLOAT);
 	img->Flip(true,true);
+}
+
+void raytracing::TileManager::ApplyPostProcessingForProgressiveTile(TileData &data)
+{
+	if(data.IsFloatData() == false)
+		return;
+	auto img = uimg::ImageBuffer::Create(data.data.data(),data.w,data.h,uimg::ImageBuffer::Format::RGBA_FLOAT);
+	if(m_colorTransformProcessor)
+	{
+		std::string err;
+		auto result = m_colorTransformProcessor->Apply(*img,err);
+		if(result == false)
+			std::cout<<"Unable to apply color transform: "<<err<<std::endl;
+	}
 
 	if(m_state == State::Cancelled)
 		return;
@@ -247,10 +268,10 @@ void raytracing::TileManager::ApplyPostProcessing(TileData &data)
 		data.h = h;
 	}
 #endif
-
 	data.data = std::move(newData);
 	data.flags |= TileData::Flags::HDRData;
 }
+
 void raytracing::TileManager::UpdateRenderTile(const ccl::RenderTile &tile,bool param)
 {
 	assert((tile.x %m_tileSize.x) == 0 && (tile.y %m_tileSize.y) == 0);
@@ -281,6 +302,6 @@ void raytracing::TileManager::UpdateRenderTile(const ccl::RenderTile &tile,bool 
 }
 void raytracing::TileManager::WriteRenderTile(const ccl::RenderTile &tile)
 {
-
+	// TODO: What's this callback for exactly?
 }
 #pragma optimize("",on)

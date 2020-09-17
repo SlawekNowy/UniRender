@@ -78,6 +78,17 @@ add_external_library(lpng)
 add_external_library(zlib)
 add_external_library(jpeg)
 
+# Required for color management
+link_external_library(util_ocio)
+add_external_library(OpenEXR_Half)
+add_external_library(OpenEXR_Iex)
+add_external_library(OpenEXR_IlmThread)
+add_external_library(OpenEXR_Imath)
+add_external_library(OpenEXR_IlmImf)
+add_external_library(OpenColorIO)
+add_external_library(OpenImageIO)
+#
+
 set(DEPENDENCY_CYCLES_LIBRARY_LOCATION "" CACHE FILEPATH "Path to cycles libraries.")
 set(DEPENDENCY_OPENEXR_LIBRARY_LOCATION "" CACHE FILEPATH "Path to openexr libraries.")
 add_def(OIIO_STATIC_BUILD)

@@ -33,14 +33,14 @@ raytracing::PMesh raytracing::Mesh::Create(const std::string &name,uint64_t numV
 	if(attrT)
 	{
 		attrT->resize(numTris *3);
-		attrT->name = name +TANGENT_POSTFIX;
+		attrT->name = "orco" +TANGENT_POSTFIX;
 	}
 
 	auto *attrTS = mesh->attributes.add(ccl::ATTR_STD_UV_TANGENT_SIGN);
 	if(attrTS)
 	{
 		attrTS->resize(numTris *3);
-		attrTS->name = name +TANGENT_SIGN_POSTIFX;
+		attrTS->name = "orco" +TANGENT_SIGN_POSTIFX;
 	}
 
 	if(umath::is_flag_set(flags,Flags::HasAlphas) || umath::is_flag_set(flags,Flags::HasWrinkles))
@@ -90,7 +90,7 @@ raytracing::Mesh::Mesh(ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTris,Flags 
 	m_uvs = uvs ? uvs->data_float2() : nullptr;
 
 	auto *tangents = m_mesh.attributes.find(ccl::ATTR_STD_UV_TANGENT);
-	m_tangents = tangents ? tangents->data_float4() : nullptr;
+	m_tangents = tangents ? tangents->data_float3() : nullptr;
 
 	auto *tangentSigns = m_mesh.attributes.find(ccl::ATTR_STD_UV_TANGENT_SIGN);
 	m_tangentSigns = tangentSigns ? tangentSigns->data_float() : nullptr;
@@ -280,11 +280,15 @@ void raytracing::Mesh::DoFinalize(Scene &scene)
 			(*this)->used_shaders.at(i) = **cclShader;
 	}
 	m_flags |= Flags::CCLObjectOwnedByScene;
-	// m_mesh.tag_update(*scene,true);
+
+	// TODO: We should be using the tangent values from m_tangents / m_tangentSigns
+	// but their coordinate system needs to be converted for Cycles.
+	// For now we'll just re-compute the tangents here.
+	compute_tangents(&m_mesh,true,true);
 }
 
 const ccl::float4 *raytracing::Mesh::GetNormals() const {return m_normals;}
-const ccl::float4 *raytracing::Mesh::GetTangents() const {return m_tangents;}
+const ccl::float3 *raytracing::Mesh::GetTangents() const {return m_tangents;}
 const float *raytracing::Mesh::GetTangentSigns() const {return m_tangentSigns;}
 const float *raytracing::Mesh::GetAlphas() const {return m_alphas;}
 const float *raytracing::Mesh::GetWrinkleFactors() const {return GetAlphas();}
@@ -305,7 +309,7 @@ static ccl::float4 to_float4(const ccl::float3 &v)
 	return ccl::float4{v.x,v.y,v.z,0.f};
 }
 
-bool raytracing::Mesh::AddVertex(const Vector3 &pos,const Vector3 &n,const Vector3 &t,const Vector2 &uv)
+bool raytracing::Mesh::AddVertex(const Vector3 &pos,const Vector3 &n,const Vector4 &t,const Vector2 &uv)
 {
 	auto idx = m_mesh.verts.size();
 	if(idx >= m_numVerts)
@@ -361,15 +365,17 @@ bool raytracing::Mesh::AddTriangle(uint32_t idx0,uint32_t idx1,uint32_t idx2,uin
 	m_uvs[offset] = Scene::ToCyclesUV(uv0);
 	m_uvs[offset +1] = Scene::ToCyclesUV(uv1);
 	m_uvs[offset +2] = Scene::ToCyclesUV(uv2);
-
+	
 	auto &t0 = m_perVertexTangents.at(idx0);
 	auto &t1 = m_perVertexTangents.at(idx1);
 	auto &t2 = m_perVertexTangents.at(idx2);
-	m_tangents[offset] = to_float4(Scene::ToCyclesNormal(t0));
-	m_tangents[offset +1] = to_float4(Scene::ToCyclesNormal(t1));
-	m_tangents[offset +2] = to_float4(Scene::ToCyclesNormal(t2));
+	m_tangents[offset] = Scene::ToCyclesNormal(t0);
+	m_tangents[offset +1] = Scene::ToCyclesNormal(t1);
+	m_tangents[offset +2] = Scene::ToCyclesNormal(t2);
 
-	m_tangentSigns[offset] = m_tangentSigns[offset +1] = m_tangentSigns[offset +2] = 1.f;
+	m_tangentSigns[offset] = t0.w;
+	m_tangentSigns[offset +1] = t1.w;
+	m_tangentSigns[offset +2] = t2.w;
 	/*if((HasAlphas() || HasWrinkles()) && idx0 < m_perVertexAlphas.size() && idx1 < m_perVertexAlphas.size() && idx2 < m_perVertexAlphas.size())
 	{
 	m_alphas[offset] = m_perVertexAlphas.at(idx0);

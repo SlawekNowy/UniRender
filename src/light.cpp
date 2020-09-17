@@ -138,10 +138,9 @@ void raytracing::Light::DoFinalize(Scene &scene)
 	{
 		auto &rot = GetRotation();
 		auto forward = uquat::forward(rot);
-		m_light.spot_smooth = 1.f;
 		m_light.dir = raytracing::Scene::ToCyclesNormal(forward);
 		m_light.spot_smooth = (m_spotOuterAngle > 0.f) ? (1.f -m_spotInnerAngle /m_spotOuterAngle) : 1.f;
-		m_light.spot_angle = m_spotOuterAngle;
+		m_light.spot_angle = m_spotOuterAngle /2.f;
 		break;
 	}
 	case Type::Directional:
@@ -183,7 +182,9 @@ void raytracing::Light::DoFinalize(Scene &scene)
 	m_light.shader = **CCLShader::Create(scene,*desc);
 
 	auto lightType = (m_type == Type::Spot) ? util::pragma::LightType::Spot : (m_type == Type::Directional) ? util::pragma::LightType::Directional : util::pragma::LightType::Point;
-	auto watt = util::pragma::light_intensity_to_watts(m_intensity,lightType);
+	auto watt = (lightType == util::pragma::LightType::Spot) ? ulighting::cycles::lumen_to_watt_spot(m_intensity,m_color,umath::rad_to_deg(m_spotOuterAngle)) :
+		(lightType == util::pragma::LightType::Point) ? ulighting::cycles::lumen_to_watt_point(m_intensity,m_color) :
+		ulighting::cycles::lumen_to_watt_area(m_intensity,m_color);
 
 	// Multiple importance sampling. It's disabled by default for some reason, but it's usually best to keep it on.
 	m_light.use_mis = true;

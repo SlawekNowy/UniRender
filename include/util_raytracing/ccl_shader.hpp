@@ -343,6 +343,7 @@ namespace raytracing
 		NodeDesc &SeparateRGB(const Socket &rgb);
 		NodeDesc &AddImageTextureNode(const std::string &fileName,TextureType type=TextureType::ColorImage);
 		NodeDesc &AddImageTextureNode(const Socket &fileNameSocket,TextureType type=TextureType::ColorImage);
+		Socket AddNormalMapNode(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,float strength=1.f);
 		Socket AddConstantNode(float f);
 		Socket AddConstantNode(const Vector3 &v);
 		Socket Mix(const Socket &socket0,const Socket &socket1,const Socket &fac);
@@ -359,7 +360,8 @@ namespace raytracing
 
 		virtual void DeserializeNodes(DataStream &dsIn) override;
 		void DeserializeLinks(DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable);
-
+		
+		raytracing::NodeDesc &AddNormalMapNodeDesc(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,float strength=1.f);
 		raytracing::NodeDesc &AddImageTextureNode(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,TextureType type);
 		GroupNodeDesc(NodeManager &nodeManager);
 	private:
