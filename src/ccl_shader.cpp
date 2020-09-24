@@ -669,13 +669,17 @@ raytracing::NodeDesc &raytracing::GroupNodeDesc::AddNormalMapNodeDesc(const std:
 	Link(*node.GetPrimaryOutputSocket(),nmap.GetInputSocket(nodes::normal_map::IN_COLOR));
 	nmap.SetProperty(nodes::normal_map::IN_STRENGTH,strength);
 
+#if 0
 	// The y-component has to be inverted to match the behavior in Blender, but I'm not sure why
 	auto &nComponents = SeparateRGB(nmap.GetOutputSocket(nodes::normal_map::OUT_NORMAL));
 	auto &convertedNormal = AddNode(NODE_COMBINE_RGB);
 	Link(nComponents.GetOutputSocket(nodes::separate_rgb::OUT_R),convertedNormal.GetInputSocket(nodes::combine_rgb::IN_R));
 	Link(-nComponents.GetOutputSocket(nodes::separate_rgb::OUT_G),convertedNormal.GetInputSocket(nodes::combine_rgb::IN_G));
+	Link(nComponents.GetOutputSocket(nodes::separate_rgb::OUT_G),convertedNormal.GetInputSocket(nodes::combine_rgb::IN_G));
 	Link(nComponents.GetOutputSocket(nodes::separate_rgb::OUT_B),convertedNormal.GetInputSocket(nodes::combine_rgb::IN_B));
 	return convertedNormal;
+#endif
+	return nmap;
 }
 raytracing::NodeDesc &raytracing::GroupNodeDesc::AddImageTextureNode(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,TextureType type)
 {

@@ -1124,6 +1124,7 @@ bool raytracing::Scene::UpdateStereo(raytracing::SceneWorker &worker,ImageRender
 	{
 		// Switch to right eye
 		m_camera->SetStereoscopicEye(raytracing::StereoEye::Right);
+		ReloadProgressiveRender();
 		StartNextRenderImageStage(worker,stage,StereoEye::Right);
 		return true;
 	}
@@ -1465,6 +1466,24 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 	});
 }
 
+void raytracing::Scene::ReloadProgressiveRender()
+{
+	if(m_createInfo.progressive == false)
+		return;
+	m_tileManager.Reload();
+	m_createInfo.progressiveRefine = false;
+	m_session->progress.reset();
+}
+
+static void validate_session(ccl::Scene &scene)
+{
+	for(auto *shader : scene.shaders)
+	{
+		if(shader->graph == nullptr)
+			throw std::logic_error{"Found shader with invalid graph!"};
+	}
+}
+
 raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStage(SceneWorker &worker,ImageRenderStage stage,StereoEye eyeStage)
 {
 	switch(stage)
@@ -1519,6 +1538,7 @@ raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStag
 		if(IsProgressiveRefine())
 			m_progressiveRunning = true;
 		worker.AddThread([this,&worker,stage,eyeStage]() {
+			validate_session(m_scene);
 			m_session->start();
 
 			// Render image with lighting
@@ -1555,17 +1575,13 @@ raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStag
 	}
 	case ImageRenderStage::Albedo:
 	{
-		if(m_createInfo.progressive)
-		{
-			m_tileManager.Reload();
-			m_createInfo.progressiveRefine = false;
-			m_session->progress.reset();
-		}
+		ReloadProgressiveRender();
 		// Render albedo colors (required for denoising)
 		m_renderMode = RenderMode::SceneAlbedo;
 		if(eyeStage == StereoEye::Left || eyeStage == StereoEye::None)
 			InitializeAlbedoPass(true);
 		worker.AddThread([this,&worker,eyeStage,stage]() {
+			validate_session(m_scene);
 			m_session->start();
 			WaitForRenderStage(worker,0.95f,0.025f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
 				m_session->wait();
@@ -1584,17 +1600,13 @@ raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStag
 	}
 	case ImageRenderStage::Normal:
 	{
-		if(m_createInfo.progressive)
-		{
-			m_tileManager.Reload();
-			m_createInfo.progressiveRefine = false;
-			m_session->progress.reset();
-		}
+		ReloadProgressiveRender();
 		// Render normals (required for denoising)
 		m_renderMode = RenderMode::SceneNormals;
 		if(eyeStage == StereoEye::Left || eyeStage == StereoEye::None)
 			InitializeNormalPass(true);
 		worker.AddThread([this,&worker,eyeStage,stage]() {
+			validate_session(m_scene);
 			m_session->start();
 			WaitForRenderStage(worker,0.975f,0.025f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
 				m_session->wait();
@@ -1645,6 +1657,9 @@ raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStag
 					HandleError("Unable to apply color transform: " +err);
 			}
 			resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGBA_HDR);
+			resultImageBuffer->ClearAlpha();
+			if(IsProgressive() == false) // If progressive, our tile manager will have already flipped the image
+				resultImageBuffer->Flip(true,true);
 		}
 
 		if(UpdateStereo(worker,stage,eyeStage))
@@ -1682,14 +1697,16 @@ raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStag
 	case ImageRenderStage::SceneNormals:
 	case ImageRenderStage::SceneDepth:
 	{
+		ReloadProgressiveRender();
 		if(eyeStage != StereoEye::Right)
 		{
 			if(stage == ImageRenderStage::SceneAlbedo)
-				InitializeAlbedoPass(false);
+				InitializeAlbedoPass(true);
 			else if(stage == ImageRenderStage::SceneNormals)
-				InitializeNormalPass(false);
+				InitializeNormalPass(true);
 		}
 		worker.AddThread([this,&worker,eyeStage,stage]() {
+			validate_session(m_scene);
 			m_session->start();
 			WaitForRenderStage(worker,0.f,1.f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
 				m_session->wait();
@@ -1714,6 +1731,8 @@ raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStag
 
 void raytracing::Scene::SetCancelled(const std::string &msg)
 {
+	if(m_session == nullptr)
+		return;
 	m_session->progress.set_cancel(msg);
 	m_tileManager.Cancel();
 }

@@ -224,6 +224,7 @@ void raytracing::TileManager::InitializeTileData(TileData &data)
 
 	auto img = uimg::ImageBuffer::Create(data.data.data(),data.w,data.h,uimg::ImageBuffer::Format::RGBA_FLOAT);
 	img->Flip(true,true);
+	img->ClearAlpha(uimg::ImageBuffer::FULLY_OPAQUE);
 }
 
 void raytracing::TileManager::ApplyPostProcessingForProgressiveTile(TileData &data)
