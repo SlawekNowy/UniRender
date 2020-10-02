@@ -402,8 +402,18 @@ std::shared_ptr<uimg::ImageBuffer> raytracing::Scene::FinalizeCyclesScene()
 		}
 		else
 		{
-			auto *pixels = m_session->display->rgba_byte.copy_from_device(0, w, h);
-			imgBuffer = uimg::ImageBuffer::Create(pixels,w,h,uimg::ImageBuffer::Format::RGBA_LDR,false);
+			if(m_sceneInfo.exposure == 1.f)
+			{
+				auto *pixels = m_session->display->rgba_byte.copy_from_device(0, w, h);
+				imgBuffer = uimg::ImageBuffer::Create(pixels,w,h,uimg::ImageBuffer::Format::RGBA_LDR,false);
+			}
+			else
+			{
+				auto *pixels = m_session->display->rgba_half.copy_from_device(0, w, h);
+				imgBuffer = uimg::ImageBuffer::Create(pixels,w,h,uimg::ImageBuffer::Format::RGBA_HDR,false);
+				imgBuffer->ApplyExposure(m_sceneInfo.exposure);
+				imgBuffer->Convert(uimg::ImageBuffer::Format::RGBA_LDR);
+			}
 		}
 	}
 	else
@@ -1124,7 +1134,7 @@ bool raytracing::Scene::UpdateStereo(raytracing::SceneWorker &worker,ImageRender
 	{
 		// Switch to right eye
 		m_camera->SetStereoscopicEye(raytracing::StereoEye::Right);
-		ReloadProgressiveRender();
+		ReloadProgressiveRender(false);
 		StartNextRenderImageStage(worker,stage,StereoEye::Right);
 		return true;
 	}
@@ -1157,6 +1167,8 @@ void raytracing::Scene::PrepareCyclesSceneForRendering()
 {
 	if(m_sceneInfo.sky.empty() == false)
 		AddSkybox(m_sceneInfo.sky);
+
+	m_sceneInfo.exposure = m_createInfo.exposure;
 
 	m_stateFlags |= StateFlags::HasRenderingStarted;
 	auto bufferParams = GetBufferParameters();
@@ -1236,6 +1248,7 @@ void raytracing::Scene::PrepareCyclesSceneForRendering()
 		auto w = m_scene.camera->width;
 		auto h = m_scene.camera->height;
 		m_tileManager.Initialize(w,h,GetTileSize().x,GetTileSize().y,m_deviceType == DeviceType::CPU,m_colorTransformProcessor.get());
+		m_tileManager.SetExposure(m_sceneInfo.exposure);
 	}
 }
 
@@ -1466,11 +1479,13 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 	});
 }
 
-void raytracing::Scene::ReloadProgressiveRender()
+void raytracing::Scene::ReloadProgressiveRender(bool clearExposure)
 {
 	if(m_createInfo.progressive == false)
 		return;
 	m_tileManager.Reload();
+	if(clearExposure)
+		m_tileManager.SetExposure(1.f);
 	m_createInfo.progressiveRefine = false;
 	m_session->progress.reset();
 }

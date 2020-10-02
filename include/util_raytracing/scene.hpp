@@ -127,6 +127,7 @@ namespace raytracing
 			uint32_t maxDiffuseBounces = 4;
 			uint32_t maxGlossyBounces = 4;
 			uint32_t maxTransmissionBounces = 12;
+			float exposure = 1.f;
 		};
 #pragma pack(pop)
 		enum class ColorSpace : uint8_t
@@ -168,6 +169,7 @@ namespace raytracing
 			bool progressiveRefine = false;
 			DeviceType deviceType = DeviceType::GPU;
 			std::optional<ColorTransform> colorTransform {};
+			float exposure = 1.f;
 		};
 		static bool IsRenderSceneMode(RenderMode renderMode);
 		static void SetKernelPath(const std::string &kernelPath);
@@ -282,7 +284,7 @@ namespace raytracing
 		Scene(NodeManager &nodeManager,std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode,DeviceType deviceType);
 		void PrepareCyclesSceneForRendering();
 		void StartTextureBaking(SceneWorker &worker);
-		void ReloadProgressiveRender();
+		void ReloadProgressiveRender(bool clearExposure=true);
 		static ccl::ShaderOutput *FindShaderNodeOutput(ccl::ShaderNode &node,const std::string &output);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const std::string &nodeName);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const OpenImageIO_v2_1::ustring &name);

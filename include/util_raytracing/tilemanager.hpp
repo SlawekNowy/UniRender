@@ -54,6 +54,7 @@ namespace raytracing
 		};
 		~TileManager();
 		void Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,util::ocio::ColorProcessor *optColorProcessor=nullptr);
+		void SetExposure(float exposure);
 		void Reload();
 		void Cancel();
 		void Wait();
@@ -81,6 +82,7 @@ namespace raytracing
 
 		std::shared_ptr<util::ocio::ColorProcessor> m_colorTransformProcessor = nullptr;
 
+		float m_exposure = 1.f;
 		bool m_cpuDevice = false;
 		std::atomic<bool> m_hasPendingWork = false;
 		std::mutex m_inputTileMutex;

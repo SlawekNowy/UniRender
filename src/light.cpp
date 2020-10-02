@@ -140,7 +140,7 @@ void raytracing::Light::DoFinalize(Scene &scene)
 		auto forward = uquat::forward(rot);
 		m_light.dir = raytracing::Scene::ToCyclesNormal(forward);
 		m_light.spot_smooth = (m_spotOuterAngle > 0.f) ? (1.f -m_spotInnerAngle /m_spotOuterAngle) : 1.f;
-		m_light.spot_angle = m_spotOuterAngle /2.f;
+		m_light.spot_angle = m_spotOuterAngle;
 		break;
 	}
 	case Type::Directional:

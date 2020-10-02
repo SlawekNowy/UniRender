@@ -37,6 +37,8 @@ void raytracing::TileManager::Wait()
 	}
 }
 
+void raytracing::TileManager::SetExposure(float exposure) {m_exposure = exposure;}
+
 void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,util::ocio::ColorProcessor *optColorProcessor)
 {
 	m_cpuDevice = cpuDevice;
@@ -289,7 +291,7 @@ void raytracing::TileManager::UpdateRenderTile(const ccl::RenderTile &tile,bool 
 	data.h = tile.h;
 	if(m_cpuDevice == false)
 		tile.buffers->copy_from_device(); // TODO: Is this the right way to do this?
-	tile.buffers->get_pass_rect("combined",1.f /* exposure */,tile.sample,4,reinterpret_cast<float*>(data.data.data()));
+	tile.buffers->get_pass_rect("combined",m_exposure,tile.sample,4,reinterpret_cast<float*>(data.data.data()));
 	// We want to minimize the overhead on this thread as much as possible (to avoid stalling Cycles), so we'll continue with post-processing on yet another thread
 	m_inputTileMutex.lock();
 		auto &inputTile = m_inputTiles[tileIndex];
