@@ -11,16 +11,18 @@
 #include "definitions.hpp"
 #include <cinttypes>
 #include <functional>
+#include <optional>
 
 namespace uimg {class ImageBuffer;};
 namespace util::ocio {class ColorProcessor;};
 namespace raytracing
 {
-	enum class ColorTransform : uint8_t
+	struct DLLRTUTIL ColorTransformProcessorCreateInfo
 	{
-		FilmicBlender = 0
+		std::string config = "filmic-blender";
+		std::optional<std::string> lookName {};
 	};
-	DLLRTUTIL std::shared_ptr<util::ocio::ColorProcessor> create_color_transform_processor(ColorTransform transform,std::string &outErr);
+	DLLRTUTIL std::shared_ptr<util::ocio::ColorProcessor> create_color_transform_processor(const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr);
 };
 
 #endif

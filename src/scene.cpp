@@ -77,6 +77,34 @@ std::shared_ptr<uimg::ImageBuffer> raytracing::SceneWorker::GetResult() {return 
 
 ///////////////////
 
+void raytracing::Scene::CreateInfo::Serialize(DataStream &ds) const
+{
+	ds->Write(reinterpret_cast<const uint8_t*>(this),offsetof(CreateInfo,colorTransform));
+	ds->Write<bool>(colorTransform.has_value());
+	if(colorTransform.has_value())
+	{
+		ds->WriteString(colorTransform->config);
+		ds->Write<bool>(colorTransform->lookName.has_value());
+		if(colorTransform->lookName.has_value())
+			ds->WriteString(*colorTransform->lookName);
+	}
+}
+void raytracing::Scene::CreateInfo::Deserialize(DataStream &ds)
+{
+	ds->Read(this,offsetof(CreateInfo,colorTransform));
+	auto hasColorTransform = ds->Read<bool>();
+	if(hasColorTransform == false)
+		return;
+	colorTransform = ColorTransformInfo{};
+	colorTransform->config = ds->ReadString();
+	auto hasLookName = ds->Read<bool>();
+	if(hasLookName == false)
+		return;
+	colorTransform->lookName = ds->ReadString();
+}
+
+///////////////////
+
 void raytracing::Scene::ApplyPostProcessing(uimg::ImageBuffer &imgBuffer,raytracing::Scene::RenderMode renderMode)
 {
 	// For some reason the image is flipped horizontally when rendering an image,
@@ -1238,7 +1266,10 @@ void raytracing::Scene::PrepareCyclesSceneForRendering()
 	if(m_createInfo.colorTransform.has_value())
 	{
 		std::string err;
-		m_colorTransformProcessor = create_color_transform_processor(*m_createInfo.colorTransform,err);
+		ColorTransformProcessorCreateInfo createInfo {};
+		createInfo.config = m_createInfo.colorTransform->config;
+		createInfo.lookName = m_createInfo.colorTransform->lookName;
+		m_colorTransformProcessor = create_color_transform_processor(createInfo,err);
 		if(m_colorTransformProcessor == nullptr)
 			HandleError("Unable to initialize color transform processor: " +err);
 	}
@@ -1849,7 +1880,7 @@ void raytracing::Scene::Serialize(DataStream &dsOut,const SerializationData &ser
 {
 	dsOut->Write(reinterpret_cast<const uint8_t*>(SERIALIZATION_HEADER.data()),SERIALIZATION_HEADER.size() *sizeof(SERIALIZATION_HEADER.front()));
 	dsOut->Write(SERIALIZATION_VERSION);
-	dsOut->Write(m_createInfo);
+	m_createInfo.Serialize(dsOut);
 	dsOut->Write(m_renderMode);
 	dsOut->WriteString(serializationData.outputFileName);
 
@@ -1879,7 +1910,7 @@ bool raytracing::Scene::ReadSerializationHeader(DataStream &dsIn,RenderMode &out
 	if(version > SERIALIZATION_VERSION || version < 3)
 		return false;
 	outVersion = version;
-	outCreateInfo = dsIn->Read<CreateInfo>();
+	outCreateInfo.Deserialize(dsIn);
 	outRenderMode = dsIn->Read<RenderMode>();
 	outSerializationData.outputFileName = dsIn->ReadString();
 

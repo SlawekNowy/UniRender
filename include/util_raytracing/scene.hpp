@@ -160,16 +160,25 @@ namespace raytracing
 			Detailed
 		};
 
+		struct ColorTransformInfo
+		{
+			std::string config;
+			std::optional<std::string> lookName {};
+		};
+
 		struct CreateInfo
 		{
+			void Serialize(DataStream &ds) const;
+			void Deserialize(DataStream &ds);
+
 			std::optional<uint32_t> samples = {};
 			bool hdrOutput = false;
 			DenoiseMode denoiseMode = DenoiseMode::Detailed;
 			bool progressive = false;
 			bool progressiveRefine = false;
 			DeviceType deviceType = DeviceType::GPU;
-			std::optional<ColorTransform> colorTransform {};
 			float exposure = 1.f;
+			std::optional<ColorTransformInfo> colorTransform {};
 		};
 		static bool IsRenderSceneMode(RenderMode renderMode);
 		static void SetKernelPath(const std::string &kernelPath);
