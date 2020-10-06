@@ -703,7 +703,7 @@ raytracing::NodeDesc &raytracing::GroupNodeDesc::AddImageTextureNode(const std::
 	case TextureType::EquirectangularImage:
 	{
 		auto &node = AddNode(NODE_ENVIRONMENT_TEXTURE);
-		node.SetProperty(nodes::environment_texture::IN_COLORSPACE,ccl::u_colorspace_srgb.c_str());
+		node.SetProperty(nodes::environment_texture::IN_COLORSPACE,ccl::u_colorspace_raw.c_str());
 		node.SetProperty(nodes::environment_texture::IN_PROJECTION,ccl::NodeEnvironmentProjection::NODE_ENVIRONMENT_EQUIRECTANGULAR);
 		desc = &node;
 		break;
