@@ -65,6 +65,9 @@ namespace raytracing
 		size_t AddMesh(Mesh &mesh);
 		size_t AddObject(Object &obj);
 
+		void RemoveMesh(Mesh &mesh);
+		void RemoveObject(Object &obj);
+
 		PMesh GetMesh(uint32_t idx) const;
 		PObject GetObject(uint32_t idx) const;
 
@@ -112,11 +115,15 @@ namespace raytracing
 		const std::vector<ModelCacheChunk> &GetChunks() const {return const_cast<ModelCache*>(this)->GetChunks();}
 		std::vector<ModelCacheChunk> &GetChunks() {return m_chunks;}
 
+		void SetUnique(bool unique);
+		bool IsUnique() const;
+
 		void Bake();
 		void GenerateData();
 	private:
 		ModelCache()=default;
 		std::vector<ModelCacheChunk> m_chunks {};
+		bool m_unique = false;
 	};
 };
 REGISTER_BASIC_BITWISE_OPERATORS(raytracing::ModelCacheChunk::Flags)

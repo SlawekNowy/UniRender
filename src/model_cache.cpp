@@ -160,6 +160,24 @@ size_t raytracing::ModelCacheChunk::AddObject(Object &obj)
 	m_objects.push_back(obj.shared_from_this());
 	return m_objects.size() -1;
 }
+void raytracing::ModelCacheChunk::RemoveMesh(Mesh &mesh)
+{
+	auto it = std::find_if(m_meshes.begin(),m_meshes.end(),[&mesh](const std::shared_ptr<Mesh> &other) {
+		return other.get() == &mesh;
+	});
+	if(it == m_meshes.end())
+		return;
+	m_meshes.erase(it);
+}
+void raytracing::ModelCacheChunk::RemoveObject(Object &obj)
+{
+	auto it = std::find_if(m_objects.begin(),m_objects.end(),[&obj](const std::shared_ptr<Object> &other) {
+		return other.get() == &obj;
+	});
+	if(it == m_objects.end())
+		return;
+	m_objects.erase(it);
+}
 
 raytracing::PMesh raytracing::ModelCacheChunk::GetMesh(uint32_t idx) const {return (idx < m_meshes.size()) ? m_meshes.at(idx) : nullptr;}
 raytracing::PObject raytracing::ModelCacheChunk::GetObject(uint32_t idx) const {return (idx < m_objects.size()) ? m_objects.at(idx) : nullptr;}
@@ -269,6 +287,9 @@ std::shared_ptr<raytracing::ModelCache> raytracing::ModelCache::Create(DataStrea
 	cache->Deserialize(ds,nodeManager);
 	return cache;
 }
+
+void raytracing::ModelCache::SetUnique(bool unique) {m_unique = unique;}
+bool raytracing::ModelCache::IsUnique() const {return m_unique;}
 
 void raytracing::ModelCache::Merge(ModelCache &other)
 {

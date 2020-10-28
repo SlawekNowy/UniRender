@@ -51,6 +51,9 @@ namespace raytracing
 		const umath::Transform &GetMotionPose() const;
 		void SetMotionPose(const umath::Transform &pose);
 
+		void SetName(const std::string &name);
+		const std::string &GetName() const;
+
 		ccl::Object *operator->();
 		const ccl::Object *operator->() const;
 		ccl::Object *operator*();
@@ -61,6 +64,7 @@ namespace raytracing
 		ccl::Object &m_object;
 		PMesh m_mesh = nullptr;
 		Flags m_flags = Flags::None;
+		std::string m_name;
 
 		// TODO
 		umath::Transform m_motionPose = {};

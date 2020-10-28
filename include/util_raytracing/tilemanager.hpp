@@ -45,6 +45,10 @@ namespace raytracing
 			bool IsFloatData() const;
 			bool IsHDRData() const;
 		};
+		struct ThreadData
+		{
+
+		};
 		enum class State : uint8_t
 		{
 			Initial = 0,
@@ -55,7 +59,7 @@ namespace raytracing
 		~TileManager();
 		void Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,util::ocio::ColorProcessor *optColorProcessor=nullptr);
 		void SetExposure(float exposure);
-		void Reload();
+		void Reload(bool waitForCompletion);
 		void Cancel();
 		void Wait();
 		void StopAndWait();
@@ -66,6 +70,7 @@ namespace raytracing
 		int32_t GetCurrentTileSampleCount(uint32_t tileIndex) const;
 		uint32_t GetTilesWithRenderedSamplesCount() const {return m_numTilesWithRenderedSamples;}
 		bool AllTilesHaveRenderedSamples() const {return GetTilesWithRenderedSamplesCount() == GetTileCount();}
+		void SetFlipImage(bool flipHorizontally,bool flipVertically);
 
 		void UpdateRenderTile(const ccl::RenderTile &tile,bool param);
 		void WriteRenderTile(const ccl::RenderTile &tile);
@@ -73,6 +78,8 @@ namespace raytracing
 		void ApplyRectData(const TileData &data);
 		void InitializeTileData(TileData &data);
 		void ApplyPostProcessingForProgressiveTile(TileData &data);
+		void SetState(State state);
+		void NotifyPendingWork();
 
 		Vector2i m_tileSize;
 		uint32_t m_numTiles = 0;
@@ -88,11 +95,15 @@ namespace raytracing
 		std::mutex m_inputTileMutex;
 		std::vector<TileData> m_inputTiles; // Tiles that have been updated by Cycles, but still require post-processing
 		std::queue<size_t> m_inputTileQueue;
+		bool m_flipHorizontally = false;
+		bool m_flipVertically = false;
 
 		std::mutex m_renderedTileMutex;
 		std::vector<TileData> m_renderedTiles;
 		std::array<std::future<void>,10> m_ppThreadPoolHandles;
 		ctpl::thread_pool m_ppThreadPool {m_ppThreadPoolHandles.size()};
+		std::condition_variable m_threadWaitCondition {};
+		std::mutex m_threadWaitMutex {};
 		std::atomic<State> m_state = State::Initial;
 
 		std::mutex m_completedTileMutex;

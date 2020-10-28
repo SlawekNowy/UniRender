@@ -54,6 +54,8 @@ namespace raytracing
 		void Serialize(DataStream &dsOut,const std::unordered_map<const Shader*,size_t> shaderToIndexTable) const;
 		void Deserialize(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader);
 
+		void Merge(const Mesh &other);
+
 		const ccl::float4 *GetNormals() const;
 		const ccl::float3 *GetTangents() const;
 		const float *GetTangentSigns() const;
@@ -84,6 +86,7 @@ namespace raytracing
 		std::vector<uint32_t> &GetOriginalShaderIndexTable() {return m_originShaderIndexTable;}
 	private:
 		Mesh(ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTris,Flags flags=Flags::None);
+		void UpdateDataPointers();
 		virtual void DoFinalize(Scene &scene) override;
 		std::vector<Vector2> m_perVertexUvs = {};
 		std::vector<Vector4> m_perVertexTangents = {};

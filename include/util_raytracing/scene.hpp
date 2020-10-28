@@ -100,7 +100,7 @@ namespace raytracing
 		: public std::enable_shared_from_this<Scene>
 	{
 	public:
-		static constexpr uint32_t SERIALIZATION_VERSION = 3;
+		static constexpr uint32_t SERIALIZATION_VERSION = 5;
 		struct SerializationData
 		{
 			std::string outputFileName;
@@ -183,8 +183,8 @@ namespace raytracing
 		static bool IsRenderSceneMode(RenderMode renderMode);
 		static void SetKernelPath(const std::string &kernelPath);
 		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,RenderMode renderMode,const CreateInfo &createInfo={});
-		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,DataStream &ds,RenderMode renderMode,const CreateInfo &createInfo={});
-		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,DataStream &ds);
+		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,DataStream &dsIn,const std::string &rootDir,RenderMode renderMode,const CreateInfo &createInfo={});
+		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,DataStream &dsIn,const std::string &rootDir);
 		static bool ReadHeaderInfo(DataStream &ds,RenderMode &outRenderMode,CreateInfo &outCreateInfo,SerializationData &outSerializationData,uint32_t &outVersion,SceneInfo *optOutSceneInfo=nullptr);
 		//
 		static Vector3 ToPragmaPosition(const ccl::float3 &pos);
@@ -222,8 +222,8 @@ namespace raytracing
 		static bool IsVerbose();
 
 		static bool ReadSerializationHeader(DataStream &dsIn,RenderMode &outRenderMode,CreateInfo &outCreateInfo,SerializationData &outSerializationData,uint32_t &outVersion,SceneInfo *optOutSceneInfo=nullptr);
-		void Serialize(DataStream &dsOut,const SerializationData &serializationData) const;
-		bool Deserialize(DataStream &dsIn);
+		void Save(DataStream &dsOut,const std::string &rootDir,const SerializationData &serializationData) const;
+		bool Load(DataStream &dsIn,const std::string &rootDir);
 
 		void HandleError(const std::string &errMsg) const;
 
@@ -263,6 +263,7 @@ namespace raytracing
 		void AddShader(CCLShader &shader,const GroupNodeDesc *optDesc=nullptr);
 		ccl::Session *GetCCLSession();
 		std::optional<uint32_t> FindCCLObjectId(const Object &o) const;
+		Object *FindObject(const std::string &objectName) const;
 	private:
 		enum class ImageRenderStage : uint8_t
 		{
@@ -293,7 +294,7 @@ namespace raytracing
 		Scene(NodeManager &nodeManager,std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode,DeviceType deviceType);
 		void PrepareCyclesSceneForRendering();
 		void StartTextureBaking(SceneWorker &worker);
-		void ReloadProgressiveRender(bool clearExposure=true);
+		void ReloadProgressiveRender(bool clearExposure=true,bool waitForPreviousCompletion=false);
 		static ccl::ShaderOutput *FindShaderNodeOutput(ccl::ShaderNode &node,const std::string &output);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const std::string &nodeName);
 		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const OpenImageIO_v2_1::ustring &name);
@@ -341,7 +342,6 @@ namespace raytracing
 		PCamera m_camera = nullptr;
 		StateFlags m_stateFlags = StateFlags::None;
 		RenderMode m_renderMode = RenderMode::RenderImage;
-		std::weak_ptr<Object> m_bakeTarget = {};
 
 		struct {
 			std::shared_ptr<ShaderCache> shaderCache;

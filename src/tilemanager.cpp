@@ -10,6 +10,7 @@
 #include "util_raytracing/color_management.hpp"
 #include <util_ocio.hpp>
 #include <util_image_buffer.hpp>
+#include <sharedutils/util.h>
 #include <render/buffers.h>
 
 #pragma optimize("",off)
@@ -23,11 +24,23 @@ raytracing::TileManager::~TileManager()
 
 void raytracing::TileManager::StopAndWait()
 {
-	m_state = State::Stopped;
+	SetState(State::Stopped);
 	Wait();
 }
 
-void raytracing::TileManager::Cancel() {m_state = State::Cancelled;}
+void raytracing::TileManager::SetState(State state)
+{
+	m_state = state;
+	m_threadWaitCondition.notify_all();
+}
+
+void raytracing::TileManager::NotifyPendingWork()
+{
+	m_hasPendingWork = true;
+	m_threadWaitCondition.notify_all();
+}
+
+void raytracing::TileManager::Cancel() {SetState(State::Cancelled);}
 void raytracing::TileManager::Wait()
 {
 	for(auto &threadHandle : m_ppThreadPoolHandles)
@@ -54,12 +67,15 @@ void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,ui
 	m_completedTiles.resize(numTiles);
 	m_progressiveImage = uimg::ImageBuffer::Create(w,h,uimg::ImageBuffer::Format::RGBA_FLOAT);
 	m_tileSize = {wTile,hTile};
-	Reload();
+	Reload(false);
 }
 
-void raytracing::TileManager::Reload()
+void raytracing::TileManager::Reload(bool waitForCompletion)
 {
-	m_state = State::Cancelled;
+	if(waitForCompletion)
+		StopAndWait();
+	else
+		SetState(State::Cancelled);
 	m_hasPendingWork = false;
 	m_renderedTileMutex.lock();
 		m_renderedTiles.clear();
@@ -72,6 +88,10 @@ void raytracing::TileManager::Reload()
 			v = 0;
 	m_renderedTileMutex.unlock();
 
+	m_completedTileMutex.lock();
+		for(auto &tile : m_completedTiles)
+			tile.sample = std::numeric_limits<uint16_t>::max();
+	m_completedTileMutex.unlock();
 	// Test
 	/*{
 		Wait();
@@ -95,24 +115,29 @@ void raytracing::TileManager::Reload()
 	m_inputTileMutex.unlock();
 
 	Wait();
-	m_state = State::Running;
+	SetState(State::Running);
 	for(auto i=decltype(m_ppThreadPool.size()){0u};i<m_ppThreadPool.size();++i)
 	{
 		m_ppThreadPoolHandles.at(i) = m_ppThreadPool.push([this](int threadId) {
-			while(m_state == State::Running)
+			std::unique_lock<std::mutex> mlock(m_threadWaitMutex);
+			for(;;)
 			{
-				while(m_state != State::Cancelled && m_hasPendingWork && (m_state != State::Stopped || m_hasPendingWork))
+				// TODO
+				// m_threadWaitCondition.wait(mlock,[this]() {return m_state != State::Running || m_hasPendingWork;});
+				// TODO: ALso see sleep
+
+				while(m_hasPendingWork)
 				{
 					m_inputTileMutex.lock();
 						if(m_state == State::Cancelled)
 						{
 							m_inputTileMutex.unlock();
-							break;
+							goto endThread;
 						}
 						if(m_inputTileQueue.empty())
 						{
 							m_inputTileMutex.unlock();
-							continue;
+							break;
 						}
 						auto tileIndex = m_inputTileQueue.front();
 						m_inputTileQueue.pop();
@@ -122,15 +147,16 @@ void raytracing::TileManager::Reload()
 					m_inputTileMutex.unlock();
 
 					if(m_state == State::Cancelled)
-						break;
+						goto endThread;
 
 					InitializeTileData(tile);
 
 					if(m_state == State::Cancelled)
-						break;
+						goto endThread;
 
 					m_completedTileMutex.lock();
-						m_completedTiles[tileIndex] = tile; // Completed tile data is float data WITHOUT color correction (color correction will be applied after denoising)
+						if(m_completedTiles[tileIndex].sample == std::numeric_limits<uint16_t>::max() || tile.sample > m_completedTiles[tileIndex].sample)
+							m_completedTiles[tileIndex] = tile; // Completed tile data is float data WITHOUT color correction (color correction will be applied after denoising)
 					m_completedTileMutex.unlock();
 
 					ApplyPostProcessingForProgressiveTile(tile);
@@ -139,7 +165,7 @@ void raytracing::TileManager::Reload()
 						if(m_state == State::Cancelled)
 						{
 							m_renderedTileMutex.unlock();
-							break;
+							goto endThread;
 						}
 						if(m_renderedTiles.size() == m_renderedTiles.capacity())
 							m_renderedTiles.reserve(m_renderedTiles.size() *1.5 +100);
@@ -159,8 +185,16 @@ void raytracing::TileManager::Reload()
 
 					m_renderedTileMutex.unlock();
 				}
+				if(m_hasPendingWork == false)
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				if((m_state == State::Stopped && m_hasPendingWork == false) || m_state == State::Cancelled)
+					goto endThread;
 			}
+		endThread:
+			;
 		});
+		// Thread priority is excessively high due to Cycles, so we'll reset it to normal here
+		// util::set_thread_priority(m_ppThreadPool.get_thread(i),util::ThreadPriority::Normal);
 	}
 }
 std::shared_ptr<uimg::ImageBuffer> raytracing::TileManager::UpdateFinalImage()
@@ -209,6 +243,12 @@ std::vector<raytracing::TileManager::TileData> raytracing::TileManager::GetRende
 	return tiles;
 }
 
+void raytracing::TileManager::SetFlipImage(bool flipHorizontally,bool flipVertically)
+{
+	m_flipHorizontally = flipHorizontally;
+	m_flipVertically = flipVertically;
+}
+
 int32_t raytracing::TileManager::GetCurrentTileSampleCount(uint32_t tileIndex) const
 {
 	if(tileIndex >= m_renderedSampleCountPerTile.size())
@@ -221,11 +261,13 @@ void raytracing::TileManager::InitializeTileData(TileData &data)
 	if(umath::is_flag_set(data.flags,TileData::Flags::Initialized))
 		return;
 	umath::set_flag(data.flags,TileData::Flags::Initialized);
-	data.x = m_progressiveImage->GetWidth() -data.x -data.w;
-	data.y = m_progressiveImage->GetHeight() -data.y -data.h;
+	if(m_flipHorizontally)
+		data.x = m_progressiveImage->GetWidth() -data.x -data.w;
+	if(m_flipVertically)
+		data.y = m_progressiveImage->GetHeight() -data.y -data.h;
 
 	auto img = uimg::ImageBuffer::Create(data.data.data(),data.w,data.h,uimg::ImageBuffer::Format::RGBA_FLOAT);
-	img->Flip(true,true);
+	img->Flip(m_flipHorizontally,m_flipVertically);
 	img->ClearAlpha(uimg::ImageBuffer::FULLY_OPAQUE);
 }
 
@@ -246,13 +288,18 @@ void raytracing::TileManager::ApplyPostProcessingForProgressiveTile(TileData &da
 		return;
 
 	std::vector<uint8_t> newData;
-	newData.resize(data.w *data.h *sizeof(uint16_t) *4);
+	auto numPixels = data.w *data.h;
+	auto numValues = numPixels *4;
+	newData.resize(numValues *sizeof(uint16_t));
 
 	if(m_state == State::Cancelled)
 		return;
 
-	auto imgCnv = uimg::ImageBuffer::Create(newData.data(),data.w,data.h,uimg::ImageBuffer::Format::RGBA_HDR);
-	img->Copy(*imgCnv,0,0,0,0,img->GetWidth(),img->GetHeight());
+	for(auto i=decltype(numValues){0u};i<numValues;++i)
+	{
+		auto *data = reinterpret_cast<uint16_t*>(newData.data()) +i;
+		*data = umath::float32_to_float16_glm(*(static_cast<float*>(img->GetData()) +i));
+	}
 
 #if 0 // Commented, since Cycles already appears to crop the tiles
 	// Crop the tile
@@ -297,9 +344,9 @@ void raytracing::TileManager::UpdateRenderTile(const ccl::RenderTile &tile,bool 
 		auto &inputTile = m_inputTiles[tileIndex];
 		if(tile.sample > inputTile.sample || inputTile.sample == std::numeric_limits<decltype(inputTile.sample)>::max())
 		{
-			m_hasPendingWork = true;
 			inputTile = std::move(data);
 			m_inputTileQueue.push(tileIndex);
+			NotifyPendingWork();
 		}
 	m_inputTileMutex.unlock();
 }

@@ -43,9 +43,11 @@
 #include <sharedutils/util_file.h>
 #include <sharedutils/util.h>
 #include <sharedutils/util_path.hpp>
+#include <util_image.hpp>
 #include <util_image_buffer.hpp>
 #include <util_texture_info.hpp>
 #include <util_ocio.hpp>
+#include <random>
 
 #ifdef ENABLE_CYCLES_LOGGING
 #pragma comment(lib,"shlwapi.lib")
@@ -188,23 +190,22 @@ bool raytracing::Scene::ReadHeaderInfo(DataStream &ds,RenderMode &outRenderMode,
 {
 	return ReadSerializationHeader(ds,outRenderMode,outCreateInfo,outSerializationData,outVersion,optOutSceneInfo);
 }
-std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeManager,DataStream &ds,RenderMode renderMode,const CreateInfo &createInfo)
+std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeManager,DataStream &dsIn,const std::string &rootDir,RenderMode renderMode,const CreateInfo &createInfo)
 {
 	auto scene = Create(nodeManager,renderMode,createInfo);
-	ds->SetOffset(0);
-	if(scene == nullptr || scene->Deserialize(ds) == false)
+	if(scene == nullptr || scene->Load(dsIn,rootDir) == false)
 		return nullptr;
 	return scene;
 }
-std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeManager,DataStream &ds)
+std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeManager,DataStream &dsIn,const std::string &rootDir)
 {
 	RenderMode renderMode;
 	CreateInfo createInfo;
 	SerializationData serializationData;
 	uint32_t version;
-	if(ReadSerializationHeader(ds,renderMode,createInfo,serializationData,version) == false)
+	if(ReadSerializationHeader(dsIn,renderMode,createInfo,serializationData,version) == false)
 		return nullptr;
-	return Create(nodeManager,ds,renderMode,createInfo);
+	return Create(nodeManager,dsIn,rootDir,renderMode,createInfo);
 }
 
 std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeManager,RenderMode renderMode,const CreateInfo &createInfo)
@@ -309,7 +310,7 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeMa
 		if(createInfo.progressiveRefine)
 			sessionParams.samples = 50'000;
 	}
-	else if(IsRenderSceneMode(renderMode))
+	else if(IsRenderSceneMode(renderMode) || renderMode == RenderMode::BakeDiffuseLighting || renderMode == RenderMode::BakeNormals || renderMode == RenderMode::BakeAmbientOcclusion)
 	{
 		// We need to define a write callback, otherwise the session's display object will not be initialized.
 		sessionParams.write_render_cb = [](const ccl::uchar *pixels,int w,int h,int channels) -> bool {return true;};
@@ -461,6 +462,7 @@ void raytracing::Scene::CloseCyclesScene()
 	m_mdlCaches.clear();
 	m_renderData = {};
 	m_camera = nullptr;
+	m_tileManager.StopAndWait();
 
 	if(m_session == nullptr)
 		return;
@@ -1003,7 +1005,11 @@ void raytracing::Scene::InitializeAlbedoPass(bool reloadShaders)
 	auto bufferParams = GetBufferParameters();
 	uint32_t sampleCount = 1;
 	if(m_createInfo.progressive)
-		sampleCount = 4; // TODO: We should only need one sample, but for whatever reason some tiles will not get rendered properly if the sample count is too low. The reason for this is unknown
+	{
+		// TODO: We should only need one sample, but for whatever reason some tiles will not get rendered properly if the sample count is too low. The reason for this is unknown
+		// UPDATE: This should be fixed now, so this line should no longer be needed!
+		sampleCount = 4;
+	}
 	m_session->params.samples = sampleCount;
 	m_session->reset(bufferParams,sampleCount); // We only need the normals and albedo colors for the first sample
 
@@ -1087,7 +1093,11 @@ void raytracing::Scene::InitializeNormalPass(bool reloadShaders)
 	auto bufferParams = GetBufferParameters();
 	uint32_t sampleCount = 1;
 	if(m_createInfo.progressive)
-		sampleCount = 4; // TODO: We should only need one sample, but for whatever reason some tiles will not get rendered properly if the sample count is too low. The reason for this is unknown
+	{
+		// TODO: We should only need one sample, but for whatever reason some tiles will not get rendered properly if the sample count is too low. The reason for this is unknown
+		// UPDATE: This should be fixed now, so this line should no longer be needed!
+		sampleCount = 4;
+	}
 	m_session->params.samples = sampleCount;
 	m_session->reset(bufferParams,sampleCount); // We only need the normals and albedo colors for the first sample
 
@@ -1185,7 +1195,7 @@ void raytracing::Scene::Reset()
 void raytracing::Scene::Restart()
 {
 	if(m_createInfo.progressive)
-		m_tileManager.Reload();
+		m_tileManager.Reload(false);
 
 	m_session->start();
 	m_restartState = 2;
@@ -1244,6 +1254,8 @@ void raytracing::Scene::PrepareCyclesSceneForRendering()
 	{
 		for(auto &o : chunk.GetObjects())
 			o->Finalize(*this);
+		for(auto &o : chunk.GetMeshes())
+			o->Finalize(*this);
 	}
 	for(auto &shader : m_renderData.shaderCache->GetShaders())
 		shader->Finalize();
@@ -1279,6 +1291,18 @@ void raytracing::Scene::PrepareCyclesSceneForRendering()
 		auto w = m_scene.camera->width;
 		auto h = m_scene.camera->height;
 		m_tileManager.Initialize(w,h,GetTileSize().x,GetTileSize().y,m_deviceType == DeviceType::CPU,m_colorTransformProcessor.get());
+		bool flipHorizontally = true;
+		if(m_scene.camera->type == ccl::CameraType::CAMERA_PANORAMA)
+		{
+			switch(m_scene.camera->panorama_type)
+			{
+			case ccl::PanoramaType::PANORAMA_EQUIRECTANGULAR:
+			case ccl::PanoramaType::PANORAMA_FISHEYE_EQUIDISTANT:
+				flipHorizontally = false; // I have no idea why some types have to be flipped and others don't
+				break;
+			}
+		}
+		m_tileManager.SetFlipImage(flipHorizontally,true);
 		m_tileManager.SetExposure(m_sceneInfo.exposure);
 	}
 }
@@ -1288,30 +1312,85 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 	// Baking cannot be done with cycles directly, we will have to
 	// do some additional steps first.
 	worker.AddThread([this,&worker]() {
-		auto bufferParams = m_session->buffers->params;
+		// InitializeAlbedoPass(true);
+		//auto bufferParams = m_session->buffers->params;
 		auto resolution = GetResolution();
 		auto imgWidth = resolution.x;
 		auto imgHeight = resolution.y;
 		m_scene.bake_manager->set_baking(true);
 		m_session->load_kernels();
 
+		static auto albedoOnly = false;
 		switch(m_renderMode)
 		{
 		case RenderMode::BakeAmbientOcclusion:
 		case RenderMode::BakeDiffuseLighting:
-			ccl::Pass::add(ccl::PASS_LIGHT,m_scene.film->passes);
+			if(albedoOnly)
+				ccl::Pass::add(ccl::PASS_DIFFUSE_COLOR,m_scene.film->passes);
+			else
+				ccl::Pass::add(ccl::PASS_LIGHT,m_scene.film->passes);
 			break;
 		case RenderMode::BakeNormals:
 			break;
 		}
+		
+		auto bufferParams = GetBufferParameters();
+		if(albedoOnly)
+		{
+			ccl::vector<ccl::Pass> passes;
+			auto displayPass = ccl::PassType::PASS_DIFFUSE_COLOR;
+			ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
+			displayPass = ccl::PassType::PASS_COMBINED;
+			//bufferParams.passes = passes;
+			auto &scene = m_scene;
+			auto &film = *m_scene.film;
+			film.tag_passes_update(&scene, passes);
+			film.display_pass = displayPass;
+			//film.tag_update(&scene);
+			//scene.integrator->tag_update(&scene);
+		}
+		else
+		{
+			ccl::vector<ccl::Pass> passes;
+			if(m_renderMode == RenderMode::BakeDiffuseLighting)
+			{
+				ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
+				ccl::Pass::add(ccl::PassType::PASS_LIGHT,passes,"light");
+			}
+			else
+			{
+				auto &scene = m_scene;
+				auto &film = *m_scene.film;
+				ccl::Pass::add(ccl::PassType::PASS_AO,passes,"ao");
+				ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
+				film.display_pass = ccl::PassType::PASS_AO;
+			}
+			auto &scene = m_scene;
+			auto &film = *m_scene.film;
+			film.passes = passes;
+			bufferParams.passes = passes;
+			film.tag_passes_update(&scene, bufferParams.passes);
+			// film.passes
+			/*ccl::vector<ccl::Pass> passes;
+			ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_DIRECT,passes,"diffuse_direct");
+			ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_INDIRECT,passes,"diffuse_indirect");
+			ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
+			auto displayPass = ccl::PassType::PASS_COMBINED;
+			
+			bufferParams.passes = passes;
+			auto &scene = m_scene;
+			auto &film = *m_scene.film;
+			film.tag_passes_update(&scene, passes);
+			film.display_pass = displayPass;*/
+		}
 
 		m_scene.film->tag_update(&m_scene);
 		m_scene.integrator->tag_update(&m_scene);
-
+		
 		// TODO: Shader limits are arbitrarily chosen, check how Blender does it?
 		m_scene.bake_manager->set_shader_limit(256,256);
 		m_session->tile_manager.set_samples(m_session->params.samples);
-
+		
 		ccl::ShaderEvalType shaderType;
 		int bake_pass_filter;
 		switch(m_renderMode)
@@ -1321,8 +1400,16 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 			bake_pass_filter = ccl::BAKE_FILTER_AO;
 			break;
 		case RenderMode::BakeDiffuseLighting:
-			shaderType = ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;
-			bake_pass_filter = ccl::BAKE_FILTER_DIFFUSE | ccl::BAKE_FILTER_INDIRECT | ccl::BAKE_FILTER_DIRECT;
+			if(albedoOnly)
+			{
+				shaderType = ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;
+				bake_pass_filter = ccl::BAKE_FILTER_DIFFUSE | ccl::BAKE_FILTER_COLOR;
+			}
+			else
+			{
+				shaderType = ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;//ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;
+				bake_pass_filter = 510 &~ccl::BAKE_FILTER_COLOR &~ccl::BAKE_FILTER_GLOSSY;//ccl::BakePassFilterCombos::BAKE_FILTER_COMBINED;//ccl::BAKE_FILTER_DIFFUSE | ccl::BAKE_FILTER_INDIRECT | ccl::BAKE_FILTER_DIRECT;
+			}
 			break;
 		case RenderMode::BakeNormals:
 			shaderType = ccl::ShaderEvalType::SHADER_EVAL_NORMAL;
@@ -1330,26 +1417,28 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 			break;
 		}
 		bake_pass_filter = ccl::BakeManager::shader_type_to_pass_filter(shaderType,bake_pass_filter);
-
 		if(worker.IsCancelled())
 			return;
 
 		auto numPixels = imgWidth *imgHeight;
-		if(m_bakeTarget.expired())
+		auto *aoTarget = FindObject("bake_target");
+		if(aoTarget == nullptr)
 		{
 			worker.SetStatus(util::JobStatus::Failed,"Invalid bake target!");
 			return;
 		}
-		auto obj = m_bakeTarget.lock();
 		std::vector<raytracing::baking::BakePixel> pixelArray;
 		pixelArray.resize(numPixels);
 		auto bakeLightmaps = (m_renderMode == RenderMode::BakeDiffuseLighting);
-		raytracing::baking::prepare_bake_data(*this,*obj,pixelArray.data(),numPixels,imgWidth,imgHeight,bakeLightmaps);
 
+		raytracing::baking::prepare_bake_data(*this,*aoTarget,pixelArray.data(),numPixels,imgWidth,imgHeight,bakeLightmaps);
+		
 		if(worker.IsCancelled())
 			return;
 
-		auto objectId = FindCCLObjectId(*obj);
+		auto objectId = aoTarget ? FindCCLObjectId(*aoTarget) : std::optional<uint32_t>{};
+
+		//FindObject
 		assert(objectId.has_value());
 		ccl::BakeData *bake_data = NULL;
 		uint32_t triOffset = 0u;
@@ -1373,7 +1462,21 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 		m_session->update_scene();
 
 		auto imgBuffer = uimg::ImageBuffer::Create(imgWidth,imgHeight,uimg::ImageBuffer::Format::RGBA_FLOAT);
+		std::atomic<bool> running = true;
+		//session->progress.set_update_callback(
+		std::thread progressThread {[this,&worker,&running]() {
+			while(running)
+			{
+				// Note: get_progress is technically not thread safe, but the worst we can expect is the progress to not be accurate once
+				// in a while
+				auto progress = m_session->progress.get_progress();
+				worker.UpdateProgress(0.2f +(0.95f -0.2f) *progress);
+				std::this_thread::sleep_for(std::chrono::seconds{1});
+			}
+		}};
 		auto r = m_scene.bake_manager->bake(m_scene.device,&m_scene.dscene,&m_scene,m_session->progress,shaderType,bake_pass_filter,bake_data,static_cast<float*>(imgBuffer->GetData()));
+		running = false;
+		progressThread.join();
 		if(r == false)
 		{
 			worker.SetStatus(util::JobStatus::Failed,"Cycles baking has failed for an unknown reason!");
@@ -1384,24 +1487,6 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 			return;
 
 		worker.UpdateProgress(0.95f);
-
-		if(worker.IsCancelled())
-			return;
-
-		worker.SetResultMessage("Baking margin...");
-
-		raytracing::baking::ImBuf ibuf {};
-		ibuf.x = imgWidth;
-		ibuf.y = imgHeight;
-		ibuf.rect = imgBuffer;
-
-		// Apply margin
-		// TODO: Margin only required for certain bake types?
-		std::vector<uint8_t> mask_buffer {};
-		mask_buffer.resize(numPixels);
-		constexpr auto margin = 16u;
-		RE_bake_mask_fill(pixelArray, numPixels, reinterpret_cast<char*>(mask_buffer.data()));
-		RE_bake_margin(&ibuf, mask_buffer, margin);
 
 		if(worker.IsCancelled())
 			return;
@@ -1447,7 +1532,7 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 				// TODO: Check if denoise flag is set
 				// Denoise the result. This has to be done before applying the margin! (Otherwise noise may flow into the margin)
 
-				worker.SetResultMessage("Baking margin...");
+				worker.SetResultMessage("Denoising...");
 				DenoiseInfo denoiseInfo {};
 				denoiseInfo.hdr = true;
 				denoiseInfo.lightmap = bakeLightmaps;
@@ -1463,7 +1548,49 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 		if(worker.IsCancelled())
 			return;
 
-		// ApplyPostProcessing(*imgBuffer,m_renderMode);
+		// Applying color transform
+		if(m_renderMode == RenderMode::BakeDiffuseLighting)
+		{
+			worker.SetResultMessage("Applying color transform...");
+			if(m_createInfo.colorTransform.has_value())
+			{
+				std::string err;
+				ColorTransformProcessorCreateInfo createInfo {};
+				createInfo.config = m_createInfo.colorTransform->config;
+				createInfo.lookName = m_createInfo.colorTransform->lookName;
+				m_colorTransformProcessor = create_color_transform_processor(createInfo,err);
+				if(m_colorTransformProcessor == nullptr)
+					HandleError("Unable to initialize color transform processor: " +err);
+				else
+					m_colorTransformProcessor->Apply(*imgBuffer,err,10.f /* exposure */,1.f /* gamma correction */);
+			}
+			if(worker.IsCancelled())
+				return;
+		}
+
+		// if(m_renderMode == RenderMode::BakeDiffuseLighting)
+		{
+			worker.SetResultMessage("Baking margin...");
+
+			imgBuffer->Convert(uimg::ImageBuffer::Format::RGBA_FLOAT);
+			raytracing::baking::ImBuf ibuf {};
+			ibuf.x = imgWidth;
+			ibuf.y = imgHeight;
+			ibuf.rect = imgBuffer;
+
+			// Apply margin
+			// TODO: Margin only required for certain bake types?
+			std::vector<uint8_t> mask_buffer {};
+			mask_buffer.resize(numPixels);
+			constexpr auto margin = 16u;
+			RE_bake_mask_fill(pixelArray, numPixels, reinterpret_cast<char*>(mask_buffer.data()));
+			RE_bake_margin(&ibuf, mask_buffer, margin);
+
+			if(worker.IsCancelled())
+				return;
+		}
+
+		ApplyPostProcessing(*imgBuffer,m_renderMode);
 
 		if(worker.IsCancelled())
 			return;
@@ -1482,6 +1609,9 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 				++itSrc;
 			}
 			imgBuffer = imgBufLDR;
+			//auto f = FileManager::OpenFile<VFilePtrReal>("test_ao.png","wb");
+			//uimg::save_image(f,*imgBuffer,uimg::ImageFormat::PNG);
+			//f = nullptr;
 		}
 		else
 		{
@@ -1497,6 +1627,9 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 				++itSrc;
 			}
 			imgBuffer = imgBufHDR;
+			//auto f = FileManager::OpenFile<VFilePtrReal>("test_lightmap.png","wb");
+			//uimg::save_image(f,*imgBuffer,uimg::ImageFormat::PNG);
+			//f = nullptr;
 		}
 
 		if(worker.IsCancelled())
@@ -1510,11 +1643,11 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 	});
 }
 
-void raytracing::Scene::ReloadProgressiveRender(bool clearExposure)
+void raytracing::Scene::ReloadProgressiveRender(bool clearExposure,bool waitForPreviousCompletion)
 {
 	if(m_createInfo.progressive == false)
 		return;
-	m_tileManager.Reload();
+	m_tileManager.Reload(waitForPreviousCompletion);
 	if(clearExposure)
 		m_tileManager.SetExposure(1.f);
 	m_createInfo.progressiveRefine = false;
@@ -1529,7 +1662,7 @@ static void validate_session(ccl::Scene &scene)
 			throw std::logic_error{"Found shader with invalid graph!"};
 	}
 }
-
+//#include <util_image.hpp>
 raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStage(SceneWorker &worker,ImageRenderStage stage,StereoEye eyeStage)
 {
 	switch(stage)
@@ -1674,7 +1807,7 @@ raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStag
 		// Denoise
 		DenoiseInfo denoiseInfo {};
 		auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
-		denoiseInfo.hdr = resultImageBuffer->IsHDRFormat();
+		denoiseInfo.hdr = true;
 		denoiseInfo.width = resultImageBuffer->GetWidth();
 		denoiseInfo.height = resultImageBuffer->GetHeight();
 
@@ -1693,19 +1826,26 @@ raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStag
 				albedoImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
 			if(normalImageBuffer)
 				normalImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
+
+			/*{
+				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf.png","wb");
+				if(f0)
+					uimg::save_image(f0,*resultImageBuffer,uimg::ImageFormat::PNG);
+			}
+			{
+				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf_albedo.png","wb");
+				if(f0)
+					uimg::save_image(f0,*albedoImageBuffer,uimg::ImageFormat::PNG);
+			}
+			{
+				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf_normal.png","wb");
+				if(f0)
+					uimg::save_image(f0,*normalImageBuffer,uimg::ImageFormat::PNG);
+			}*/
+
 			denoise(denoiseInfo,*resultImageBuffer,albedoImageBuffer.get(),normalImageBuffer.get(),[this,&worker](float progress) -> bool {
 				return !worker.IsCancelled();
 			});
-			if(m_colorTransformProcessor)
-			{
-				std::string err;
-				if(m_colorTransformProcessor->Apply(*resultImageBuffer,err,0.f,2.4 /* same gamma as used by Blender */) == false)
-					HandleError("Unable to apply color transform: " +err);
-			}
-			resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGBA_HDR);
-			resultImageBuffer->ClearAlpha();
-			if(IsProgressive() == false) // If progressive, our tile manager will have already flipped the image
-				resultImageBuffer->Flip(true,true);
 		}
 
 		if(UpdateStereo(worker,stage,eyeStage))
@@ -1715,6 +1855,19 @@ raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStag
 	}
 	case ImageRenderStage::FinalizeImage:
 	{
+		auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
+		if(m_colorTransformProcessor) // TODO: Should we really apply color transform if we're not denoising?
+		{
+			std::string err;
+			if(m_colorTransformProcessor->Apply(*resultImageBuffer,err,0.f,2.4 /* same gamma as used by Blender */) == false)
+				HandleError("Unable to apply color transform: " +err);
+		}
+		resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGBA_HDR);
+		resultImageBuffer->ClearAlpha();
+		if(IsProgressive() == false) // If progressive, our tile manager will have already flipped the image
+			resultImageBuffer->Flip(true,true);
+		if(UpdateStereo(worker,stage,eyeStage))
+			return RenderStageResult::Continue;
 		if(eyeStage == StereoEye::Left)
 			return StartNextRenderImageStage(worker,ImageRenderStage::MergeStereoscopic,StereoEye::None);
 		return StartNextRenderImageStage(worker,ImageRenderStage::Finalize,StereoEye::None);
@@ -1833,6 +1986,19 @@ std::optional<uint32_t> raytracing::Scene::FindCCLObjectId(const Object &o) cons
 	return (it != m_scene.objects.end()) ? (it -m_scene.objects.begin()) : std::optional<uint32_t>{};
 }
 
+raytracing::Object *raytracing::Scene::FindObject(const std::string &objectName) const
+{
+	for(auto &chunk : m_renderData.modelCache->GetChunks())
+	{
+		for(auto &obj : chunk.GetObjects())
+		{
+			if(obj->GetName() == objectName)
+				return obj.get();
+		}
+	}
+	return nullptr;
+}
+
 const std::vector<raytracing::PLight> &raytracing::Scene::GetLights() const {return const_cast<Scene*>(this)->GetLights();}
 std::vector<raytracing::PLight> &raytracing::Scene::GetLights() {return m_lights;}
 
@@ -1876,8 +2042,13 @@ void raytracing::Scene::SetVerbose(bool verbose) {g_verbose = verbose;}
 bool raytracing::Scene::IsVerbose() {return g_verbose;}
 
 static constexpr std::array<char,3> SERIALIZATION_HEADER = {'R','T','D'};
-void raytracing::Scene::Serialize(DataStream &dsOut,const SerializationData &serializationData) const
+static constexpr std::array<char,4> MODEL_CACHE_HEADER = {'R','T','M','C'};
+void raytracing::Scene::Save(DataStream &dsOut,const std::string &rootDir,const SerializationData &serializationData) const
 {
+	auto modelCachePath = rootDir +"cache/";
+	FileManager::CreateSystemDirectory(modelCachePath.c_str());
+
+	dsOut->SetOffset(0);
 	dsOut->Write(reinterpret_cast<const uint8_t*>(SERIALIZATION_HEADER.data()),SERIALIZATION_HEADER.size() *sizeof(SERIALIZATION_HEADER.front()));
 	dsOut->Write(SERIALIZATION_VERSION);
 	m_createInfo.Serialize(dsOut);
@@ -1889,10 +2060,57 @@ void raytracing::Scene::Serialize(DataStream &dsOut,const SerializationData &ser
 	dsOut->Write(reinterpret_cast<const uint8_t*>(&m_sceneInfo.skyAngles),sizeof(SceneInfo) -offsetof(SceneInfo,skyAngles));
 
 	dsOut->Write(m_stateFlags);
-
+	
 	dsOut->Write<uint32_t>(m_mdlCaches.size());
 	for(auto &mdlCache : m_mdlCaches)
-		mdlCache->Serialize(dsOut);
+	{
+		// Try to create a reasonable has to identify the cache
+		auto &chunks = mdlCache->GetChunks();
+		size_t hash = 0;
+		if(mdlCache->IsUnique())
+		{
+			std::random_device rd;
+			std::default_random_engine generator(rd());
+			std::uniform_int_distribution<long long unsigned> distribution(0,0xFFFFFFFFFFFFFFFF);
+			hash = util::hash_combine<uint64_t>(0u,distribution(generator)); // Not the best solution, but extremely unlikely to cause collisions
+		}
+		else
+		{
+			hash = util::hash_combine<uint64_t>(0u,chunks.size());
+			for(auto &chunk : chunks)
+			{
+				auto &objects = chunk.GetObjects();
+				auto &meshes = chunk.GetMeshes();
+				hash = util::hash_combine<uint64_t>(hash,objects.size());
+				hash = util::hash_combine<uint64_t>(hash,meshes.size());
+				for(auto &m : meshes)
+				{
+					hash = util::hash_combine<std::string>(hash,m->GetName());
+					hash = util::hash_combine<uint64_t>(hash,m->GetVertexCount());
+					hash = util::hash_combine<uint64_t>(hash,m->GetTriangleCount());
+				}
+			}
+		}
+		auto mdlCachePath = modelCachePath +std::to_string(hash) +".prtc";
+		if(FileManager::ExistsSystem(mdlCachePath) == false)
+		{
+			DataStream mdlCacheStream {};
+			mdlCacheStream->SetOffset(0);
+			mdlCache->Serialize(mdlCacheStream);
+			auto f = FileManager::OpenSystemFile(mdlCachePath.c_str(),"wb");
+			if(f)
+			{
+				f->Write(reinterpret_cast<const uint8_t*>(MODEL_CACHE_HEADER.data()),MODEL_CACHE_HEADER.size() *sizeof(MODEL_CACHE_HEADER.front()));
+				f->Write(SERIALIZATION_VERSION);
+				f->Write(mdlCacheStream->GetData(),mdlCacheStream->GetInternalSize());
+			}
+		}
+		dsOut->Write<size_t>(hash);
+	}
+
+	//for(auto &mdlCache : m_mdlCaches)
+	//	m_renderData.modelCache->Merge(*mdlCache);
+	//m_renderData.modelCache->Bake();
 
 	dsOut->Write<uint32_t>(m_lights.size());
 	for(auto &light : m_lights)
@@ -1921,8 +2139,11 @@ bool raytracing::Scene::ReadSerializationHeader(DataStream &dsIn,RenderMode &out
 	}
 	return true;
 }
-bool raytracing::Scene::Deserialize(DataStream &dsIn)
+bool raytracing::Scene::Load(DataStream &dsIn,const std::string &rootDir)
 {
+	auto modelCachePath = rootDir +"cache/";
+	dsIn->SetOffset(0);
+
 	SerializationData serializationData;
 	uint32_t version;
 	CreateInfo createInfo {};
@@ -1931,9 +2152,30 @@ bool raytracing::Scene::Deserialize(DataStream &dsIn)
 	m_stateFlags = dsIn->Read<decltype(m_stateFlags)>();
 
 	auto numCaches = dsIn->Read<uint32_t>();
-	m_mdlCaches.resize(numCaches);
+	m_mdlCaches.reserve(numCaches);
 	for(auto i=decltype(numCaches){0u};i<numCaches;++i)
-		m_mdlCaches.at(i) = ModelCache::Create(dsIn,GetShaderNodeManager());
+	{
+		auto hash = dsIn->Read<size_t>();
+		auto mdlCachePath = modelCachePath +std::to_string(hash) +".prtc";
+		auto f = FileManager::OpenSystemFile(mdlCachePath.c_str(),"rb");
+		if(f)
+		{
+			std::array<char,4> header {};
+			f->Read(reinterpret_cast<uint8_t*>(&header),sizeof(header));
+			if(header != MODEL_CACHE_HEADER)
+				continue;
+			uint32_t version;
+			f->Read(&version,sizeof(version));
+			if(version > SERIALIZATION_VERSION || version < 3)
+				continue;
+			DataStream dsMdlCache {};
+			dsMdlCache->Resize(f->GetSize() -f->Tell());
+			f->Read(dsMdlCache->GetData(),f->GetSize() -f->Tell());
+			auto mdlCache = ModelCache::Create(dsMdlCache,GetShaderNodeManager());
+			if(mdlCache)
+				m_mdlCaches.push_back(mdlCache);
+		}
+	}
 
 	auto numLights = dsIn->Read<uint32_t>();
 	m_lights.reserve(numLights);
@@ -1961,7 +2203,7 @@ void raytracing::Scene::SetMaxDiffuseBounces(uint32_t bounces) {m_sceneInfo.maxD
 void raytracing::Scene::SetMaxGlossyBounces(uint32_t bounces) {m_sceneInfo.maxGlossyBounces = bounces;}
 void raytracing::Scene::SetMaxTransmissionBounces(uint32_t bounces) {m_sceneInfo.maxTransmissionBounces = bounces;}
 void raytracing::Scene::SetMotionBlurStrength(float strength) {m_sceneInfo.motionBlurStrength = strength;}
-void raytracing::Scene::SetAOBakeTarget(Object &o) {m_bakeTarget = o.shared_from_this();}
+void raytracing::Scene::SetAOBakeTarget(Object &o) {o.SetName("bake_target");}
 std::vector<raytracing::TileManager::TileData> raytracing::Scene::GetRenderedTileBatch() {return m_tileManager.GetRenderedTileBatch();}
 Vector2i raytracing::Scene::GetTileSize() const
 {

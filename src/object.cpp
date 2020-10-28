@@ -49,6 +49,7 @@ void raytracing::Object::Serialize(DataStream &dsOut,const std::function<std::op
 	auto idx = fGetMeshIndex(*m_mesh);
 	assert(idx.has_value());
 	dsOut->Write<uint32_t>(*idx);
+	dsOut->WriteString(GetName());
 }
 void raytracing::Object::Serialize(DataStream &dsOut,const std::unordered_map<const Mesh*,size_t> &meshToIndexTable) const
 {
@@ -61,6 +62,7 @@ void raytracing::Object::Deserialize(uint32_t version,DataStream &dsIn,const std
 {
 	WorldObject::Deserialize(version,dsIn);
 	auto meshIdx = dsIn->Read<uint32_t>();
+	m_name = dsIn->ReadString();
 	auto mesh = fGetMesh(meshIdx);
 	assert(mesh);
 	m_mesh = mesh;
@@ -90,6 +92,9 @@ raytracing::Mesh &raytracing::Object::GetMesh() {return *m_mesh;}
 
 const umath::Transform &raytracing::Object::GetMotionPose() const {return m_motionPose;}
 void raytracing::Object::SetMotionPose(const umath::Transform &pose) {m_motionPose = pose;}
+
+void raytracing::Object::SetName(const std::string &name) {m_name = name;}
+const std::string &raytracing::Object::GetName() const {return m_name;}
 
 ccl::Object *raytracing::Object::operator->() {return &m_object;}
 const ccl::Object *raytracing::Object::operator->() const {return const_cast<Object*>(this)->operator->();}

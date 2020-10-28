@@ -83,6 +83,28 @@ raytracing::Mesh::Mesh(ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTris,Flags 
 	: m_mesh{mesh},m_numVerts{numVerts},
 	m_numTris{numTris},m_flags{flags}
 {
+	UpdateDataPointers();
+	if(HasAlphas() || HasWrinkles())
+	{
+		// Note: There's no option to supply user-data for vertices in Cycles, so we're (ab)using ATTR_STD_POINTINESS arbitrarily,
+		// which is currently only used for Fluid Domain in Cycles, which we don't use anyway (State: 2020-02-25). This may change in the future!
+		if(m_alphas)
+		{
+			// Clear alpha values to 0
+			for(auto i=decltype(numVerts){0u};i<numVerts;++i)
+				m_alphas[i] = 0.f;
+		}
+	}
+}
+
+raytracing::Mesh::~Mesh()
+{
+	if(umath::is_flag_set(m_flags,Flags::CCLObjectOwnedByScene) == false)
+		delete &m_mesh;
+}
+
+void raytracing::Mesh::UpdateDataPointers()
+{
 	auto *normals = m_mesh.attributes.find(ccl::ATTR_STD_VERTEX_NORMAL);
 	m_normals = normals ? normals->data_float4() : nullptr;
 
@@ -101,19 +123,7 @@ raytracing::Mesh::Mesh(ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTris,Flags 
 		// which is currently only used for Fluid Domain in Cycles, which we don't use anyway (State: 2020-02-25). This may change in the future!
 		auto *alphas = m_mesh.attributes.find(ALPHA_ATTRIBUTE_TYPE);
 		m_alphas = alphas ? alphas->data_float() : nullptr;
-		if(alphas)
-		{
-			// Clear alpha values to 0
-			for(auto i=decltype(numVerts){0u};i<numVerts;++i)
-				m_alphas[i] = 0.f;
-		}
 	}
-}
-
-raytracing::Mesh::~Mesh()
-{
-	if(umath::is_flag_set(m_flags,Flags::CCLObjectOwnedByScene) == false)
-		delete &m_mesh;
 }
 
 util::WeakHandle<raytracing::Mesh> raytracing::Mesh::GetHandle()
@@ -261,6 +271,88 @@ void raytracing::Mesh::Deserialize(DataStream &dsIn,const std::function<PShader(
 	auto numLightmapUvs = dsIn->Read<size_t>();
 	m_lightmapUvs.resize(numLightmapUvs);
 	dsIn->Read(m_lightmapUvs.data(),m_lightmapUvs.size() *sizeof(m_lightmapUvs.front()));
+}
+
+template<typename T>
+	static void merge_containers(std::vector<T> &a,const std::vector<T> &b)
+{
+	a.reserve(a.size() +b.size());
+	for(auto &v : b)
+		a.push_back(v);
+}
+void raytracing::Mesh::Merge(const Mesh &other)
+{
+	auto vertexOffset = m_numVerts;
+	auto triOffset = m_numTris;
+	auto indexOffset = triOffset *3;
+	auto subMeshShaderOffset = m_subMeshShaders.size();
+	auto smoothOffset = m_mesh.smooth.size();
+	auto shaderOffset = m_mesh.shader.size();
+
+	m_numVerts += other.m_numVerts;
+	m_numTris += other.m_numTris;
+
+	auto *attrN = m_mesh.attributes.find(ccl::ATTR_STD_VERTEX_NORMAL);
+	auto *attrUvTangent = m_mesh.attributes.find(ccl::ATTR_STD_UV_TANGENT);
+	auto *attrTs = m_mesh.attributes.find(ccl::ATTR_STD_UV_TANGENT_SIGN);
+	auto *attrUv = m_mesh.attributes.find(ccl::ATTR_STD_UV);
+	if(attrN)
+		attrN->resize(m_numVerts);
+	if(attrUvTangent)
+		attrUvTangent->resize(m_numTris *3);
+	if(attrTs)
+		attrTs->resize(m_numTris *3);
+	if(attrUv)
+		attrUv->resize(m_numTris *3);
+	m_mesh.triangles.resize(m_numTris *3);
+	m_mesh.smooth.resize(m_mesh.smooth.size() +other.m_mesh.smooth.size());
+	m_mesh.shader.resize(m_mesh.shader.size() +other.m_mesh.shader.size());
+	UpdateDataPointers();
+
+	if(attrN)
+	{
+		for(auto i=vertexOffset;i<m_numVerts;++i)
+			m_normals[i] = other.m_normals[i -vertexOffset];
+	}
+	
+	if(attrUvTangent)
+	{
+		for(auto i=indexOffset;i<m_numTris *3;++i)
+			m_tangents[i] = other.m_tangents[i -indexOffset];
+	}
+	
+	if(attrTs)
+	{
+		for(auto i=indexOffset;i<m_numTris *3;++i)
+			m_tangentSigns[i] = other.m_tangentSigns[i -indexOffset];
+	}
+	
+	if(attrUv)
+	{
+		for(auto i=indexOffset;i<m_numTris *3;++i)
+			m_uvs[i] = other.m_uvs[i -indexOffset];
+	}
+	
+	for(auto i=indexOffset;i<m_numTris *3;++i)
+		m_mesh.triangles[i] = other.m_mesh.triangles[i -indexOffset];
+
+	for(auto i=indexOffset;i<m_mesh.triangles.size();++i)
+		m_mesh.triangles[i] += vertexOffset;
+
+	// TODO: m_alphas
+
+	merge_containers(m_perVertexUvs,other.m_perVertexUvs);
+	merge_containers(m_perVertexTangents,other.m_perVertexTangents);
+	merge_containers(m_perVertexTangentSigns,other.m_perVertexTangentSigns);
+	merge_containers(m_perVertexAlphas,other.m_perVertexAlphas);
+	merge_containers(m_lightmapUvs,other.m_lightmapUvs);
+	merge_containers(m_subMeshShaders,other.m_subMeshShaders);
+
+	for(auto i=smoothOffset;i<m_mesh.smooth.size();++i)
+		m_mesh.smooth[i] = other.m_mesh.smooth[i -smoothOffset];
+
+	for(auto i=shaderOffset;i<m_mesh.shader.size();++i)
+		m_mesh.shader[i] = other.m_mesh.shader[i -shaderOffset] +subMeshShaderOffset;
 }
 
 void raytracing::Mesh::DoFinalize(Scene &scene)
