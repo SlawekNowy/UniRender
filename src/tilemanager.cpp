@@ -51,8 +51,9 @@ void raytracing::TileManager::Wait()
 }
 
 void raytracing::TileManager::SetExposure(float exposure) {m_exposure = exposure;}
+void raytracing::TileManager::SetGamma(float gamma) {m_gamma = gamma;}
 
-void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,util::ocio::ColorProcessor *optColorProcessor)
+void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,float exposure,float gamma,util::ocio::ColorProcessor *optColorProcessor)
 {
 	m_cpuDevice = cpuDevice;
 	if(optColorProcessor)
@@ -67,6 +68,8 @@ void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,ui
 	m_completedTiles.resize(numTiles);
 	m_progressiveImage = uimg::ImageBuffer::Create(w,h,uimg::ImageBuffer::Format::RGBA_FLOAT);
 	m_tileSize = {wTile,hTile};
+	m_exposure = exposure;
+	m_gamma = gamma;
 	Reload(false);
 }
 
@@ -279,7 +282,7 @@ void raytracing::TileManager::ApplyPostProcessingForProgressiveTile(TileData &da
 	if(m_colorTransformProcessor)
 	{
 		std::string err;
-		auto result = m_colorTransformProcessor->Apply(*img,err);
+		auto result = m_colorTransformProcessor->Apply(*img,err,0.f,m_gamma);
 		if(result == false)
 			std::cout<<"Unable to apply color transform: "<<err<<std::endl;
 	}

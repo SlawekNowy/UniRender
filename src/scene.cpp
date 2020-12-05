@@ -167,17 +167,20 @@ static void init_cycles()
 	google::SetLogDestination(google::GLOG_WARNING,(kernelPath +"/log/warning.log").c_str());
 	FLAGS_log_dir = kernelPath +"/log";
 
-	ccl::util_logging_init(engine_info::get_name().c_str());
+	ccl::util_logging_init("util_raytracing");
 	ccl::util_logging_verbosity_set(2);
 	ccl::util_logging_start();
 	FLAGS_logtostderr = false;
 	FLAGS_alsologtostderr = true; // Doesn't seem to work properly?
+	FLAGS_stderrthreshold = google::GLOG_WARNING|google::GLOG_ERROR|google::GLOG_INFO|google::GLOG_FATAL;
+	FLAGS_v = 5; // Setting the log level any other way doesn't seem to work properly
 
-								  /* // Test output
-								  google::LogAtLevel(google::GLOG_INFO,"Info test");
-								  google::LogAtLevel(google::GLOG_WARNING,"Warning test");
-								  google::FlushLogFiles(google::GLOG_INFO);
-								  google::FlushLogFiles(google::GLOG_WARNING);*/
+	// Test output
+	/*google::LogAtLevel(google::GLOG_INFO,"Info test");
+	google::LogAtLevel(google::GLOG_WARNING,"Warning test");
+	VLOG(1) << "Colorspace " << 5 << " is no-op";
+	google::FlushLogFiles(google::GLOG_INFO);
+	google::FlushLogFiles(google::GLOG_WARNING);*/
 #endif
 }
 
@@ -1290,7 +1293,7 @@ void raytracing::Scene::PrepareCyclesSceneForRendering()
 	{
 		auto w = m_scene.camera->width;
 		auto h = m_scene.camera->height;
-		m_tileManager.Initialize(w,h,GetTileSize().x,GetTileSize().y,m_deviceType == DeviceType::CPU,m_colorTransformProcessor.get());
+		m_tileManager.Initialize(w,h,GetTileSize().x,GetTileSize().y,m_deviceType == DeviceType::CPU,m_createInfo.exposure,GetGamma(),m_colorTransformProcessor.get());
 		bool flipHorizontally = true;
 		if(m_scene.camera->type == ccl::CameraType::CAMERA_PANORAMA)
 		{
@@ -1662,7 +1665,7 @@ static void validate_session(ccl::Scene &scene)
 			throw std::logic_error{"Found shader with invalid graph!"};
 	}
 }
-//#include <util_image.hpp>
+float raytracing::Scene::GetGamma() const {return m_createInfo.hdrOutput ? 1.f : DEFAULT_GAMMA;}
 raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStage(SceneWorker &worker,ImageRenderStage stage,StereoEye eyeStage)
 {
 	switch(stage)
@@ -1859,7 +1862,7 @@ raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStag
 		if(m_colorTransformProcessor) // TODO: Should we really apply color transform if we're not denoising?
 		{
 			std::string err;
-			if(m_colorTransformProcessor->Apply(*resultImageBuffer,err,0.f,2.4 /* same gamma as used by Blender */) == false)
+			if(m_colorTransformProcessor->Apply(*resultImageBuffer,err,0.f,GetGamma()) == false)
 				HandleError("Unable to apply color transform: " +err);
 		}
 		resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGBA_HDR);

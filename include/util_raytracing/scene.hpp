@@ -292,6 +292,7 @@ namespace raytracing
 		friend Object;
 		friend Light;
 		Scene(NodeManager &nodeManager,std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode,DeviceType deviceType);
+		float GetGamma() const;
 		void PrepareCyclesSceneForRendering();
 		void StartTextureBaking(SceneWorker &worker);
 		void ReloadProgressiveRender(bool clearExposure=true,bool waitForPreviousCompletion=false);
