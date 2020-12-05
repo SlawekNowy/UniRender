@@ -54,10 +54,10 @@ void raytracing::baking::populate_bake_data(ccl::BakeData *data,
 	int i;
 	for (i = 0; i < num_pixels; i++) {
 		if (bp->object_id == object_id) {
-			data->set(i, bp->primitive_id, bp->uv, bp->du_dx, bp->du_dy, bp->dv_dx, bp->dv_dy);
+			//data->set(i, bp->primitive_id, bp->uv, bp->du_dx, bp->du_dy, bp->dv_dx, bp->dv_dy);
 		}
 		else {
-			data->set_null(i);
+			//data->set_null(i);
 		}
 		++bp;
 	}
@@ -358,8 +358,8 @@ void raytracing::baking::prepare_bake_data(const Scene &scene,raytracing::Object
 	auto objId = scene.FindCCLObjectId(o);
 	assert(objId.has_value());
 	bd.object_id = *objId;
-	auto *cclMesh = *mesh;
-	auto numTris = cclMesh->triangles.size() /3;
+	auto *cclMesh = mesh.GetCyclesMesh();
+	auto numTris = cclMesh->get_triangles().size() /3;
 	for(auto i=decltype(numTris){0u};i<numTris;++i)
 	{
 		int32_t imageId = 0;
@@ -368,7 +368,7 @@ void raytracing::baking::prepare_bake_data(const Scene &scene,raytracing::Object
 		bd.primitive_id = i;
 
 		float vec[3][2];
-		auto *tri = &cclMesh->triangles[i *3];
+		auto *tri = &cclMesh->get_triangles()[i *3];
 		for(uint8_t j=0;j<3;++j)
 		{
 			const float *uv = reinterpret_cast<const float*>(&uvs[i *3 +j]);

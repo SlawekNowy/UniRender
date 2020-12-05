@@ -27,7 +27,7 @@ std::shared_ptr<raytracing::CCLShader> raytracing::CCLShader::Create(Scene &scen
 		if(shader)
 			return shader;
 	}
-	cclShader.volume_sampling_method = ccl::VOLUME_SAMPLING_MULTIPLE_IMPORTANCE;
+	cclShader.set_volume_sampling_method(ccl::VOLUME_SAMPLING_MULTIPLE_IMPORTANCE);
 
 	ccl::ShaderGraph *graph = new ccl::ShaderGraph();
 	auto pShader = std::shared_ptr<CCLShader>{new CCLShader{scene,cclShader,*graph}};
@@ -283,15 +283,15 @@ void raytracing::CCLShader::ConvertGroupSocketsToNodes(const GroupNodeDesc &grou
 			{
 				auto *nodeMath = static_cast<ccl::MathNode*>(AddNode(NODE_MATH));
 				assert(nodeMath);
-				nodeMath->type = ccl::NodeMathType::NODE_MATH_ADD;
-				nodeMath->value1 = 0.f;
-				nodeMath->value2 = 0.f;
+				nodeMath->set_math_type(ccl::NodeMathType::NODE_MATH_ADD);
+				nodeMath->set_value1(0.f);
+				nodeMath->set_value2(0.f);
 
 				if(socketDesc.dataValue.value)
 				{
 					auto v = socketDesc.dataValue.ToValue<float>();
 					if(v.has_value())
-						nodeMath->value1 = *v;
+						nodeMath->set_value1(*v);
 				}
 				socketTranslation.input = {nodeMath,nodes::math::IN_VALUE1};
 				socketTranslation.output = {nodeMath,nodes::math::OUT_VALUE};
@@ -300,15 +300,15 @@ void raytracing::CCLShader::ConvertGroupSocketsToNodes(const GroupNodeDesc &grou
 			{
 				auto *nodeVec = static_cast<ccl::VectorMathNode*>(AddNode(NODE_VECTOR_MATH));
 				assert(nodeVec);
-				nodeVec->type = ccl::NodeVectorMathType::NODE_VECTOR_MATH_ADD;
-				nodeVec->vector1 = {0.f,0.f,0.f};
-				nodeVec->vector2 = {0.f,0.f,0.f};
+				nodeVec->set_math_type(ccl::NodeVectorMathType::NODE_VECTOR_MATH_ADD);
+				nodeVec->set_vector1({0.f,0.f,0.f});
+				nodeVec->set_vector2({0.f,0.f,0.f});
 
 				if(socketDesc.dataValue.value)
 				{
 					auto v = socketDesc.dataValue.ToValue<Vector3>();
 					if(v.has_value())
-						nodeVec->vector1 = {v->x,v->y,v->z};
+						nodeVec->set_vector1({v->x,v->y,v->z});
 				}
 				socketTranslation.input = {nodeVec,nodes::vector_math::IN_VECTOR1};
 				socketTranslation.output = {nodeVec,nodes::vector_math::OUT_VECTOR};
@@ -317,7 +317,7 @@ void raytracing::CCLShader::ConvertGroupSocketsToNodes(const GroupNodeDesc &grou
 			{
 				auto *mix = static_cast<ccl::MixClosureNode*>(AddNode(NODE_MIX_CLOSURE));
 				assert(mix);
-				mix->fac = 0.f;
+				mix->set_fac(0.f);
 
 				socketTranslation.input = {mix,nodes::mix_closure::IN_CLOSURE1};
 				socketTranslation.output = {mix,nodes::mix_closure::OUT_CLOSURE};

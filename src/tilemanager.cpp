@@ -50,9 +50,7 @@ void raytracing::TileManager::Wait()
 	}
 }
 
-void raytracing::TileManager::SetExposure(float exposure) {m_exposure = exposure;}
-
-void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,util::ocio::ColorProcessor *optColorProcessor)
+void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,float exposure,float gamma,util::ocio::ColorProcessor *optColorProcessor)
 {
 	m_cpuDevice = cpuDevice;
 	if(optColorProcessor)
@@ -67,6 +65,8 @@ void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,ui
 	m_completedTiles.resize(numTiles);
 	m_progressiveImage = uimg::ImageBuffer::Create(w,h,uimg::ImageBuffer::Format::RGBA_FLOAT);
 	m_tileSize = {wTile,hTile};
+	m_exposure = exposure;
+	m_gamma = gamma;
 	Reload(false);
 }
 
@@ -249,6 +249,9 @@ void raytracing::TileManager::SetFlipImage(bool flipHorizontally,bool flipVertic
 	m_flipVertically = flipVertically;
 }
 
+void raytracing::TileManager::SetExposure(float exposure) {m_exposure = exposure;}
+void raytracing::TileManager::SetGamma(float gamma) {m_gamma = gamma;}
+
 int32_t raytracing::TileManager::GetCurrentTileSampleCount(uint32_t tileIndex) const
 {
 	if(tileIndex >= m_renderedSampleCountPerTile.size())
@@ -279,7 +282,7 @@ void raytracing::TileManager::ApplyPostProcessingForProgressiveTile(TileData &da
 	if(m_colorTransformProcessor)
 	{
 		std::string err;
-		auto result = m_colorTransformProcessor->Apply(*img,err);
+		auto result = m_colorTransformProcessor->Apply(*img,err,0.f,m_gamma);
 		if(result == false)
 			std::cout<<"Unable to apply color transform: "<<err<<std::endl;
 	}
@@ -322,6 +325,8 @@ void raytracing::TileManager::ApplyPostProcessingForProgressiveTile(TileData &da
 	data.flags |= TileData::Flags::HDRData;
 }
 
+#include <util_image.hpp>
+#include <fsys/filesystem.h>
 void raytracing::TileManager::UpdateRenderTile(const ccl::RenderTile &tile,bool param)
 {
 	assert((tile.x %m_tileSize.x) == 0 && (tile.y %m_tileSize.y) == 0);
@@ -338,7 +343,16 @@ void raytracing::TileManager::UpdateRenderTile(const ccl::RenderTile &tile,bool 
 	data.h = tile.h;
 	if(m_cpuDevice == false)
 		tile.buffers->copy_from_device(); // TODO: Is this the right way to do this?
-	tile.buffers->get_pass_rect("combined",m_exposure,tile.sample,4,reinterpret_cast<float*>(data.data.data()));
+	tile.buffers->get_pass_rect("Combined",m_exposure,tile.sample,4,reinterpret_cast<float*>(data.data.data()));
+	static auto testExport = false;
+	if(testExport)
+	{
+		auto img = uimg::ImageBuffer::Create(data.data.data(),tile.w,tile.h,uimg::ImageBuffer::Format::RGBA32);
+		auto f = FileManager::OpenFile<VFilePtrReal>("test_ao.png","wb");
+		uimg::save_image(f,*img,uimg::ImageFormat::PNG);
+		f = nullptr;
+	}
+	//set_pass_rect(PassType type, int components, float *pixels, int samples)
 	// We want to minimize the overhead on this thread as much as possible (to avoid stalling Cycles), so we'll continue with post-processing on yet another thread
 	m_inputTileMutex.lock();
 		auto &inputTile = m_inputTiles[tileIndex];
@@ -352,6 +366,7 @@ void raytracing::TileManager::UpdateRenderTile(const ccl::RenderTile &tile,bool 
 }
 void raytracing::TileManager::WriteRenderTile(const ccl::RenderTile &tile)
 {
+	UpdateRenderTile(tile,true);
 	// TODO: What's this callback for exactly?
 }
 #pragma optimize("",on)

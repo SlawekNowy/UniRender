@@ -16,6 +16,7 @@
 #include <optional>
 #include <sharedutils/ctpl_stl.h>
 #include <mathutil/uvec.h>
+#include "util_raytracing.hpp"
 
 namespace uimg {class ImageBuffer;};
 namespace ccl {class RenderTile;};
@@ -57,8 +58,7 @@ namespace raytracing
 			Stopped
 		};
 		~TileManager();
-		void Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,util::ocio::ColorProcessor *optColorProcessor=nullptr);
-		void SetExposure(float exposure);
+		void Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,float exposure=0.f,float gamma=DEFAULT_GAMMA,util::ocio::ColorProcessor *optColorProcessor=nullptr);
 		void Reload(bool waitForCompletion);
 		void Cancel();
 		void Wait();
@@ -71,6 +71,8 @@ namespace raytracing
 		uint32_t GetTilesWithRenderedSamplesCount() const {return m_numTilesWithRenderedSamples;}
 		bool AllTilesHaveRenderedSamples() const {return GetTilesWithRenderedSamplesCount() == GetTileCount();}
 		void SetFlipImage(bool flipHorizontally,bool flipVertically);
+		void SetExposure(float exposure);
+		void SetGamma(float gamma);
 
 		void UpdateRenderTile(const ccl::RenderTile &tile,bool param);
 		void WriteRenderTile(const ccl::RenderTile &tile);
@@ -86,10 +88,11 @@ namespace raytracing
 		Vector2i m_numTilesPerAxis;
 		std::vector<std::atomic<uint32_t>> m_renderedSampleCountPerTile;
 		std::atomic<uint32_t> m_numTilesWithRenderedSamples = 0;
+		float m_exposure = 0.f;
+		float m_gamma = DEFAULT_GAMMA;
 
 		std::shared_ptr<util::ocio::ColorProcessor> m_colorTransformProcessor = nullptr;
 
-		float m_exposure = 1.f;
 		bool m_cpuDevice = false;
 		std::atomic<bool> m_hasPendingWork = false;
 		std::mutex m_inputTileMutex;

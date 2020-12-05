@@ -20,7 +20,7 @@
 raytracing::PLight raytracing::Light::Create()
 {
 	auto *light = new ccl::Light{}; // Object will be removed automatically by cycles
-	light->tfm = ccl::transform_identity();
+	light->set_tfm(ccl::transform_identity());
 
 	auto pLight = PLight{new Light{*light}};
 	return pLight;
@@ -108,23 +108,23 @@ void raytracing::Light::DoFinalize(Scene &scene)
 	switch(m_type)
 	{
 	case Type::Spot:
-		m_light.type = ccl::LightType::LIGHT_SPOT;
+		m_light.set_light_type(ccl::LightType::LIGHT_SPOT);
 		break;
 	case Type::Directional:
-		m_light.type = ccl::LightType::LIGHT_DISTANT;
+		m_light.set_light_type(ccl::LightType::LIGHT_DISTANT);
 		break;
 	case Type::Area:
-		m_light.type = ccl::LightType::LIGHT_AREA;
+		m_light.set_light_type(ccl::LightType::LIGHT_AREA);
 		break;
 	case Type::Background:
-		m_light.type = ccl::LightType::LIGHT_BACKGROUND;
+		m_light.set_light_type(ccl::LightType::LIGHT_BACKGROUND);
 		break;
 	case Type::Triangle:
-		m_light.type = ccl::LightType::LIGHT_TRIANGLE;
+		m_light.set_light_type(ccl::LightType::LIGHT_TRIANGLE);
 		break;
 	case Type::Point:
 	default:
-		m_light.type = ccl::LightType::LIGHT_POINT;
+		m_light.set_light_type(ccl::LightType::LIGHT_POINT);
 		break;
 	}
 
@@ -138,29 +138,29 @@ void raytracing::Light::DoFinalize(Scene &scene)
 	{
 		auto &rot = GetRotation();
 		auto forward = uquat::forward(rot);
-		m_light.dir = raytracing::Scene::ToCyclesNormal(forward);
-		m_light.spot_smooth = (m_spotOuterAngle > 0.f) ? (1.f -m_spotInnerAngle /m_spotOuterAngle) : 1.f;
-		m_light.spot_angle = m_spotOuterAngle;
+		m_light.set_dir(raytracing::Scene::ToCyclesNormal(forward));
+		m_light.set_spot_smooth((m_spotOuterAngle > 0.f) ? (1.f -m_spotInnerAngle /m_spotOuterAngle) : 1.f);
+		m_light.set_spot_angle(m_spotOuterAngle);
 		break;
 	}
 	case Type::Directional:
 	{
 		auto &rot = GetRotation();
 		auto forward = uquat::forward(rot);
-		m_light.dir = raytracing::Scene::ToCyclesNormal(forward);
+		m_light.set_dir(raytracing::Scene::ToCyclesNormal(forward));
 		break;
 	}
 	case Type::Area:
 	{
-		m_light.axisu = raytracing::Scene::ToCyclesNormal(m_axisU);
-		m_light.axisv = raytracing::Scene::ToCyclesNormal(m_axisV);
-		m_light.sizeu = raytracing::Scene::ToCyclesLength(m_sizeU);
-		m_light.sizev = raytracing::Scene::ToCyclesLength(m_sizeV);
-		m_light.round = m_bRound;
+		m_light.set_axisu(raytracing::Scene::ToCyclesNormal(m_axisU));
+		m_light.set_axisv(raytracing::Scene::ToCyclesNormal(m_axisV));
+		m_light.set_sizeu(raytracing::Scene::ToCyclesLength(m_sizeU));
+		m_light.set_sizev(raytracing::Scene::ToCyclesLength(m_sizeV));
+		m_light.set_round(m_bRound);
 
 		auto &rot = GetRotation();
 		auto forward = uquat::forward(rot);
-		m_light.dir = raytracing::Scene::ToCyclesNormal(forward);
+		m_light.set_dir(raytracing::Scene::ToCyclesNormal(forward));
 		break;
 	}
 	case Type::Background:
@@ -179,7 +179,7 @@ void raytracing::Light::DoFinalize(Scene &scene)
 	//nodeEmission->SetInputArgument<float>("strength",watt);
 	//nodeEmission->SetInputArgument<ccl::float3>("color",ccl::float3{1.f,1.f,1.f});
 	desc->Link(nodeEmission.GetOutputSocket("emission"),outputNode.GetInputSocket("surface"));
-	m_light.shader = **CCLShader::Create(scene,*desc);
+	m_light.set_shader(**CCLShader::Create(scene,*desc));
 
 	auto lightType = (m_type == Type::Spot) ? util::pragma::LightType::Spot : (m_type == Type::Directional) ? util::pragma::LightType::Directional : util::pragma::LightType::Point;
 	auto watt = (lightType == util::pragma::LightType::Spot) ? ulighting::cycles::lumen_to_watt_spot(m_intensity,m_color,umath::rad_to_deg(m_spotOuterAngle)) :
@@ -187,18 +187,18 @@ void raytracing::Light::DoFinalize(Scene &scene)
 		ulighting::cycles::lumen_to_watt_area(m_intensity,m_color);
 
 	// Multiple importance sampling. It's disabled by default for some reason, but it's usually best to keep it on.
-	m_light.use_mis = true;
+	m_light.set_use_mis(true);
 
 	//static float lightIntensityFactor = 10.f;
 	//watt *= lightIntensityFactor;
 
 	watt *= scene.GetLightIntensityFactor();
-	m_light.strength = ccl::float3{m_color.r,m_color.g,m_color.b} *watt;
-	m_light.size = raytracing::Scene::ToCyclesLength(m_size);
-	m_light.co = raytracing::Scene::ToCyclesPosition(GetPos());
-	m_light.samples = 4;
-	m_light.max_bounces = 1'024;
-	m_light.map_resolution = 2'048;
+	m_light.set_strength(ccl::float3{m_color.r,m_color.g,m_color.b} *watt);
+	m_light.set_size(raytracing::Scene::ToCyclesLength(m_size));
+	m_light.set_co(raytracing::Scene::ToCyclesPosition(GetPos()));
+	m_light.set_samples(4);
+	m_light.set_max_bounces(1'024);
+	m_light.set_map_resolution(2'048);
 	// Test
 	/*m_light.strength = ccl::float3{0.984539f,1.f,0.75f} *40.f;
 	m_light.size = 0.25f;

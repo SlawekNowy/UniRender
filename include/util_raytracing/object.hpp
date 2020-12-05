@@ -32,12 +32,10 @@ namespace raytracing
 	public:
 		enum class Flags : uint8_t
 		{
-			None = 0u,
-			CCLObjectOwnedByScene = 1u
+			None = 0u
 		};
 		static PObject Create(Mesh &mesh);
 		static PObject Create(uint32_t version,DataStream &dsIn,const std::function<PMesh(uint32_t)> &fGetMesh);
-		virtual ~Object() override;
 		util::WeakHandle<Object> GetHandle();
 		virtual void DoFinalize(Scene &scene) override;
 
@@ -53,15 +51,13 @@ namespace raytracing
 
 		void SetName(const std::string &name);
 		const std::string &GetName() const;
-
-		ccl::Object *operator->();
-		const ccl::Object *operator->() const;
-		ccl::Object *operator*();
-		const ccl::Object *operator*() const;
+		
+		// For internal use only
+		ccl::Object *GetCyclesObject() {return m_object;}
 	private:
 		static PObject Create(Mesh *mesh);
-		Object(ccl::Object &object,Mesh *mesh);
-		ccl::Object &m_object;
+		Object(Mesh *mesh);
+		ccl::Object *m_object = nullptr;
 		PMesh m_mesh = nullptr;
 		Flags m_flags = Flags::None;
 		std::string m_name;

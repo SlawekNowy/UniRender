@@ -4,3 +4,11 @@
 *
 * Copyright (c) 2020 Florian Weischer
 */
+
+#ifndef __UTIL_RAYTRACING_HPP__
+#define __UTIL_RAYTRACING_HPP__
+
+// Note: Blender uses 2.4 when rendering with Cycles
+constexpr auto DEFAULT_GAMMA = 2.2f;
+
+#endif

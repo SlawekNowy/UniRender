@@ -181,6 +181,7 @@ namespace raytracing
 			std::optional<ColorTransformInfo> colorTransform {};
 		};
 		static bool IsRenderSceneMode(RenderMode renderMode);
+		static bool IsBakingSceneMode(RenderMode renderMode);
 		static void SetKernelPath(const std::string &kernelPath);
 		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,RenderMode renderMode,const CreateInfo &createInfo={});
 		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,DataStream &dsIn,const std::string &rootDir,RenderMode renderMode,const CreateInfo &createInfo={});
@@ -292,6 +293,7 @@ namespace raytracing
 		friend Object;
 		friend Light;
 		Scene(NodeManager &nodeManager,std::unique_ptr<ccl::Session> session,ccl::Scene &scene,RenderMode renderMode,DeviceType deviceType);
+		float GetGamma() const;
 		void PrepareCyclesSceneForRendering();
 		void StartTextureBaking(SceneWorker &worker);
 		void ReloadProgressiveRender(bool clearExposure=true,bool waitForPreviousCompletion=false);

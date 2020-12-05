@@ -18,11 +18,7 @@
 #pragma optimize("",off)
 raytracing::PObject raytracing::Object::Create(Mesh *mesh)
 {
-	auto *object = new ccl::Object{}; // Object will be removed automatically by cycles
-	if(mesh)
-		object->mesh = **mesh;
-	object->tfm = ccl::transform_identity();
-	return PObject{new Object{*object,mesh}};
+	return PObject{new Object{mesh}};
 }
 raytracing::PObject raytracing::Object::Create(Mesh &mesh) {return Create(&mesh);}
 
@@ -33,15 +29,9 @@ raytracing::PObject raytracing::Object::Create(uint32_t version,DataStream &dsIn
 	return o;
 }
 
-raytracing::Object::Object(ccl::Object &object,Mesh *mesh)
-	: WorldObject{},BaseObject{},m_object{object},m_mesh{mesh ? mesh->shared_from_this() : nullptr}
+raytracing::Object::Object(Mesh *mesh)
+	: WorldObject{},BaseObject{},m_mesh{mesh ? mesh->shared_from_this() : nullptr}
 {}
-
-raytracing::Object::~Object()
-{
-	if(umath::is_flag_set(m_flags,Flags::CCLObjectOwnedByScene) == false)
-		delete &m_object;
-}
 
 void raytracing::Object::Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Mesh&)> &fGetMeshIndex) const
 {
@@ -66,7 +56,6 @@ void raytracing::Object::Deserialize(uint32_t version,DataStream &dsIn,const std
 	auto mesh = fGetMesh(meshIdx);
 	assert(mesh);
 	m_mesh = mesh;
-	m_object.mesh = **m_mesh;
 }
 
 util::WeakHandle<raytracing::Object> raytracing::Object::GetHandle()
@@ -76,9 +65,18 @@ util::WeakHandle<raytracing::Object> raytracing::Object::GetHandle()
 
 void raytracing::Object::DoFinalize(Scene &scene)
 {
-	m_mesh->Finalize(scene);
-	m_object.tfm = Scene::ToCyclesTransform(GetPose());
-	m_flags |= Flags::CCLObjectOwnedByScene;
+	m_object = scene->create_node<ccl::Object>();
+	m_object->set_tfm(Scene::ToCyclesTransform(GetPose()));
+	m_object->set_color({1.f,1.f,1.f});
+	if(m_mesh)
+	{
+		m_mesh->Finalize(scene);
+		auto *geoSock = m_object->get_geometry_socket();
+		m_object->set(*geoSock,m_mesh->GetCyclesMesh());
+
+		// For some reason this converts it to a boolean, Cycles bug?
+		//m_object->set_geometry(m_mesh->GetCyclesMesh());
+	}
 	// m_object.tag_update(*scene);
 
 #ifdef ENABLE_MOTION_BLUR_TEST
@@ -95,9 +93,4 @@ void raytracing::Object::SetMotionPose(const umath::Transform &pose) {m_motionPo
 
 void raytracing::Object::SetName(const std::string &name) {m_name = name;}
 const std::string &raytracing::Object::GetName() const {return m_name;}
-
-ccl::Object *raytracing::Object::operator->() {return &m_object;}
-const ccl::Object *raytracing::Object::operator->() const {return const_cast<Object*>(this)->operator->();}
-ccl::Object *raytracing::Object::operator*() {return &m_object;}
-const ccl::Object *raytracing::Object::operator*() const {return const_cast<Object*>(this)->operator*();}
 #pragma optimize("",on)

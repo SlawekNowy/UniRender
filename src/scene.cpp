@@ -38,6 +38,7 @@
 #include <glog/logging.h>
 #endif
 #include <optional>
+#include <OpenImageIO/filesystem.h>
 #include <fsys/filesystem.h>
 #include <sharedutils/datastream.h>
 #include <sharedutils/util_file.h>
@@ -52,6 +53,8 @@
 #ifdef ENABLE_CYCLES_LOGGING
 #pragma comment(lib,"shlwapi.lib")
 #endif
+
+static constexpr const char *BAKE_TARGET_OBJECT_NAME = "bake_target";
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -112,9 +115,9 @@ void raytracing::Scene::ApplyPostProcessing(uimg::ImageBuffer &imgBuffer,raytrac
 	// For some reason the image is flipped horizontally when rendering an image,
 	// so we'll just flip it the right way here
 	auto flipHorizontally = IsRenderSceneMode(renderMode);
-	if(m_scene.camera->type == ccl::CameraType::CAMERA_PANORAMA)
+	if(m_scene.camera->get_camera_type() == ccl::CameraType::CAMERA_PANORAMA)
 	{
-		switch(m_scene.camera->panorama_type)
+		switch(m_scene.camera->get_panorama_type())
 		{
 		case ccl::PanoramaType::PANORAMA_EQUIRECTANGULAR:
 		case ccl::PanoramaType::PANORAMA_FISHEYE_EQUIDISTANT:
@@ -143,6 +146,18 @@ bool raytracing::Scene::IsRenderSceneMode(RenderMode renderMode)
 	return false;
 }
 
+bool raytracing::Scene::IsBakingSceneMode(RenderMode renderMode)
+{
+	switch(renderMode)
+	{
+	case RenderMode::BakeAmbientOcclusion:
+	case RenderMode::BakeNormals:
+	case RenderMode::BakeDiffuseLighting:
+		return true;
+	}
+	return false;
+}
+
 static std::optional<std::string> KERNEL_PATH {};
 void raytracing::Scene::SetKernelPath(const std::string &kernelPath) {KERNEL_PATH = kernelPath;}
 static void init_cycles()
@@ -159,6 +174,7 @@ static void init_cycles()
 		kernelPath = util::get_program_path();
 
 	ccl::path_init(kernelPath,kernelPath);
+	OIIO::Filesystem::exists(kernelPath); // See ccl::path_init
 
 	putenv(("CYCLES_KERNEL_PATH=" +kernelPath).c_str());
 	putenv(("CYCLES_SHADER_PATH=" +kernelPath).c_str());
@@ -166,18 +182,20 @@ static void init_cycles()
 	google::SetLogDestination(google::GLOG_INFO,(kernelPath +"/log/info.log").c_str());
 	google::SetLogDestination(google::GLOG_WARNING,(kernelPath +"/log/warning.log").c_str());
 	FLAGS_log_dir = kernelPath +"/log";
-
-	ccl::util_logging_init(engine_info::get_name().c_str());
-	ccl::util_logging_verbosity_set(2);
+	
+	ccl::util_logging_init("util_raytracing");
 	ccl::util_logging_start();
 	FLAGS_logtostderr = false;
 	FLAGS_alsologtostderr = true; // Doesn't seem to work properly?
+	FLAGS_stderrthreshold = google::GLOG_WARNING|google::GLOG_ERROR|google::GLOG_INFO|google::GLOG_FATAL;
+	FLAGS_v = 5; // Setting the log level any other way doesn't seem to work properly
 
-								  /* // Test output
-								  google::LogAtLevel(google::GLOG_INFO,"Info test");
-								  google::LogAtLevel(google::GLOG_WARNING,"Warning test");
-								  google::FlushLogFiles(google::GLOG_INFO);
-								  google::FlushLogFiles(google::GLOG_WARNING);*/
+	// Test output
+	/*google::LogAtLevel(google::GLOG_INFO,"Info test");
+	google::LogAtLevel(google::GLOG_WARNING,"Warning test");
+	VLOG(1) << "Colorspace " << 5 << " is no-op";
+	google::FlushLogFiles(google::GLOG_INFO);
+	google::FlushLogFiles(google::GLOG_WARNING);*/
 #endif
 }
 
@@ -212,11 +230,24 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeMa
 {
 	init_cycles();
 
+	if(IsBakingSceneMode(renderMode))
+	{
+		const_cast<CreateInfo&>(createInfo).hdrOutput = true;
+		//const_cast<CreateInfo&>(createInfo).progressive = true;
+		if(createInfo.denoiseMode == DenoiseMode::Detailed)
+			const_cast<CreateInfo&>(createInfo).denoiseMode = DenoiseMode::Fast;
+	}
+
 	auto cclDeviceType = ccl::DeviceType::DEVICE_CPU;
 	switch(createInfo.deviceType)
 	{
 	case DeviceType::GPU:
 	{
+		if(is_device_type_available(ccl::DeviceType::DEVICE_OPTIX))
+		{
+			cclDeviceType = ccl::DeviceType::DEVICE_OPTIX;
+			break;
+		}
 		if(is_device_type_available(ccl::DeviceType::DEVICE_CUDA))
 		{
 			cclDeviceType = ccl::DeviceType::DEVICE_CUDA;
@@ -240,7 +271,7 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeMa
 	static_assert(umath::to_integral(DeviceType::Count) == 2);
 
 	std::optional<ccl::DeviceInfo> device = {};
-	for(auto &devInfo : ccl::Device::available_devices(ccl::DeviceTypeMask::DEVICE_MASK_CUDA | ccl::DeviceTypeMask::DEVICE_MASK_OPENCL | ccl::DeviceTypeMask::DEVICE_MASK_CPU))
+	for(auto &devInfo : ccl::Device::available_devices(ccl::DeviceTypeMask::DEVICE_MASK_OPTIX | ccl::DeviceTypeMask::DEVICE_MASK_CUDA | ccl::DeviceTypeMask::DEVICE_MASK_OPENCL | ccl::DeviceTypeMask::DEVICE_MASK_CPU))
 	{
 		if(devInfo.type == cclDeviceType)
 		{
@@ -283,8 +314,7 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeMa
 		sessionParams.run_denoising = true;
 	}*/
 	// We'll handle denoising ourselves
-	sessionParams.full_denoising = false;
-	sessionParams.run_denoising = false;
+	sessionParams.denoising.use = false;
 
 	sessionParams.start_resolution = 64;
 	if(createInfo.samples.has_value())
@@ -304,20 +334,27 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeMa
 		}
 	}
 
+	if(IsBakingSceneMode(renderMode))
+	{
+		sessionParams.progressive = false;
+		sessionParams.samples = 128;
+		//sessionParams.display_buffer_linear = true;
+	}
+
 	if(createInfo.progressive)
 	{
 		sessionParams.write_render_cb = nullptr;
 		if(createInfo.progressiveRefine)
 			sessionParams.samples = 50'000;
 	}
-	else if(IsRenderSceneMode(renderMode) || renderMode == RenderMode::BakeDiffuseLighting || renderMode == RenderMode::BakeNormals || renderMode == RenderMode::BakeAmbientOcclusion)
+	else if(IsRenderSceneMode(renderMode))// || renderMode == RenderMode::BakeDiffuseLighting || renderMode == RenderMode::BakeNormals || renderMode == RenderMode::BakeAmbientOcclusion)
 	{
 		// We need to define a write callback, otherwise the session's display object will not be initialized.
 		sessionParams.write_render_cb = [](const ccl::uchar *pixels,int w,int h,int channels) -> bool {return true;};
 	}
 
 #ifdef ENABLE_TEST_AMBIENT_OCCLUSION
-	if(IsRenderSceneMode(renderMode) == false)
+	/*if(IsRenderSceneMode(renderMode) == false)
 	{
 		//sessionParams.background = true;
 		sessionParams.progressive_refine = false;
@@ -330,13 +367,29 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeMa
 		sessionParams.threads = 0;
 		sessionParams.use_profiling = false;
 		sessionParams.display_buffer_linear = true;
-		sessionParams.run_denoising = false;
-		sessionParams.write_denoising_passes = false;
-		sessionParams.full_denoising = false;
+		sessionParams.denoising.use = false;
 		sessionParams.progressive_update_timeout = 1.0000000000000000;
 		sessionParams.shadingsystem = ccl::SHADINGSYSTEM_SVM;
-	}
+	}*/
 #endif
+
+	if(IsBakingSceneMode(renderMode))
+	{
+	sessionParams.background = true;
+	sessionParams.progressive_refine = false;
+	sessionParams.progressive = false;
+	sessionParams.experimental = false;
+	sessionParams.samples = 128;
+	sessionParams.start_resolution = 2147483647;
+	sessionParams.denoising_start_sample = 0;
+	sessionParams.pixel_size = 1;
+	sessionParams.threads = 0;
+	sessionParams.adaptive_sampling = false;
+	sessionParams.use_profiling = false;
+	sessionParams.display_buffer_linear = true;
+	sessionParams.tile_size = {64,64};
+	}
+
 	auto session = std::make_unique<ccl::Session>(sessionParams);
 
 	ccl::SceneParams sceneParams {};
@@ -344,7 +397,8 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeMa
 
 	auto *cclScene = new ccl::Scene{sceneParams,session->device}; // Object will be removed automatically by cycles
 	cclScene->params.bvh_type = ccl::SceneParams::BVH_STATIC;
-	cclScene->params.persistent_data = true;
+	//cclScene->params.persistent_data = true;
+	cclScene->params.persistent_data = false;
 
 	auto *pSession = session.get();
 	auto scene = std::shared_ptr<Scene>{new Scene{nodeManager,std::move(session),*cclScene,renderMode,deviceType}};
@@ -352,9 +406,18 @@ std::shared_ptr<raytracing::Scene> raytracing::Scene::Create(NodeManager &nodeMa
 	auto *pScene = scene.get();
 	if(createInfo.progressive)
 	{
-		pSession->update_render_tile_cb = [pScene](ccl::RenderTile tile,bool param) {
-			pScene->m_tileManager.UpdateRenderTile(tile,param);
-		};
+		if(IsBakingSceneMode(renderMode))
+		{
+			pSession->read_bake_tile_cb = [pScene](ccl::RenderTile tile) {
+				pScene->m_tileManager.UpdateRenderTile(tile,true);
+			};
+		}
+		else
+		{
+			pSession->update_render_tile_cb = [pScene](ccl::RenderTile tile,bool param) {
+				pScene->m_tileManager.UpdateRenderTile(tile,param);
+			};
+		}
 		pSession->write_render_tile_cb = [pScene](ccl::RenderTile &tile) {
 			pScene->m_tileManager.WriteRenderTile(tile);
 		};
@@ -417,10 +480,11 @@ std::shared_ptr<uimg::ImageBuffer> raytracing::Scene::FinalizeCyclesScene()
 	};
 	auto &session = reinterpret_cast<SessionWrapper&>(*m_session);
 	auto outputWithHDR = umath::is_flag_set(m_stateFlags,StateFlags::OutputResultWithHDRColors);
-	session.Finalize(outputWithHDR,m_createInfo.progressive);
+	if(IsBakingSceneMode(m_renderMode) == false)
+		session.Finalize(outputWithHDR,m_createInfo.progressive);
 
 	std::shared_ptr<uimg::ImageBuffer> imgBuffer = nullptr;
-	if(m_createInfo.progressive == false)
+	if(m_createInfo.progressive == false && IsBakingSceneMode(m_renderMode) == false)
 	{
 		auto w = m_session->display->draw_width;
 		auto h = m_session->display->draw_height;
@@ -452,7 +516,7 @@ std::shared_ptr<uimg::ImageBuffer> raytracing::Scene::FinalizeCyclesScene()
 
 void raytracing::Scene::FinalizeAndCloseCyclesScene()
 {
-	if(m_session && IsRenderSceneMode(m_renderMode) && umath::is_flag_set(m_stateFlags,StateFlags::HasRenderingStarted))
+	if(m_session && /*IsRenderSceneMode(m_renderMode) &&*/ umath::is_flag_set(m_stateFlags,StateFlags::HasRenderingStarted))
 		GetResultImageBuffer() = FinalizeCyclesScene();
 	CloseCyclesScene();
 }
@@ -524,6 +588,10 @@ static std::optional<std::string> get_abs_sky_path(const std::string &skyTex)
 
 void raytracing::Scene::AddSkybox(const std::string &texture)
 {
+	// TODO
+	// static auto transparent = true;
+	// m_scene.background->transparent = true;
+
 	if(umath::is_flag_set(m_stateFlags,StateFlags::SkyInitialized))
 		return;
 	umath::set_flag(m_stateFlags,StateFlags::SkyInitialized);
@@ -579,15 +647,15 @@ void raytracing::Scene::AddSkybox(const std::string &texture)
 
 	// Add the light source for the background
 	auto *light = new ccl::Light{}; // Object will be removed automatically by cycles
-	light->tfm = ccl::transform_identity();
+	light->set_tfm(ccl::transform_identity());
 
 	m_scene.lights.push_back(light);
-	light->type = ccl::LightType::LIGHT_BACKGROUND;
-	light->map_resolution = 2'048;
-	light->shader = m_scene.default_background;
-	light->use_mis = true;
-	light->max_bounces = 1'024;
-	light->samples = 4;
+	light->set_light_type(ccl::LightType::LIGHT_BACKGROUND);
+	light->set_map_resolution(2'048);
+	light->set_shader(m_scene.default_background);
+	light->set_use_mis(true);
+	light->set_max_bounces(1'024);
+	light->set_samples(4);
 	light->tag_update(&m_scene);
 }
 
@@ -738,201 +806,6 @@ void raytracing::Scene::DenoiseHDRImageArea(uimg::ImageBuffer &imgBuffer,uint32_
 	}
 }
 
-void raytracing::Scene::SetupRenderSettings(
-	ccl::Scene &scene,ccl::Session &session,ccl::BufferParams &bufferParams,raytracing::Scene::RenderMode renderMode,
-	uint32_t maxTransparencyBounces
-) const
-{
-	// Default parameters taken from Blender
-	auto &integrator = *scene.integrator;
-	integrator.min_bounce = 0;
-	integrator.max_bounce = m_sceneInfo.maxBounces;
-	integrator.max_diffuse_bounce = m_sceneInfo.maxDiffuseBounces;
-	integrator.max_glossy_bounce = m_sceneInfo.maxGlossyBounces;
-	integrator.max_transmission_bounce = m_sceneInfo.maxTransmissionBounces;
-	integrator.max_volume_bounce = 0;
-
-	integrator.transparent_min_bounce = 0;
-	integrator.transparent_max_bounce = maxTransparencyBounces;
-
-	integrator.volume_max_steps = 1024;
-	integrator.volume_step_size = 0.1;
-
-	integrator.caustics_reflective = true;
-	integrator.caustics_refractive = true;
-	integrator.filter_glossy = 0.f;
-	integrator.seed = 0;
-	integrator.sampling_pattern = ccl::SamplingPattern::SAMPLING_PATTERN_SOBOL;
-
-	integrator.sample_clamp_direct = 0.f;
-	integrator.sample_clamp_indirect = 0.f;
-	integrator.motion_blur = false;
-	integrator.method = ccl::Integrator::Method::PATH;
-	integrator.sample_all_lights_direct = true;
-	integrator.sample_all_lights_indirect = true;
-	integrator.light_sampling_threshold = 0.f;
-
-	integrator.diffuse_samples = 1;
-	integrator.glossy_samples = 1;
-	integrator.transmission_samples = 1;
-	integrator.ao_samples = 1;
-	integrator.mesh_light_samples = 1;
-	integrator.subsurface_samples = 1;
-	integrator.volume_samples = 1;
-
-	integrator.ao_bounces = 0;
-	integrator.tag_update(&scene);
-
-	// Film
-	auto &film = *scene.film;
-	film.exposure = 1.f;
-	film.filter_type = ccl::FilterType::FILTER_GAUSSIAN;
-	film.filter_width = 1.5f;
-	if(renderMode == raytracing::Scene::RenderMode::RenderImage)
-	{
-		film.mist_start = 5.f;
-		film.mist_depth = 25.f;
-		film.mist_falloff = 2.f;
-	}
-	film.tag_update(&scene);
-	film.tag_passes_update(&scene, film.passes);
-
-	film.cryptomatte_depth = 3;
-	film.cryptomatte_passes = ccl::CRYPT_NONE;
-
-	session.params.pixel_size = 1;
-	session.params.threads = 0;
-	session.params.use_profiling = false;
-	session.params.shadingsystem = ccl::ShadingSystem::SHADINGSYSTEM_SVM;
-
-	ccl::vector<ccl::Pass> passes;
-	auto displayPass = ccl::PassType::PASS_DIFFUSE_COLOR;
-	switch(renderMode)
-	{
-	case raytracing::Scene::RenderMode::SceneAlbedo:
-		// Note: PASS_DIFFUSE_COLOR would probably make more sense but does not seem to work
-		// (just creates a black output).
-		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
-		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
-		displayPass = ccl::PassType::PASS_COMBINED;
-		break;
-	case raytracing::Scene::RenderMode::SceneNormals:
-		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
-		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
-		displayPass = ccl::PassType::PASS_COMBINED;
-		break;
-	case raytracing::Scene::RenderMode::SceneDepth:
-		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined"); // TODO: Why do we need this?
-		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
-		displayPass = ccl::PassType::PASS_COMBINED;
-		break;
-	case raytracing::Scene::RenderMode::RenderImage:
-		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
-		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
-		displayPass = ccl::PassType::PASS_COMBINED;
-		break;
-	case raytracing::Scene::RenderMode::BakeAmbientOcclusion:
-		ccl::Pass::add(ccl::PassType::PASS_AO,passes,"ao");
-		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
-		displayPass = ccl::PassType::PASS_AO;
-		break;
-	case raytracing::Scene::RenderMode::BakeDiffuseLighting:
-		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_DIRECT,passes,"diffuse_direct");
-		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_INDIRECT,passes,"diffuse_indirect");
-		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
-		displayPass = ccl::PassType::PASS_COMBINED; // TODO: Is this correct?
-		break;
-	}
-	bufferParams.passes = passes;
-
-	if(m_sceneInfo.motionBlurStrength > 0.f)
-	{
-		// ccl::Pass::add(ccl::PassType::PASS_MOTION,passes);
-		scene.integrator->motion_blur = true;
-	}
-
-	film.pass_alpha_threshold = 0.5;
-	film.tag_passes_update(&scene, passes);
-	film.display_pass = displayPass;
-	film.tag_update(&scene);
-	scene.integrator->tag_update(&scene);
-
-	// Camera
-	/*auto &cam = *scene.camera;
-	cam.shuttertime	= 0.500000000;
-	cam.motion_position=	ccl::Camera::MotionPosition::MOTION_POSITION_CENTER;
-	cam.shutter_table_offset=	18446744073709551615;
-	cam.rolling_shutter_type=	ccl::Camera::RollingShutterType::ROLLING_SHUTTER_NONE;
-	cam.rolling_shutter_duration=	0.100000001	;
-	cam.focaldistance=	2.49260306	;
-	cam.aperturesize=	0.00625000009	;
-	cam.blades=	0;
-	cam.bladesrotation=	0.000000000	;
-	cam.type=	ccl::CAMERA_PERSPECTIVE ;
-	cam.fov=	0.503379941	;
-	cam.panorama_type=	ccl::PANORAMA_FISHEYE_EQUISOLID ;
-	cam.fisheye_fov=	3.14159274	;
-	cam.fisheye_lens=	10.5000000	;
-	cam.latitude_min=	-1.57079637	;
-	cam.latitude_max=	1.57079637	;
-	cam.longitude_min=	-3.14159274	;
-	cam.longitude_max=	3.14159274	;
-	cam.stereo_eye=	ccl::Camera::STEREO_NONE ;
-	cam.use_spherical_stereo=	false	;
-	cam.interocular_distance=	0.0649999976	;
-	cam.convergence_distance=	1.94999993	;
-	cam.use_pole_merge	=false	;
-	cam.pole_merge_angle_from=	1.04719758	;
-	cam.pole_merge_angle_to=	1.30899692	;
-	cam.aperture_ratio=	1.00000000	;
-	cam.sensorwidth=	0.0359999985	;
-	cam.sensorheight=	0.0240000002	;
-	cam.nearclip=	0.100000001	;
-	cam.farclip	=100.000000	;
-	cam.width	=3840	;
-	cam.height=	2160	;
-	cam.resolution=	1	;
-
-	cam.viewplane.left=	-1.77777779	;
-	cam.viewplane.right=	1.77777779	;
-	cam.viewplane.bottom=	-1.00000000	;
-	cam.viewplane.top=	1.00000000	;
-
-
-	cam.full_width=	3840	;
-	cam.full_height=	2160	;
-	cam.offscreen_dicing_scale	=4.00000000	;
-	cam.border.left = 0.f;
-	cam.border.right = 1.f;
-	cam.border.bottom = 0.f;
-	cam.border.top = 1.f;
-	cam.viewport_camera_border .left = 0.f;
-	cam.viewport_camera_border.right = 1.f;
-	cam.viewport_camera_border.bottom = 0.f;
-	cam.viewport_camera_border.top = 1.f;
-
-	cam.matrix.x.x=	1.00000000	;
-	cam.matrix.x.y=	1.63195708e-07	;
-	cam.matrix.x.z=	3.42843151e-07	;
-	cam.matrix.x.w=	17.5277958	;
-
-	cam.matrix.y.x=	-3.47716451e-07	;
-	cam.matrix.y.y	=0.0308625121	;
-	cam.matrix.y.z=	0.999523640	;
-	cam.matrix.y.w=	-2.77792454	;
-
-	cam.matrix.z.x=	-1.52536970e-07	;
-	cam.matrix.z.y=	0.999523640	;
-	cam.matrix.z.z=	-0.0308625121	;
-	cam.matrix.z.w=	0.846632719	;
-
-	cam.use_perspective_motion=	false	;
-	cam.fov_pre=	0.503379941	;
-	cam.fov_post	=0.503379941	;
-
-	cam.tag_update();*/
-}
-
 std::shared_ptr<uimg::ImageBuffer> &raytracing::Scene::GetResultImageBuffer(StereoEye eye)
 {
 	if(eye == StereoEye::None)
@@ -957,10 +830,10 @@ std::shared_ptr<uimg::ImageBuffer> &raytracing::Scene::GetNormalImageBuffer(Ster
 ccl::BufferParams raytracing::Scene::GetBufferParameters() const
 {
 	ccl::BufferParams bufferParams {};
-	bufferParams.width = m_scene.camera->width;
-	bufferParams.height = m_scene.camera->height;
-	bufferParams.full_width = m_scene.camera->width;
-	bufferParams.full_height = m_scene.camera->height;
+	bufferParams.width = m_scene.camera->get_full_width();
+	bufferParams.height = m_scene.camera->get_full_height();
+	bufferParams.full_width = m_scene.camera->get_full_width();
+	bufferParams.full_height = m_scene.camera->get_full_height();
 	SetupRenderSettings(m_scene,*m_session,bufferParams,m_renderMode,m_sceneInfo.maxTransparencyBounces);
 	return bufferParams;
 }
@@ -993,9 +866,9 @@ void raytracing::Scene::InitializePassShaders(const std::function<std::shared_pt
 					cclShader->Finalize(*this);
 					shaderCache[shader.get()] = cclShader;
 				}
-				mesh->used_shaders.at(i) = **cclShader;
+				mesh.GetCyclesMesh()->get_used_shaders()[i] = **cclShader;
 			}
-			mesh->tag_update(&m_scene,false);
+			mesh.GetCyclesMesh()->tag_update(&m_scene,false);
 		}
 	}
 }
@@ -1201,114 +1074,11 @@ void raytracing::Scene::Restart()
 	m_restartState = 2;
 }
 
-void raytracing::Scene::PrepareCyclesSceneForRendering()
-{
-	if(m_sceneInfo.sky.empty() == false)
-		AddSkybox(m_sceneInfo.sky);
-
-	m_sceneInfo.exposure = m_createInfo.exposure;
-
-	m_stateFlags |= StateFlags::HasRenderingStarted;
-	auto bufferParams = GetBufferParameters();
-
-	m_session->scene = &m_scene;
-	m_session->reset(bufferParams,m_session->params.samples);
-	m_camera->Finalize(*this);
-
-	m_renderData.shaderCache = ShaderCache::Create();
-	m_renderData.modelCache = ModelCache::Create();
-
-	for(auto &mdlCache : m_mdlCaches)
-		m_renderData.modelCache->Merge(*mdlCache);
-	m_renderData.modelCache->Bake();
-	
-	auto &mdlCache = m_renderData.modelCache;
-	mdlCache->GenerateData();
-	uint32_t numObjects = 0;
-	uint32_t numMeshes = 0;
-	for(auto &chunk : mdlCache->GetChunks())
-	{
-		numObjects += chunk.GetObjects().size();
-		numMeshes += chunk.GetMeshes().size();
-	}
-	m_scene.objects.reserve(m_scene.objects.size() +numObjects);
-	m_scene.meshes.reserve(m_scene.meshes.size() +numMeshes);
-
-	for(auto &chunk : mdlCache->GetChunks())
-	{
-		for(auto &o : chunk.GetObjects())
-			m_scene.objects.push_back(**o);
-		for(auto &m : chunk.GetMeshes())
-			m_scene.meshes.push_back(**m);
-	}
-
-	// Note: Lights and objects have to be initialized before shaders, because they may
-	// create additional shaders.
-	m_scene.lights.reserve(m_lights.size());
-	for(auto &light : m_lights)
-	{
-		light->Finalize(*this);
-		m_scene.lights.push_back(**light);
-	}
-	for(auto &chunk : mdlCache->GetChunks())
-	{
-		for(auto &o : chunk.GetObjects())
-			o->Finalize(*this);
-		for(auto &o : chunk.GetMeshes())
-			o->Finalize(*this);
-	}
-	for(auto &shader : m_renderData.shaderCache->GetShaders())
-		shader->Finalize();
-	for(auto &cclShader : m_cclShaders)
-		cclShader->Finalize(*this);
-
-	constexpr auto validate = false;
-	if constexpr(validate)
-	{
-		for(auto &chunk : m_renderData.modelCache->GetChunks())
-		{
-			for(auto &o : chunk.GetObjects())
-			{
-				auto &mesh = o->GetMesh();
-				mesh.Validate();
-			}
-		}
-	}
-
-	if(m_createInfo.colorTransform.has_value())
-	{
-		std::string err;
-		ColorTransformProcessorCreateInfo createInfo {};
-		createInfo.config = m_createInfo.colorTransform->config;
-		createInfo.lookName = m_createInfo.colorTransform->lookName;
-		m_colorTransformProcessor = create_color_transform_processor(createInfo,err);
-		if(m_colorTransformProcessor == nullptr)
-			HandleError("Unable to initialize color transform processor: " +err);
-	}
-
-	if(m_createInfo.progressive)
-	{
-		auto w = m_scene.camera->width;
-		auto h = m_scene.camera->height;
-		m_tileManager.Initialize(w,h,GetTileSize().x,GetTileSize().y,m_deviceType == DeviceType::CPU,m_colorTransformProcessor.get());
-		bool flipHorizontally = true;
-		if(m_scene.camera->type == ccl::CameraType::CAMERA_PANORAMA)
-		{
-			switch(m_scene.camera->panorama_type)
-			{
-			case ccl::PanoramaType::PANORAMA_EQUIRECTANGULAR:
-			case ccl::PanoramaType::PANORAMA_FISHEYE_EQUIDISTANT:
-				flipHorizontally = false; // I have no idea why some types have to be flipped and others don't
-				break;
-			}
-		}
-		m_tileManager.SetFlipImage(flipHorizontally,true);
-		m_tileManager.SetExposure(m_sceneInfo.exposure);
-	}
-}
+float raytracing::Scene::GetGamma() const {return m_createInfo.hdrOutput ? 1.f : DEFAULT_GAMMA;}
 
 void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 {
+#if 0
 	// Baking cannot be done with cycles directly, we will have to
 	// do some additional steps first.
 	worker.AddThread([this,&worker]() {
@@ -1317,7 +1087,7 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 		auto resolution = GetResolution();
 		auto imgWidth = resolution.x;
 		auto imgHeight = resolution.y;
-		m_scene.bake_manager->set_baking(true);
+		//m_scene.bake_manager->set_baking(true);
 		m_session->load_kernels();
 
 		static auto albedoOnly = false;
@@ -1339,7 +1109,7 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 		{
 			ccl::vector<ccl::Pass> passes;
 			auto displayPass = ccl::PassType::PASS_DIFFUSE_COLOR;
-			ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
+			ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"Combined");
 			displayPass = ccl::PassType::PASS_COMBINED;
 			//bufferParams.passes = passes;
 			auto &scene = m_scene;
@@ -1354,7 +1124,7 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 			ccl::vector<ccl::Pass> passes;
 			if(m_renderMode == RenderMode::BakeDiffuseLighting)
 			{
-				ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
+				ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"Combined");
 				ccl::Pass::add(ccl::PassType::PASS_LIGHT,passes,"light");
 			}
 			else
@@ -1388,7 +1158,7 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 		m_scene.integrator->tag_update(&m_scene);
 		
 		// TODO: Shader limits are arbitrarily chosen, check how Blender does it?
-		m_scene.bake_manager->set_shader_limit(256,256);
+		//m_scene.bake_manager->set_shader_limit(256,256);
 		m_session->tile_manager.set_samples(m_session->params.samples);
 		
 		ccl::ShaderEvalType shaderType;
@@ -1416,12 +1186,12 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 			bake_pass_filter = 0;
 			break;
 		}
-		bake_pass_filter = ccl::BakeManager::shader_type_to_pass_filter(shaderType,bake_pass_filter);
+		//bake_pass_filter = ccl::BakeManager::shader_type_to_pass_filter(shaderType,bake_pass_filter);
 		if(worker.IsCancelled())
 			return;
 
 		auto numPixels = imgWidth *imgHeight;
-		auto *aoTarget = FindObject("bake_target");
+		auto *aoTarget = FindObject(BAKE_TARGET_OBJECT_NAME);
 		if(aoTarget == nullptr)
 		{
 			worker.SetStatus(util::JobStatus::Failed,"Invalid bake target!");
@@ -1449,7 +1219,7 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 		/// before this one.
 		///for(auto i=decltype(objectId){0u};i<objectId;++i)
 		///	triOffset += m_objects.at(i)->GetMesh().GetTriangleCount();
-		bake_data = m_scene.bake_manager->init(*objectId,triOffset /* triOffset */,numPixels);
+		//bake_data = m_scene.bake_manager->init(*objectId,triOffset /* triOffset */,numPixels);
 		populate_bake_data(bake_data,*objectId,pixelArray.data(),numPixels);
 
 		if(worker.IsCancelled())
@@ -1474,7 +1244,11 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 				std::this_thread::sleep_for(std::chrono::seconds{1});
 			}
 		}};
-		auto r = m_scene.bake_manager->bake(m_scene.device,&m_scene.dscene,&m_scene,m_session->progress,shaderType,bake_pass_filter,bake_data,static_cast<float*>(imgBuffer->GetData()));
+
+		m_session->start();
+		m_session->wait();
+
+		auto r = true;//m_scene.bake_manager->bake(m_scene.device,&m_scene.dscene,&m_scene,m_session->progress,shaderType,bake_pass_filter,bake_data,static_cast<float*>(imgBuffer->GetData()));
 		running = false;
 		progressThread.join();
 		if(r == false)
@@ -1641,6 +1415,7 @@ void raytracing::Scene::StartTextureBaking(SceneWorker &worker)
 		worker.SetStatus(util::JobStatus::Successful,"Baking has been completed successfully!");
 		worker.UpdateProgress(1.f);
 	});
+#endif
 }
 
 void raytracing::Scene::ReloadProgressiveRender(bool clearExposure,bool waitForPreviousCompletion)
@@ -1652,280 +1427,6 @@ void raytracing::Scene::ReloadProgressiveRender(bool clearExposure,bool waitForP
 		m_tileManager.SetExposure(1.f);
 	m_createInfo.progressiveRefine = false;
 	m_session->progress.reset();
-}
-
-static void validate_session(ccl::Scene &scene)
-{
-	for(auto *shader : scene.shaders)
-	{
-		if(shader->graph == nullptr)
-			throw std::logic_error{"Found shader with invalid graph!"};
-	}
-}
-//#include <util_image.hpp>
-raytracing::Scene::RenderStageResult raytracing::Scene::StartNextRenderImageStage(SceneWorker &worker,ImageRenderStage stage,StereoEye eyeStage)
-{
-	switch(stage)
-	{
-	case ImageRenderStage::InitializeScene:
-	{
-		worker.AddThread([this,&worker]() {
-			PrepareCyclesSceneForRendering();
-
-			if(IsRenderSceneMode(m_renderMode))
-			{
-				auto stereoscopic = m_camera->IsStereoscopic();
-				if(stereoscopic)
-					m_camera->SetStereoscopicEye(raytracing::StereoEye::Left);
-				ImageRenderStage initialRenderStage;
-				switch(m_renderMode)
-				{
-				case RenderMode::RenderImage:
-					initialRenderStage = ImageRenderStage::Lighting;
-					break;
-				case RenderMode::SceneAlbedo:
-					initialRenderStage = ImageRenderStage::SceneAlbedo;
-					break;
-				case RenderMode::SceneNormals:
-					initialRenderStage = ImageRenderStage::SceneNormals;
-					break;
-				case RenderMode::SceneDepth:
-					initialRenderStage = ImageRenderStage::SceneDepth;
-					break;
-				default:
-					throw std::invalid_argument{"Invalid render mode " +std::to_string(umath::to_integral(m_renderMode))};
-				}
-				StartNextRenderImageStage(worker,initialRenderStage,stereoscopic ? StereoEye::Left : StereoEye::None);
-				worker.Start();
-			}
-			else
-			{
-				StartNextRenderImageStage(worker,ImageRenderStage::Bake,StereoEye::None);
-				worker.Start();
-			}
-			return RenderStageResult::Continue;
-		});
-		break;
-	}
-	case ImageRenderStage::Bake:
-	{
-		StartTextureBaking(worker);
-		break;
-	}
-	case ImageRenderStage::Lighting:
-	{
-		if(IsProgressiveRefine())
-			m_progressiveRunning = true;
-		worker.AddThread([this,&worker,stage,eyeStage]() {
-			validate_session(m_scene);
-			m_session->start();
-
-			// Render image with lighting
-			auto progressMultiplier = (GetDenoiseMode() == DenoiseMode::Detailed) ? 0.95f : 1.f;
-			WaitForRenderStage(worker,0.f,progressMultiplier,[this,&worker,stage,eyeStage]() mutable -> RenderStageResult {
-				if(IsProgressiveRefine() == false)
-					m_session->wait();
-				else if(m_progressiveRunning)
-				{
-					std::unique_lock<std::mutex> lock {m_progressiveMutex};
-					m_progressiveCondition.wait(lock);
-				}
-				auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
-				resultImageBuffer = FinalizeCyclesScene();
-				// ApplyPostProcessing(*resultImageBuffer,m_renderMode);
-
-				if(UpdateStereo(worker,stage,eyeStage))
-				{
-					worker.Start(); // Lighting stage for the left eye is triggered by the user, but we have to start it manually for the right eye
-					return RenderStageResult::Continue;
-				}
-
-				if(ShouldDenoise() == false)
-					return StartNextRenderImageStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
-				if(GetDenoiseMode() == DenoiseMode::Fast)
-				{
-					// Skip albedo/normal render passes and just go straight to denoising
-					return StartNextRenderImageStage(worker,ImageRenderStage::Denoise,eyeStage);
-				}
-				return StartNextRenderImageStage(worker,ImageRenderStage::Albedo,eyeStage);
-			});
-		});
-		break;
-	}
-	case ImageRenderStage::Albedo:
-	{
-		ReloadProgressiveRender();
-		// Render albedo colors (required for denoising)
-		m_renderMode = RenderMode::SceneAlbedo;
-		if(eyeStage == StereoEye::Left || eyeStage == StereoEye::None)
-			InitializeAlbedoPass(true);
-		worker.AddThread([this,&worker,eyeStage,stage]() {
-			validate_session(m_scene);
-			m_session->start();
-			WaitForRenderStage(worker,0.95f,0.025f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
-				m_session->wait();
-				auto &albedoImageBuffer = GetAlbedoImageBuffer(eyeStage);
-				albedoImageBuffer = FinalizeCyclesScene();
-				// ApplyPostProcessing(*albedoImageBuffer,m_renderMode);
-
-				if(UpdateStereo(worker,stage,eyeStage))
-					return RenderStageResult::Continue;
-
-				return StartNextRenderImageStage(worker,ImageRenderStage::Normal,eyeStage);
-			});
-		});
-		worker.Start();
-		break;
-	}
-	case ImageRenderStage::Normal:
-	{
-		ReloadProgressiveRender();
-		// Render normals (required for denoising)
-		m_renderMode = RenderMode::SceneNormals;
-		if(eyeStage == StereoEye::Left || eyeStage == StereoEye::None)
-			InitializeNormalPass(true);
-		worker.AddThread([this,&worker,eyeStage,stage]() {
-			validate_session(m_scene);
-			m_session->start();
-			WaitForRenderStage(worker,0.975f,0.025f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
-				m_session->wait();
-				auto &normalImageBuffer = GetNormalImageBuffer(eyeStage);
-				normalImageBuffer = FinalizeCyclesScene();
-				// ApplyPostProcessing(*normalImageBuffer,m_renderMode);
-
-				if(UpdateStereo(worker,stage,eyeStage))
-					return RenderStageResult::Continue;
-
-				return StartNextRenderImageStage(worker,ImageRenderStage::Denoise,eyeStage);
-			});
-		});
-		worker.Start();
-		break;
-	}
-	case ImageRenderStage::Denoise:
-	{
-		// Denoise
-		DenoiseInfo denoiseInfo {};
-		auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
-		denoiseInfo.hdr = true;
-		denoiseInfo.width = resultImageBuffer->GetWidth();
-		denoiseInfo.height = resultImageBuffer->GetHeight();
-
-		static auto dbgAlbedo = false;
-		static auto dbgNormals = false;
-		if(dbgAlbedo)
-			m_resultImageBuffer = m_albedoImageBuffer;
-		else if(dbgNormals)
-			m_resultImageBuffer = m_normalImageBuffer;
-		else
-		{
-			auto &albedoImageBuffer = GetAlbedoImageBuffer(eyeStage);
-			auto &normalImageBuffer = GetNormalImageBuffer(eyeStage);
-			resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
-			if(albedoImageBuffer)
-				albedoImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
-			if(normalImageBuffer)
-				normalImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
-
-			/*{
-				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf.png","wb");
-				if(f0)
-					uimg::save_image(f0,*resultImageBuffer,uimg::ImageFormat::PNG);
-			}
-			{
-				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf_albedo.png","wb");
-				if(f0)
-					uimg::save_image(f0,*albedoImageBuffer,uimg::ImageFormat::PNG);
-			}
-			{
-				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf_normal.png","wb");
-				if(f0)
-					uimg::save_image(f0,*normalImageBuffer,uimg::ImageFormat::PNG);
-			}*/
-
-			denoise(denoiseInfo,*resultImageBuffer,albedoImageBuffer.get(),normalImageBuffer.get(),[this,&worker](float progress) -> bool {
-				return !worker.IsCancelled();
-			});
-		}
-
-		if(UpdateStereo(worker,stage,eyeStage))
-			return RenderStageResult::Continue;
-
-		return StartNextRenderImageStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
-	}
-	case ImageRenderStage::FinalizeImage:
-	{
-		auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
-		if(m_colorTransformProcessor) // TODO: Should we really apply color transform if we're not denoising?
-		{
-			std::string err;
-			if(m_colorTransformProcessor->Apply(*resultImageBuffer,err,0.f,2.4 /* same gamma as used by Blender */) == false)
-				HandleError("Unable to apply color transform: " +err);
-		}
-		resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGBA_HDR);
-		resultImageBuffer->ClearAlpha();
-		if(IsProgressive() == false) // If progressive, our tile manager will have already flipped the image
-			resultImageBuffer->Flip(true,true);
-		if(UpdateStereo(worker,stage,eyeStage))
-			return RenderStageResult::Continue;
-		if(eyeStage == StereoEye::Left)
-			return StartNextRenderImageStage(worker,ImageRenderStage::MergeStereoscopic,StereoEye::None);
-		return StartNextRenderImageStage(worker,ImageRenderStage::Finalize,StereoEye::None);
-	}
-	case ImageRenderStage::MergeStereoscopic:
-	{
-		auto &imgLeft = m_resultImageBuffer.at(umath::to_integral(StereoEye::Left));
-		auto &imgRight = m_resultImageBuffer.at(umath::to_integral(StereoEye::Right));
-		auto w = imgLeft->GetWidth();
-		auto h = imgLeft->GetHeight();
-		auto imgComposite = uimg::ImageBuffer::Create(w,h *2,imgLeft->GetFormat());
-		auto *dataSrcLeft = imgLeft->GetData();
-		auto *dataSrcRight = imgRight->GetData();
-		auto *dataDst = imgComposite->GetData();
-		memcpy(dataDst,dataSrcLeft,imgLeft->GetSize());
-		memcpy(static_cast<uint8_t*>(dataDst) +imgLeft->GetSize(),dataSrcRight,imgRight->GetSize());
-		m_resultImageBuffer.at(umath::to_integral(StereoEye::Left)) = imgComposite;
-		m_resultImageBuffer.at(umath::to_integral(StereoEye::Right)) = nullptr;
-		return StartNextRenderImageStage(worker,ImageRenderStage::Finalize,StereoEye::None);
-	}
-	case ImageRenderStage::Finalize:
-		// We're done here
-		CloseCyclesScene();
-		return RenderStageResult::Complete;
-	case ImageRenderStage::SceneAlbedo:
-	case ImageRenderStage::SceneNormals:
-	case ImageRenderStage::SceneDepth:
-	{
-		ReloadProgressiveRender();
-		if(eyeStage != StereoEye::Right)
-		{
-			if(stage == ImageRenderStage::SceneAlbedo)
-				InitializeAlbedoPass(true);
-			else if(stage == ImageRenderStage::SceneNormals)
-				InitializeNormalPass(true);
-		}
-		worker.AddThread([this,&worker,eyeStage,stage]() {
-			validate_session(m_scene);
-			m_session->start();
-			WaitForRenderStage(worker,0.f,1.f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
-				m_session->wait();
-				auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
-				resultImageBuffer = FinalizeCyclesScene();
-				// ApplyPostProcessing(*resultImageBuffer,m_renderMode);
-
-				if(UpdateStereo(worker,stage,eyeStage))
-				{
-					worker.Start(); // Initial stage for the left eye is triggered by the user, but we have to start it manually for the right eye
-					return RenderStageResult::Continue;
-				}
-
-				return StartNextRenderImageStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
-			});
-		});
-		break;
-	}
-	}
-	return RenderStageResult::Continue;
 }
 
 void raytracing::Scene::SetCancelled(const std::string &msg)
@@ -1982,7 +1483,7 @@ void raytracing::Scene::WaitForRenderStage(SceneWorker &worker,float baseProgres
 
 std::optional<uint32_t> raytracing::Scene::FindCCLObjectId(const Object &o) const
 {
-	auto it = std::find(m_scene.objects.begin(),m_scene.objects.end(),*o);
+	auto it = std::find(m_scene.objects.begin(),m_scene.objects.end(),const_cast<Object&>(o).GetCyclesObject());
 	return (it != m_scene.objects.end()) ? (it -m_scene.objects.begin()) : std::optional<uint32_t>{};
 }
 
@@ -2203,7 +1704,7 @@ void raytracing::Scene::SetMaxDiffuseBounces(uint32_t bounces) {m_sceneInfo.maxD
 void raytracing::Scene::SetMaxGlossyBounces(uint32_t bounces) {m_sceneInfo.maxGlossyBounces = bounces;}
 void raytracing::Scene::SetMaxTransmissionBounces(uint32_t bounces) {m_sceneInfo.maxTransmissionBounces = bounces;}
 void raytracing::Scene::SetMotionBlurStrength(float strength) {m_sceneInfo.motionBlurStrength = strength;}
-void raytracing::Scene::SetAOBakeTarget(Object &o) {o.SetName("bake_target");}
+void raytracing::Scene::SetAOBakeTarget(Object &o) {o.SetName(BAKE_TARGET_OBJECT_NAME);}
 std::vector<raytracing::TileManager::TileData> raytracing::Scene::GetRenderedTileBatch() {return m_tileManager.GetRenderedTileBatch();}
 Vector2i raytracing::Scene::GetTileSize() const
 {
@@ -2211,7 +1712,7 @@ Vector2i raytracing::Scene::GetTileSize() const
 }
 Vector2i raytracing::Scene::GetResolution() const
 {
-	return {(*m_camera)->width,(*m_camera)->height};
+	return {(*m_camera)->get_full_width(),(*m_camera)->get_full_height()};
 }
 
 ccl::Session *raytracing::Scene::GetCCLSession() {return m_session.get();}
