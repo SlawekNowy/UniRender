@@ -13,7 +13,7 @@
 #include <sharedutils/util.h>
 #include <memory>
 
-namespace raytracing
+namespace unirender
 {
 	class Scene;
 	class DLLRTUTIL BaseObject

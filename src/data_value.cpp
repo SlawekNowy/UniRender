@@ -8,7 +8,7 @@
 #include "util_raytracing/data_value.hpp"
 
 #pragma optimize("",off)
-void raytracing::DataValue::Serialize(DataStream &dsOut) const
+void unirender::DataValue::Serialize(DataStream &dsOut) const
 {
 	dsOut->Write(type);
 	dsOut->Write<bool>(value != nullptr);
@@ -72,7 +72,7 @@ void raytracing::DataValue::Serialize(DataStream &dsOut) const
 	}
 	static_assert(umath::to_integral(SocketType::Count) == 16);
 }
-raytracing::DataValue raytracing::DataValue::Deserialize(DataStream &dsIn)
+unirender::DataValue unirender::DataValue::Deserialize(DataStream &dsIn)
 {
 	auto type = dsIn->Read<SocketType>();
 	auto hasValue = dsIn->Read<bool>();
@@ -126,7 +126,7 @@ raytracing::DataValue raytracing::DataValue::Deserialize(DataStream &dsIn)
 	}
 }
 
-std::string raytracing::to_string(SocketType type)
+std::string unirender::to_string(SocketType type)
 {
 	switch(type)
 	{
@@ -165,7 +165,7 @@ std::string raytracing::to_string(SocketType type)
 	}
 	return "Invalid";
 }
-std::optional<raytracing::DataValue> raytracing::convert(const void *value,SocketType srcType,SocketType dstType)
+std::optional<unirender::DataValue> unirender::convert(const void *value,SocketType srcType,SocketType dstType)
 {
 	if(is_convertible_to(srcType,dstType) == false)
 		return {};

@@ -25,12 +25,12 @@ namespace ccl
 	enum AttributeStandard : int32_t;
 };
 
-namespace raytracing
+namespace unirender
 {
 	class NodeDesc;
 	class GroupNodeDesc;
 	struct NodeSocketDesc;
-
+	namespace cycles {class Renderer;};
 	struct GroupSocketTranslation
 	{
 		std::pair<ccl::ShaderNode*,std::string> input;
@@ -49,8 +49,8 @@ namespace raytracing
 			CCLShaderOwnedByScene = 1u,
 			CCLShaderGraphOwnedByScene = CCLShaderOwnedByScene<<1u
 		};
-		static std::shared_ptr<CCLShader> Create(Scene &scene,const GroupNodeDesc &desc);
-		static std::shared_ptr<CCLShader> Create(Scene &scene,ccl::Shader &cclShader,const GroupNodeDesc &desc,bool useCache=false);
+		static std::shared_ptr<CCLShader> Create(cycles::Renderer &renderer,const GroupNodeDesc &desc);
+		static std::shared_ptr<CCLShader> Create(cycles::Renderer &renderer,ccl::Shader &cclShader,const GroupNodeDesc &desc,bool useCache=false);
 
 		~CCLShader();
 		void InitializeNodeGraph(const GroupNodeDesc &desc);
@@ -58,7 +58,7 @@ namespace raytracing
 		ccl::Shader *operator->();
 		ccl::Shader *operator*();
 	protected:
-		CCLShader(Scene &scene,ccl::Shader &cclShader,ccl::ShaderGraph &cclShaderGraph);
+		CCLShader(cycles::Renderer &renderer,ccl::Shader &cclShader,ccl::ShaderGraph &cclShaderGraph);
 		virtual void DoFinalize(Scene &scene) override;
 		void InitializeNode(const NodeDesc &desc,std::unordered_map<const NodeDesc*,ccl::ShaderNode*> &nodeToCclNode,const GroupSocketTranslationTable &groupIoSockets);
 		void ConvertGroupSocketsToNodes(const GroupNodeDesc &groupDesc,GroupSocketTranslationTable &outGroupIoSockets);
@@ -72,7 +72,7 @@ namespace raytracing
 		ccl::Shader &m_cclShader;
 		ccl::ShaderGraph &m_cclGraph;
 		Flags m_flags = Flags::None;
-		Scene &m_scene;
+		cycles::Renderer &m_renderer;
 	};
 
 	struct DLLRTUTIL NodeDescLink
@@ -361,8 +361,8 @@ namespace raytracing
 		virtual void DeserializeNodes(DataStream &dsIn) override;
 		void DeserializeLinks(DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable);
 		
-		raytracing::NodeDesc &AddNormalMapNodeDesc(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,float strength=1.f);
-		raytracing::NodeDesc &AddImageTextureNode(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,TextureType type);
+		unirender::NodeDesc &AddNormalMapNodeDesc(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,float strength=1.f);
+		unirender::NodeDesc &AddImageTextureNode(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,TextureType type);
 		GroupNodeDesc(NodeManager &nodeManager);
 	private:
 		std::vector<std::shared_ptr<NodeDesc>> m_nodes = {};
@@ -391,15 +391,15 @@ namespace raytracing
 		~Shader()=default;
 
 		void SetActivePass(Pass pass);
-		std::shared_ptr<raytracing::GroupNodeDesc> GetActivePassNode() const;
+		std::shared_ptr<unirender::GroupNodeDesc> GetActivePassNode() const;
 
 		void Serialize(DataStream &dsOut) const;
 		void Deserialize(DataStream &dsIn,NodeManager &nodeManager);
 
-		std::shared_ptr<raytracing::GroupNodeDesc> combinedPass = nullptr;
-		std::shared_ptr<raytracing::GroupNodeDesc> albedoPass = nullptr;
-		std::shared_ptr<raytracing::GroupNodeDesc> normalPass = nullptr;
-		std::shared_ptr<raytracing::GroupNodeDesc> depthPass = nullptr;
+		std::shared_ptr<unirender::GroupNodeDesc> combinedPass = nullptr;
+		std::shared_ptr<unirender::GroupNodeDesc> albedoPass = nullptr;
+		std::shared_ptr<unirender::GroupNodeDesc> normalPass = nullptr;
+		std::shared_ptr<unirender::GroupNodeDesc> depthPass = nullptr;
 
 		void Finalize();
 	protected:
@@ -476,9 +476,9 @@ namespace raytracing
 	constexpr auto *NODE_LAYER_WEIGHT = "layer_weight";
 	static_assert(NODE_COUNT == 35,"Increase this number if new node types are added!");
 };
-REGISTER_BASIC_BITWISE_OPERATORS(raytracing::CCLShader::Flags)
+REGISTER_BASIC_BITWISE_OPERATORS(unirender::CCLShader::Flags)
 
-DLLRTUTIL std::ostream& operator<<(std::ostream &os,const raytracing::NodeDesc &desc);
-DLLRTUTIL std::ostream& operator<<(std::ostream &os,const raytracing::GroupNodeDesc &desc);
+DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc);
+DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::GroupNodeDesc &desc);
 
 #endif

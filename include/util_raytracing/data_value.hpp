@@ -16,7 +16,7 @@
 #include <mathutil/umat.h>
 #include <sharedutils/datastream.h>
 
-namespace raytracing
+namespace unirender
 {
 	using STBool = bool;
 	using STFloat = float;

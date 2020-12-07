@@ -13,7 +13,7 @@
 #include <iostream>
 
 #pragma optimize("",off)
-raytracing::Denoiser::Denoiser()
+unirender::Denoiser::Denoiser()
 {
 	auto device = oidn::newDevice();
 	const char *errMsg;
@@ -27,7 +27,7 @@ raytracing::Denoiser::Denoiser()
 	m_device = std::make_unique<oidn::DeviceRef>(device);
 }
 
-bool raytracing::Denoiser::Denoise(
+bool unirender::Denoiser::Denoise(
 	const DenoiseInfo &denoise,float *inOutData,
 	float *optAlbedoData,float *optInNormalData,
 	const std::function<bool(float)> &fProgressCallback,
@@ -70,7 +70,7 @@ bool raytracing::Denoiser::Denoise(
 	filter.execute();
 	return true;
 }
-bool raytracing::Denoiser::Denoise(
+bool unirender::Denoiser::Denoise(
 	const DenoiseInfo &denoiseInfo,uimg::ImageBuffer &imgBuffer,
 	uimg::ImageBuffer *optImgBufferAlbedo,
 	uimg::ImageBuffer *optImgBufferNormal,
@@ -113,7 +113,7 @@ bool raytracing::Denoiser::Denoise(
 	return true;
 }
 
-bool raytracing::denoise(
+bool unirender::denoise(
 	const DenoiseInfo &denoise,
 	float *inOutData,float *optAlbedoData,float *optInNormalData,
 	const std::function<bool(float)> &fProgressCallback
@@ -123,7 +123,7 @@ bool raytracing::denoise(
 	return denoiser.Denoise(denoise,inOutData,optAlbedoData,optInNormalData,fProgressCallback);
 }
 
-bool raytracing::denoise(
+bool unirender::denoise(
 	const DenoiseInfo &denoiseInfo,uimg::ImageBuffer &imgBuffer,
 	uimg::ImageBuffer *optImgBufferAlbedo,uimg::ImageBuffer *optImgBufferNormal,
 	const std::function<bool(float)> &fProgressCallback

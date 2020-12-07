@@ -16,7 +16,7 @@
 #include <memory>
 
 namespace ccl {class Light;};
-namespace raytracing
+namespace unirender
 {
 	using Lumen = float;
 	class Light;
@@ -28,8 +28,7 @@ namespace raytracing
 	public:
 		enum class Flags : uint8_t
 		{
-			None = 0u,
-			CCLObjectOwnedByScene = 1u
+			None = 0u
 		};
 		enum class Type : uint8_t
 		{
@@ -43,11 +42,10 @@ namespace raytracing
 		};
 		static PLight Create();
 		static PLight Create(uint32_t version,DataStream &dsIn);
-		virtual ~Light() override;
 		util::WeakHandle<Light> GetHandle();
 
 		void SetType(Type type);
-		void SetConeAngles(umath::Radian innerAngle,umath::Radian outerAngle);
+		void SetConeAngles(umath::Degree innerAngle,umath::Degree outerAngle);
 		void SetColor(const Color &color);
 		void SetIntensity(Lumen intensity);
 		void SetSize(float size);
@@ -61,17 +59,29 @@ namespace raytracing
 		void Serialize(DataStream &dsOut) const;
 		void Deserialize(uint32_t version,DataStream &dsIn);
 
-		ccl::Light *operator->();
-		ccl::Light *operator*();
+		Type GetType() const {return m_type;}
+		float GetSize() const {return m_size;}
+		const Vector3 &GetColor() const {return m_color;}
+		Lumen GetIntensity() const {return m_intensity;}
+		umath::Degree GetInnerConeAngle() const {return m_spotInnerAngle;}
+		umath::Degree GetOuterConeAngle() const {return m_spotOuterAngle;}
+		const Vector3 &GetAxisU() const {return m_axisU;}
+		const Vector3 &GetAxisV() const {return m_axisV;}
+		float GetSizeU() const {return m_sizeU;}
+		float GetSizeV() const {return m_sizeV;}
+		bool IsRound() const {return m_bRound;}
+		Flags GetFlags() const {return m_flags;}
 	private:
-		Light(ccl::Light &light);
-		ccl::Light &m_light;
+		Light();
+
+		// Note: All of these are automatically serialized/deserialized!
+		// There must be no unserializable data after this point!
 		float m_size = util::pragma::metres_to_units(1.f);
 		Vector3 m_color = {1.f,1.f,1.f};
 		Lumen m_intensity = 1'600.f;
 		Type m_type = Type::Point;
-		umath::Radian m_spotInnerAngle = 0.f;
-		umath::Radian m_spotOuterAngle = 0.f;
+		umath::Degree m_spotInnerAngle = 0.f;
+		umath::Degree m_spotOuterAngle = 0.f;
 
 		Vector3 m_axisU = {};
 		Vector3 m_axisV = {};
@@ -81,6 +91,6 @@ namespace raytracing
 		Flags m_flags = Flags::None;
 	};
 };
-REGISTER_BASIC_BITWISE_OPERATORS(raytracing::Light::Flags)
+REGISTER_BASIC_BITWISE_OPERATORS(unirender::Light::Flags)
 
 #endif

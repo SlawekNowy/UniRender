@@ -198,7 +198,7 @@ static void mikk_set_tangent_space(const SMikkTSpaceContext *context,
   }
 }
 
-void raytracing::compute_tangents(
+void unirender::compute_tangents(
     ccl::Mesh *mesh, bool need_sign, bool active_render)
 {
     const char *layer_name = nullptr;

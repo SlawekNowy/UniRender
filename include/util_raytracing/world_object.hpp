@@ -14,7 +14,7 @@
 #include <mathutil/transform.hpp>
 
 class DataStream;
-namespace raytracing
+namespace unirender
 {
 	class WorldObject;
 	using PWorldObject = std::shared_ptr<WorldObject>;

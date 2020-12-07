@@ -15,7 +15,7 @@
 
 namespace uimg {class ImageBuffer;};
 namespace util::ocio {class ColorProcessor;};
-namespace raytracing
+namespace unirender
 {
 	struct DLLRTUTIL ColorTransformProcessorCreateInfo
 	{

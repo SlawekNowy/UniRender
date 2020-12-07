@@ -8,17 +8,17 @@
 #include "util_raytracing/scene_object.hpp"
 
 #pragma optimize("",off)
-raytracing::Scene &raytracing::SceneObject::GetScene() const {return m_scene;}
-raytracing::SceneObject::SceneObject(Scene &scene)
+unirender::Scene &unirender::SceneObject::GetScene() const {return m_scene;}
+unirender::SceneObject::SceneObject(Scene &scene)
 	: m_scene{scene}
 {}
 
-void raytracing::BaseObject::Finalize(Scene &scene,bool force)
+void unirender::BaseObject::Finalize(Scene &scene,bool force)
 {
 	if(m_bFinalized && force == false)
 		return;
 	m_bFinalized = true;
 	DoFinalize(scene);
 }
-void raytracing::BaseObject::DoFinalize(Scene &scene) {}
+void unirender::BaseObject::DoFinalize(Scene &scene) {}
 #pragma optimize("",on)

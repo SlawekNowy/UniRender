@@ -27,7 +27,7 @@ namespace ccl
 	enum AttributeStandard : int32_t;
 	enum NodeMathType : int32_t;
 };
-namespace raytracing
+namespace unirender
 {
 	class Shader;
 	class NodeDesc;
@@ -455,6 +455,6 @@ namespace raytracing
 	constexpr uint32_t NODE_COUNT = 35;
 };
 
-DLLRTUTIL std::ostream& operator<<(std::ostream &os,const raytracing::Socket &socket);
+DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::Socket &socket);
 
 #endif

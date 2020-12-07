@@ -21,7 +21,7 @@
 namespace uimg {class ImageBuffer;};
 namespace ccl {class RenderTile;};
 namespace util::ocio {class ColorProcessor;};
-namespace raytracing
+namespace unirender
 {
 	enum class ColorTransform : uint8_t;
 	class TileManager
@@ -114,6 +114,6 @@ namespace raytracing
 		std::shared_ptr<uimg::ImageBuffer> m_progressiveImage = nullptr;
 	};
 };
-REGISTER_BASIC_BITWISE_OPERATORS(raytracing::TileManager::TileData::Flags)
+REGISTER_BASIC_BITWISE_OPERATORS(unirender::TileManager::TileData::Flags)
 
 #endif

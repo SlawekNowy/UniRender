@@ -18,6 +18,7 @@
 #include "util_raytracing/mesh.hpp"
 #include "util_raytracing/object.hpp"
 #include "util_raytracing/scene.hpp"
+#include "util_raytracing/cycles/renderer.hpp"
 #include <render/mesh.h>
 
 #define FILTER_MASK_MARGIN 1
@@ -33,7 +34,7 @@ typedef struct ZSpan {
 } ZSpan;
 
 typedef struct BakeDataZSpan {
-	raytracing::baking::BakePixel *pixel_array;
+	unirender::baking::BakePixel *pixel_array;
 	int primitive_id;
 	int object_id;
 	//BakeImage *bk_image;
@@ -44,7 +45,7 @@ typedef struct BakeDataZSpan {
 	float dv_dx, dv_dy;
 } BakeDataZSpan;
 
-void raytracing::baking::populate_bake_data(ccl::BakeData *data,
+void unirender::baking::populate_bake_data(ccl::BakeData *data,
 	const int object_id,
 	BakePixel *pixel_array,
 	const int num_pixels)
@@ -309,7 +310,7 @@ void copy_v2_fl2(float v[2], float x, float y)
 static void store_bake_pixel(void *handle, int x, int y, float u, float v)
 {
 	BakeDataZSpan *bd = (BakeDataZSpan *)handle;
-	raytracing::baking::BakePixel *pixel;
+	unirender::baking::BakePixel *pixel;
 
 	const int width = bd->bakeImageWidth;
 	const size_t offset = 0;
@@ -327,7 +328,7 @@ static void store_bake_pixel(void *handle, int x, int y, float u, float v)
 	pixel->object_id = bd->object_id;
 }
 
-void raytracing::baking::prepare_bake_data(const Scene &scene,raytracing::Object &o,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs)
+void unirender::baking::prepare_bake_data(const cycles::Renderer &renderer,unirender::Object &o,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs)
 {
 	/* initialize all pixel arrays so we know which ones are 'blank' */
 	for(auto i=decltype(numPixels){0u};i<numPixels;++i)
@@ -352,13 +353,11 @@ void raytracing::baking::prepare_bake_data(const Scene &scene,raytracing::Object
 	}
 
 	auto &mesh = o.GetMesh();
-	auto *uvs = useLightmapUvs ? mesh.GetLightmapUVs() : mesh.GetUVs();
-	if(uvs == nullptr)
-		return;
-	auto objId = scene.FindCCLObjectId(o);
+	auto &uvs = useLightmapUvs ? mesh.GetLightmapUvs() : mesh.GetUvs();
+	auto objId = renderer.FindCCLObjectId(*renderer.FindCclObject(o));
 	assert(objId.has_value());
 	bd.object_id = *objId;
-	auto *cclMesh = *mesh;
+	auto *cclMesh = renderer.FindCclMesh(mesh);
 	auto numTris = cclMesh->triangles.size() /3;
 	for(auto i=decltype(numTris){0u};i<numTris;++i)
 	{
@@ -387,13 +386,13 @@ void raytracing::baking::prepare_bake_data(const Scene &scene,raytracing::Object
 }
 
 // Source: blender/blenlib/intern/math_base_inline.c
-unsigned char raytracing::baking::unit_float_to_uchar_clamp(float val)
+unsigned char unirender::baking::unit_float_to_uchar_clamp(float val)
 {
 	return (unsigned char)((
 		(val <= 0.0f) ? 0 : ((val > (1.0f - 0.5f / 255.0f)) ? 255 : ((255.0f * val) + 0.5f))));
 }
 
-unsigned short raytracing::baking::unit_float_to_ushort_clamp(float val)
+unsigned short unirender::baking::unit_float_to_ushort_clamp(float val)
 {
 	return (unsigned short)((val >= 1.0f - 0.5f / 65535) ?
 		65535 :
@@ -430,7 +429,7 @@ static int check_pixel_assigned(
 	return res;
 }
 
-static void IMB_filter_extend(struct raytracing::baking::ImBuf *ibuf, std::vector<uint8_t> &vmask, int filter)
+static void IMB_filter_extend(struct unirender::baking::ImBuf *ibuf, std::vector<uint8_t> &vmask, int filter)
 {
 	auto *mask = reinterpret_cast<char*>(vmask.data());
 
@@ -563,13 +562,13 @@ static void IMB_filter_extend(struct raytracing::baking::ImBuf *ibuf, std::vecto
 	}
 }
 
-void raytracing::baking::RE_bake_margin(ImBuf *ibuf, std::vector<uint8_t> &mask, const int margin)
+void unirender::baking::RE_bake_margin(ImBuf *ibuf, std::vector<uint8_t> &mask, const int margin)
 {
 	/* margin */
 	IMB_filter_extend(ibuf, mask, margin);
 }
 
-void raytracing::baking::RE_bake_mask_fill(const std::vector<BakePixel> pixel_array, const size_t num_pixels, char *mask)
+void unirender::baking::RE_bake_mask_fill(const std::vector<BakePixel> pixel_array, const size_t num_pixels, char *mask)
 {
 	size_t i;
 	if (!mask) {

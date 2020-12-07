@@ -14,34 +14,34 @@
 #include <render/buffers.h>
 
 #pragma optimize("",off)
-bool raytracing::TileManager::TileData::IsFloatData() const {return !IsHDRData();}
-bool raytracing::TileManager::TileData::IsHDRData() const {return umath::is_flag_set(flags,Flags::HDRData);}
+bool unirender::TileManager::TileData::IsFloatData() const {return !IsHDRData();}
+bool unirender::TileManager::TileData::IsHDRData() const {return umath::is_flag_set(flags,Flags::HDRData);}
 
-raytracing::TileManager::~TileManager()
+unirender::TileManager::~TileManager()
 {
 	StopAndWait();
 }
 
-void raytracing::TileManager::StopAndWait()
+void unirender::TileManager::StopAndWait()
 {
 	SetState(State::Stopped);
 	Wait();
 }
 
-void raytracing::TileManager::SetState(State state)
+void unirender::TileManager::SetState(State state)
 {
 	m_state = state;
 	m_threadWaitCondition.notify_all();
 }
 
-void raytracing::TileManager::NotifyPendingWork()
+void unirender::TileManager::NotifyPendingWork()
 {
 	m_hasPendingWork = true;
 	m_threadWaitCondition.notify_all();
 }
 
-void raytracing::TileManager::Cancel() {SetState(State::Cancelled);}
-void raytracing::TileManager::Wait()
+void unirender::TileManager::Cancel() {SetState(State::Cancelled);}
+void unirender::TileManager::Wait()
 {
 	for(auto &threadHandle : m_ppThreadPoolHandles)
 	{
@@ -50,10 +50,10 @@ void raytracing::TileManager::Wait()
 	}
 }
 
-void raytracing::TileManager::SetExposure(float exposure) {m_exposure = exposure;}
-void raytracing::TileManager::SetGamma(float gamma) {m_gamma = gamma;}
+void unirender::TileManager::SetExposure(float exposure) {m_exposure = exposure;}
+void unirender::TileManager::SetGamma(float gamma) {m_gamma = gamma;}
 
-void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,float exposure,float gamma,util::ocio::ColorProcessor *optColorProcessor)
+void unirender::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,float exposure,float gamma,util::ocio::ColorProcessor *optColorProcessor)
 {
 	m_cpuDevice = cpuDevice;
 	if(optColorProcessor)
@@ -73,7 +73,7 @@ void raytracing::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,ui
 	Reload(false);
 }
 
-void raytracing::TileManager::Reload(bool waitForCompletion)
+void unirender::TileManager::Reload(bool waitForCompletion)
 {
 	if(waitForCompletion)
 		StopAndWait();
@@ -200,7 +200,7 @@ void raytracing::TileManager::Reload(bool waitForCompletion)
 		// util::set_thread_priority(m_ppThreadPool.get_thread(i),util::ThreadPriority::Normal);
 	}
 }
-std::shared_ptr<uimg::ImageBuffer> raytracing::TileManager::UpdateFinalImage()
+std::shared_ptr<uimg::ImageBuffer> unirender::TileManager::UpdateFinalImage()
 {
 	StopAndWait();
 	constexpr auto verify = false;
@@ -218,7 +218,7 @@ std::shared_ptr<uimg::ImageBuffer> raytracing::TileManager::UpdateFinalImage()
 	}
 	return m_progressiveImage;
 }
-void raytracing::TileManager::ApplyRectData(const TileData &tile)
+void unirender::TileManager::ApplyRectData(const TileData &tile)
 {
 	if(tile.index == std::numeric_limits<decltype(tile.index)>::max())
 		return;
@@ -237,7 +237,7 @@ void raytracing::TileManager::ApplyRectData(const TileData &tile)
 		dstOffset += dstSizePerRow;
 	}
 }
-std::vector<raytracing::TileManager::TileData> raytracing::TileManager::GetRenderedTileBatch()
+std::vector<unirender::TileManager::TileData> unirender::TileManager::GetRenderedTileBatch()
 {
 	m_renderedTileMutex.lock();
 		auto tiles = std::move(m_renderedTiles);
@@ -246,20 +246,20 @@ std::vector<raytracing::TileManager::TileData> raytracing::TileManager::GetRende
 	return tiles;
 }
 
-void raytracing::TileManager::SetFlipImage(bool flipHorizontally,bool flipVertically)
+void unirender::TileManager::SetFlipImage(bool flipHorizontally,bool flipVertically)
 {
 	m_flipHorizontally = flipHorizontally;
 	m_flipVertically = flipVertically;
 }
 
-int32_t raytracing::TileManager::GetCurrentTileSampleCount(uint32_t tileIndex) const
+int32_t unirender::TileManager::GetCurrentTileSampleCount(uint32_t tileIndex) const
 {
 	if(tileIndex >= m_renderedSampleCountPerTile.size())
 		return 0;
 	return m_renderedSampleCountPerTile.at(tileIndex);
 }
 
-void raytracing::TileManager::InitializeTileData(TileData &data)
+void unirender::TileManager::InitializeTileData(TileData &data)
 {
 	if(umath::is_flag_set(data.flags,TileData::Flags::Initialized))
 		return;
@@ -274,7 +274,7 @@ void raytracing::TileManager::InitializeTileData(TileData &data)
 	img->ClearAlpha(uimg::ImageBuffer::FULLY_OPAQUE);
 }
 
-void raytracing::TileManager::ApplyPostProcessingForProgressiveTile(TileData &data)
+void unirender::TileManager::ApplyPostProcessingForProgressiveTile(TileData &data)
 {
 	if(data.IsFloatData() == false)
 		return;
@@ -325,7 +325,7 @@ void raytracing::TileManager::ApplyPostProcessingForProgressiveTile(TileData &da
 	data.flags |= TileData::Flags::HDRData;
 }
 
-void raytracing::TileManager::UpdateRenderTile(const ccl::RenderTile &tile,bool param)
+void unirender::TileManager::UpdateRenderTile(const ccl::RenderTile &tile,bool param)
 {
 	assert((tile.x %m_tileSize.x) == 0 && (tile.y %m_tileSize.y) == 0);
 	if((tile.x %m_tileSize.x) != 0 || (tile.y %m_tileSize.y) != 0)
@@ -353,7 +353,7 @@ void raytracing::TileManager::UpdateRenderTile(const ccl::RenderTile &tile,bool 
 		}
 	m_inputTileMutex.unlock();
 }
-void raytracing::TileManager::WriteRenderTile(const ccl::RenderTile &tile)
+void unirender::TileManager::WriteRenderTile(const ccl::RenderTile &tile)
 {
 	// TODO: What's this callback for exactly?
 }

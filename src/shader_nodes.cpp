@@ -13,7 +13,7 @@
 #include <render/shader.h>
 
 #pragma optimize("",off)
-std::size_t raytracing::SocketHasher::operator()(const Socket& k) const
+std::size_t unirender::SocketHasher::operator()(const Socket& k) const
 {
 	assert(k.IsNodeSocket());
 	if(k.IsNodeSocket() == false)
@@ -28,23 +28,23 @@ std::size_t raytracing::SocketHasher::operator()(const Socket& k) const
 	return seed;
 }
 
-raytracing::Socket::Socket(NodeDesc &node,const std::string &socketName,bool output)
+unirender::Socket::Socket(NodeDesc &node,const std::string &socketName,bool output)
 {
 	m_nodeSocketRef.node = node.shared_from_this();
 	m_nodeSocketRef.socketName = socketName;
 	m_nodeSocketRef.output = output;
 }
-raytracing::Socket::Socket(const DataValue &value)
+unirender::Socket::Socket(const DataValue &value)
 	: m_value{value}
 {}
-raytracing::Socket::Socket(float value)
+unirender::Socket::Socket(float value)
 	: Socket{DataValue::Create<decltype(value),SocketType::Float>(value)}
 {}
-raytracing::Socket::Socket(const Vector3 &value)
+unirender::Socket::Socket(const Vector3 &value)
 	: Socket{DataValue::Create<decltype(value),SocketType::Vector>(value)}
 {}
 
-raytracing::SocketType raytracing::Socket::GetType() const
+unirender::SocketType unirender::Socket::GetType() const
 {
 	if(IsConcreteValue())
 		return m_value->type;
@@ -53,23 +53,23 @@ raytracing::SocketType raytracing::Socket::GetType() const
 	auto *desc = node ? node->FindSocketDesc(*this) : nullptr;
 	return desc ? desc->dataValue.type : SocketType::Invalid;
 }
-raytracing::Socket raytracing::Socket::operator-() const
+unirender::Socket unirender::Socket::operator-() const
 {
 	if(is_vector_type(GetType()))
 		return Socket{Vector3{}} -*this;
 	return Socket{0.f} -*this;
 }
-raytracing::Socket raytracing::Socket::operator+(float f) const {return operator+(Socket{f});}
-raytracing::Socket raytracing::Socket::operator-(float f) const {return operator-(Socket{f});}
-raytracing::Socket raytracing::Socket::operator*(float f) const {return operator*(Socket{f});}
-raytracing::Socket raytracing::Socket::operator/(float f) const {return operator/(Socket{f});}
-raytracing::Socket raytracing::Socket::operator%(float f) const {return operator%(Socket{f});}
-raytracing::Socket raytracing::Socket::operator^(float f) const {return operator^(Socket{f});}
-raytracing::Socket raytracing::Socket::operator<(float f) const {return operator<(Socket{f});}
-raytracing::Socket raytracing::Socket::operator<=(float f) const {return operator<=(Socket{f});}
-raytracing::Socket raytracing::Socket::operator>(float f) const {return operator>(Socket{f});}
-raytracing::Socket raytracing::Socket::operator>=(float f) const {return operator>=(Socket{f});}
-raytracing::Socket raytracing::Socket::ApplyOperator(const Socket &other,ccl::NodeMathType opType,std::optional<ccl::NodeVectorMathType> opTypeVec,float(*applyValue)(float,float)) const
+unirender::Socket unirender::Socket::operator+(float f) const {return operator+(Socket{f});}
+unirender::Socket unirender::Socket::operator-(float f) const {return operator-(Socket{f});}
+unirender::Socket unirender::Socket::operator*(float f) const {return operator*(Socket{f});}
+unirender::Socket unirender::Socket::operator/(float f) const {return operator/(Socket{f});}
+unirender::Socket unirender::Socket::operator%(float f) const {return operator%(Socket{f});}
+unirender::Socket unirender::Socket::operator^(float f) const {return operator^(Socket{f});}
+unirender::Socket unirender::Socket::operator<(float f) const {return operator<(Socket{f});}
+unirender::Socket unirender::Socket::operator<=(float f) const {return operator<=(Socket{f});}
+unirender::Socket unirender::Socket::operator>(float f) const {return operator>(Socket{f});}
+unirender::Socket unirender::Socket::operator>=(float f) const {return operator>=(Socket{f});}
+unirender::Socket unirender::Socket::ApplyOperator(const Socket &other,ccl::NodeMathType opType,std::optional<ccl::NodeVectorMathType> opTypeVec,float(*applyValue)(float,float)) const
 {
 	auto srcType = GetType();
 	auto dstType = other.GetType();
@@ -166,15 +166,15 @@ raytracing::Socket raytracing::Socket::ApplyOperator(const Socket &other,ccl::No
 	// Case #1
 	return parent->AddMathNode(*this,other,opType);
 }
-raytracing::Socket raytracing::Socket::operator+(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_ADD,ccl::NodeVectorMathType::NODE_VECTOR_MATH_ADD,[](float a,float b) -> float {return a +b;});}
-raytracing::Socket raytracing::Socket::operator-(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_SUBTRACT,ccl::NodeVectorMathType::NODE_VECTOR_MATH_SUBTRACT,[](float a,float b) -> float {return a -b;});}
-raytracing::Socket raytracing::Socket::operator*(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_MULTIPLY,ccl::NodeVectorMathType::NODE_VECTOR_MATH_MULTIPLY,[](float a,float b) -> float {return a *b;});}
-raytracing::Socket raytracing::Socket::operator/(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_DIVIDE,ccl::NodeVectorMathType::NODE_VECTOR_MATH_DIVIDE,[](float a,float b) -> float {return a /b;});}
-raytracing::Socket raytracing::Socket::operator%(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_MODULO,ccl::NodeVectorMathType::NODE_VECTOR_MATH_MODULO,[](float a,float b) -> float {return fmodf(a,b);});}
-raytracing::Socket raytracing::Socket::operator^(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_POWER,{},[](float a,float b) -> float {return powf(a,b);});}
+unirender::Socket unirender::Socket::operator+(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_ADD,ccl::NodeVectorMathType::NODE_VECTOR_MATH_ADD,[](float a,float b) -> float {return a +b;});}
+unirender::Socket unirender::Socket::operator-(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_SUBTRACT,ccl::NodeVectorMathType::NODE_VECTOR_MATH_SUBTRACT,[](float a,float b) -> float {return a -b;});}
+unirender::Socket unirender::Socket::operator*(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_MULTIPLY,ccl::NodeVectorMathType::NODE_VECTOR_MATH_MULTIPLY,[](float a,float b) -> float {return a *b;});}
+unirender::Socket unirender::Socket::operator/(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_DIVIDE,ccl::NodeVectorMathType::NODE_VECTOR_MATH_DIVIDE,[](float a,float b) -> float {return a /b;});}
+unirender::Socket unirender::Socket::operator%(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_MODULO,ccl::NodeVectorMathType::NODE_VECTOR_MATH_MODULO,[](float a,float b) -> float {return fmodf(a,b);});}
+unirender::Socket unirender::Socket::operator^(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_POWER,{},[](float a,float b) -> float {return powf(a,b);});}
 
 constexpr float COMPARISON_EPSILON = 0.00001f;
-raytracing::Socket raytracing::Socket::ApplyComparisonOperator(const Socket &other,bool(*op)(float,float),Socket(*opNode)(GroupNodeDesc&,const Socket&,const Socket&)) const
+unirender::Socket unirender::Socket::ApplyComparisonOperator(const Socket &other,bool(*op)(float,float),Socket(*opNode)(GroupNodeDesc&,const Socket&,const Socket&)) const
 {
 	if(IsConcreteValue() && other.IsConcreteValue())
 	{
@@ -193,32 +193,32 @@ raytracing::Socket raytracing::Socket::ApplyComparisonOperator(const Socket &oth
 		return 0.f; // Invalid case
 	return opNode(*parent,*this,other);
 }
-raytracing::Socket raytracing::Socket::operator<(const Socket &socket) const
+unirender::Socket unirender::Socket::operator<(const Socket &socket) const
 {
 	return ApplyComparisonOperator(socket,[](float a,float b) -> bool {return a < b;},[](GroupNodeDesc &node,const Socket &a,const Socket &b) -> Socket {
 		return node.AddMathNode(a,b,ccl::NodeMathType::NODE_MATH_LESS_THAN);
 	});
 }
-raytracing::Socket raytracing::Socket::operator<=(const Socket &socket) const
+unirender::Socket unirender::Socket::operator<=(const Socket &socket) const
 {
 	return ApplyComparisonOperator(socket,[](float a,float b) -> bool {return a <= b;},[](GroupNodeDesc &node,const Socket &a,const Socket &b) -> Socket {
 		return node.AddMathNode(a,b +COMPARISON_EPSILON,ccl::NodeMathType::NODE_MATH_LESS_THAN);
 	});
 }
-raytracing::Socket raytracing::Socket::operator>(const Socket &socket) const
+unirender::Socket unirender::Socket::operator>(const Socket &socket) const
 {
 	return ApplyComparisonOperator(socket,[](float a,float b) -> bool {return a > b;},[](GroupNodeDesc &node,const Socket &a,const Socket &b) -> Socket {
 		return node.AddMathNode(a,b,ccl::NodeMathType::NODE_MATH_GREATER_THAN);
 	});
 }
-raytracing::Socket raytracing::Socket::operator>=(const Socket &socket) const
+unirender::Socket unirender::Socket::operator>=(const Socket &socket) const
 {
 	return ApplyComparisonOperator(socket,[](float a,float b) -> bool {return a >= b;},[](GroupNodeDesc &node,const Socket &a,const Socket &b) -> Socket {
 		return node.AddMathNode(a,b -COMPARISON_EPSILON,ccl::NodeMathType::NODE_MATH_GREATER_THAN);
 	});
 }
 
-bool raytracing::Socket::operator==(const Socket &other) const
+bool unirender::Socket::operator==(const Socket &other) const
 {
 	auto fOptionalEqual = [](const std::optional<DataValue> &a,const std::optional<DataValue> &b) -> bool {
 		if(a.has_value() != b.has_value())
@@ -229,9 +229,9 @@ bool raytracing::Socket::operator==(const Socket &other) const
 	};
 	return fOptionalEqual(m_value,other.m_value) && m_nodeSocketRef.node.lock().get() == other.m_nodeSocketRef.node.lock().get() && m_nodeSocketRef.socketName == other.m_nodeSocketRef.socketName;
 }
-bool raytracing::Socket::operator!=(const Socket &other) const {return !operator==(other);}
+bool unirender::Socket::operator!=(const Socket &other) const {return !operator==(other);}
 
-void raytracing::Socket::Link(const Socket &other)
+void unirender::Socket::Link(const Socket &other)
 {
 	if(IsConcreteValue() && other.IsConcreteValue())
 		throw Exception{"Cannot link two concrete sockets!"};
@@ -243,7 +243,7 @@ void raytracing::Socket::Link(const Socket &other)
 		return;
 	parent->Link(*this,other);
 }
-std::string raytracing::Socket::ToString() const
+std::string unirender::Socket::ToString() const
 {
 	std::string str = "Socket[" +to_string(GetType()) +"]";
 	if(IsConcreteValue())
@@ -255,56 +255,56 @@ std::string raytracing::Socket::ToString() const
 		{
 			switch(m_value->type)
 			{
-			case raytracing::SocketType::Bool:
-				str += std::to_string(*static_cast<raytracing::STBool*>(m_value->value.get()));
+			case unirender::SocketType::Bool:
+				str += std::to_string(*static_cast<unirender::STBool*>(m_value->value.get()));
 				break;
-			case raytracing::SocketType::Float:
-				str += std::to_string(*static_cast<raytracing::STFloat*>(m_value->value.get()));
+			case unirender::SocketType::Float:
+				str += std::to_string(*static_cast<unirender::STFloat*>(m_value->value.get()));
 				break;
-			case raytracing::SocketType::Int:
-				str += std::to_string(*static_cast<raytracing::STInt*>(m_value->value.get()));
+			case unirender::SocketType::Int:
+				str += std::to_string(*static_cast<unirender::STInt*>(m_value->value.get()));
 				break;
-			case raytracing::SocketType::UInt:
-				str += std::to_string(*static_cast<raytracing::STUInt*>(m_value->value.get()));
+			case unirender::SocketType::UInt:
+				str += std::to_string(*static_cast<unirender::STUInt*>(m_value->value.get()));
 				break;
-			case raytracing::SocketType::Color:
-				str += uvec::to_string(static_cast<raytracing::STColor*>(m_value->value.get()));
+			case unirender::SocketType::Color:
+				str += uvec::to_string(static_cast<unirender::STColor*>(m_value->value.get()));
 				break;
-			case raytracing::SocketType::Vector:
-				str += uvec::to_string(static_cast<raytracing::STVector*>(m_value->value.get()));
+			case unirender::SocketType::Vector:
+				str += uvec::to_string(static_cast<unirender::STVector*>(m_value->value.get()));
 				break;
-			case raytracing::SocketType::Point:
-				str += uvec::to_string(static_cast<raytracing::STPoint*>(m_value->value.get()));
+			case unirender::SocketType::Point:
+				str += uvec::to_string(static_cast<unirender::STPoint*>(m_value->value.get()));
 				break;
-			case raytracing::SocketType::Normal:
-				str += uvec::to_string(static_cast<raytracing::STNormal*>(m_value->value.get()));
+			case unirender::SocketType::Normal:
+				str += uvec::to_string(static_cast<unirender::STNormal*>(m_value->value.get()));
 				break;
-			case raytracing::SocketType::Point2:
+			case unirender::SocketType::Point2:
 			{
 				std::stringstream ss;
-				ss<<*static_cast<raytracing::STPoint2*>(m_value->value.get());
+				ss<<*static_cast<unirender::STPoint2*>(m_value->value.get());
 				str += ss.str();
 				break;
 			}
-			case raytracing::SocketType::String:
-				str += *static_cast<raytracing::STString*>(m_value->value.get());
+			case unirender::SocketType::String:
+				str += *static_cast<unirender::STString*>(m_value->value.get());
 				break;
-			case raytracing::SocketType::Enum:
-				str += std::to_string(*static_cast<raytracing::STEnum*>(m_value->value.get()));
+			case unirender::SocketType::Enum:
+				str += std::to_string(*static_cast<unirender::STEnum*>(m_value->value.get()));
 				break;
-			case raytracing::SocketType::Transform:
+			case unirender::SocketType::Transform:
 			{
 				std::stringstream ss;
-				auto &t = *static_cast<raytracing::STTransform*>(m_value->value.get());
+				auto &t = *static_cast<unirender::STTransform*>(m_value->value.get());
 				ss<<t[0][0]<<','<<t[0][1]<<','<<t[0][2]<<','<<t[1][0]<<','<<t[1][1]<<','<<t[1][2]<<','<<t[2][0]<<','<<t[2][1]<<','<<t[2][2]<<','<<t[3][0]<<','<<t[3][1]<<','<<t[3][2];
 				str += ss.str();
 				break;
 			}
-			case raytracing::SocketType::FloatArray:
+			case unirender::SocketType::FloatArray:
 			{
 				str += '{';
 				auto first = true;
-				for(auto &v : *static_cast<raytracing::STFloatArray*>(m_value->value.get()))
+				for(auto &v : *static_cast<unirender::STFloatArray*>(m_value->value.get()))
 				{
 					if(first)
 						first = false;
@@ -315,11 +315,11 @@ std::string raytracing::Socket::ToString() const
 				str += '}';
 				break;
 			}
-			case raytracing::SocketType::ColorArray:
+			case unirender::SocketType::ColorArray:
 			{
 				str += '{';
 				auto first = true;
-				for(auto &v : *static_cast<raytracing::STColorArray*>(m_value->value.get()))
+				for(auto &v : *static_cast<unirender::STColorArray*>(m_value->value.get()))
 				{
 					if(first)
 						first = false;
@@ -331,7 +331,7 @@ std::string raytracing::Socket::ToString() const
 				break;
 			}
 			}
-			static_assert(umath::to_integral(raytracing::SocketType::Count) == 16);
+			static_assert(umath::to_integral(unirender::SocketType::Count) == 16);
 		}
 		str += "]";
 	}
@@ -349,25 +349,25 @@ std::string raytracing::Socket::ToString() const
 	return str;
 }
 
-bool raytracing::Socket::IsValid() const {return IsConcreteValue() || m_nodeSocketRef.node.expired() == false;}
-bool raytracing::Socket::IsConcreteValue() const {return m_value.has_value();}
-bool raytracing::Socket::IsNodeSocket() const {return !IsConcreteValue();}
-bool raytracing::Socket::IsOutputSocket() const {return IsConcreteValue() || m_nodeSocketRef.output;}
+bool unirender::Socket::IsValid() const {return IsConcreteValue() || m_nodeSocketRef.node.expired() == false;}
+bool unirender::Socket::IsConcreteValue() const {return m_value.has_value();}
+bool unirender::Socket::IsNodeSocket() const {return !IsConcreteValue();}
+bool unirender::Socket::IsOutputSocket() const {return IsConcreteValue() || m_nodeSocketRef.output;}
 
-raytracing::NodeDesc *raytracing::Socket::GetNode(std::string &outSocketName) const
+unirender::NodeDesc *unirender::Socket::GetNode(std::string &outSocketName) const
 {
 	auto *node = GetNode();
 	if(node)
 		outSocketName = m_nodeSocketRef.socketName;
 	return node;
 }
-raytracing::NodeDesc *raytracing::Socket::GetNode() const
+unirender::NodeDesc *unirender::Socket::GetNode() const
 {
 	return m_nodeSocketRef.node.lock().get();
 }
-std::optional<raytracing::DataValue> raytracing::Socket::GetValue() const {return m_value;}
+std::optional<unirender::DataValue> unirender::Socket::GetValue() const {return m_value;}
 
-void raytracing::Socket::Serialize(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const
+void unirender::Socket::Serialize(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const
 {
 	if(IsValid() == false)
 	{
@@ -389,7 +389,7 @@ void raytracing::Socket::Serialize(DataStream &dsOut,const std::unordered_map<co
 	dsOut->WriteString(m_nodeSocketRef.socketName);
 	dsOut->Write<bool>(m_nodeSocketRef.output);
 }
-void raytracing::Socket::Deserialize(GroupNodeDesc &parentGroupNode,DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable)
+void unirender::Socket::Deserialize(GroupNodeDesc &parentGroupNode,DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable)
 {
 	auto type = dsIn->Read<uint8_t>();
 	switch(type)
@@ -416,6 +416,6 @@ void raytracing::Socket::Deserialize(GroupNodeDesc &parentGroupNode,DataStream &
 	}
 }
 
-std::ostream& operator<<(std::ostream &os,const raytracing::Socket &socket) {os<<socket.ToString(); return os;}
+std::ostream& operator<<(std::ostream &os,const unirender::Socket &socket) {os<<socket.ToString(); return os;}
 
 #pragma optimize("",on)

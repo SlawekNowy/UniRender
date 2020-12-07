@@ -12,7 +12,7 @@
 #include <exception>
 #include <string>
 
-namespace raytracing
+namespace unirender
 {
 	class DLLRTUTIL Exception
 		: public std::exception

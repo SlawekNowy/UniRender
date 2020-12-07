@@ -22,10 +22,11 @@
 #include <cinttypes>
 #include <vector>
 
-namespace raytracing
+namespace unirender
 {
 	class Object;
 	class Scene;
+	namespace cycles {class Renderer;};
 	namespace baking
 	{
 		// Note: These are various utility functions from the blender repository, which are required
@@ -42,7 +43,7 @@ namespace raytracing
 			std::shared_ptr<uimg::ImageBuffer> rect;
 		} ImBuf;
 
-		void prepare_bake_data(const Scene &scene,Object &o,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs=false);
+		void prepare_bake_data(const cycles::Renderer &renderer,Object &o,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs=false);
 		void populate_bake_data(ccl::BakeData *data,
 			const int object_id,
 			BakePixel *pixel_array,

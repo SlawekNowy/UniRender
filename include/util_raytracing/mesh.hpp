@@ -19,7 +19,7 @@
 
 namespace ccl {class Mesh; class Attribute; struct float4; struct float3; struct float2;};
 class DataStream;
-namespace raytracing
+namespace unirender
 {
 	void compute_tangents(ccl::Mesh *mesh,bool need_sign,bool active_render);
 	class Shader;
@@ -38,16 +38,16 @@ namespace raytracing
 		{
 			None = 0u,
 			HasAlphas = 1u,
-			HasWrinkles = HasAlphas<<1u,
-
-			CCLObjectOwnedByScene = HasWrinkles<<1u
+			HasWrinkles = HasAlphas<<1u
 		};
+		static const std::string TANGENT_POSTFIX;
+		static const std::string TANGENT_SIGN_POSTIFX;
+		using Smooth = uint8_t; // Boolean value
 		static constexpr ccl::AttributeStandard ALPHA_ATTRIBUTE_TYPE = ccl::AttributeStandard::ATTR_STD_POINTINESS;
 
 		static PMesh Create(const std::string &name,uint64_t numVerts,uint64_t numTris,Flags flags=Flags::None);
 		static PMesh Create(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader);
 		static PMesh Create(DataStream &dsIn,const ShaderCache &cache);
-		virtual ~Mesh() override;
 		util::WeakHandle<Mesh> GetHandle();
 
 		void Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Shader&)> &fGetShaderIndex) const;
@@ -56,20 +56,20 @@ namespace raytracing
 
 		void Merge(const Mesh &other);
 
-		const ccl::float4 *GetNormals() const;
+		/*const ccl::float4 *GetNormals() const;
 		const ccl::float3 *GetTangents() const;
 		const float *GetTangentSigns() const;
 		const float *GetAlphas() const;
 		const float *GetWrinkleFactors() const;
 		const ccl::float2 *GetUVs() const;
-		const ccl::float2 *GetLightmapUVs() const;
+		const ccl::float2 *GetLightmapUVs() const;*/
 		const std::vector<PShader> &GetSubMeshShaders() const;
 		std::vector<PShader> &GetSubMeshShaders();
-		void SetLightmapUVs(std::vector<ccl::float2> &&lightmapUvs);
+		void SetLightmapUVs(std::vector<Vector2> &&lightmapUvs);
 		uint64_t GetVertexCount() const;
 		uint64_t GetTriangleCount() const;
 		uint32_t GetVertexOffset() const;
-		std::string GetName() const;
+		const std::string &GetName() const;
 		bool HasAlphas() const;
 		bool HasWrinkles() const;
 
@@ -79,34 +79,50 @@ namespace raytracing
 		bool AddTriangle(uint32_t idx0,uint32_t idx1,uint32_t idx2,uint32_t shaderIndex);
 		uint32_t AddSubMeshShader(Shader &shader);
 		void Validate() const;
-		ccl::Mesh *operator->();
-		ccl::Mesh *operator*();
+
+		const std::vector<Vector3> &GetVertices() const {return m_verts;}
+		const std::vector<int> &GetTriangles() const {return m_triangles;}
+		const std::vector<Vector3> &GetVertexNormals() const {return m_vertexNormals;}
+		const std::vector<Vector2> &GetUvs() const {return m_uvs;}
+		const std::vector<Vector2> &GetLightmapUvs() const {return m_lightmapUvs;}
+		const std::vector<Vector3> &GetUvTangents() const {return m_uvTangents;}
+		const std::vector<float> &GetUvTangentSigns() const {return m_uvTangentSigns;}
+		const std::optional<std::vector<float>> &GetAlphas() const {return m_alphas;}
+		const std::vector<Smooth> &GetSmooth() const {return m_smooth;}
+		const std::vector<int> &GetShaders() const {return m_shader;}
 
 		// For internal use only
 		std::vector<uint32_t> &GetOriginalShaderIndexTable() {return m_originShaderIndexTable;}
 	private:
-		Mesh(ccl::Mesh &mesh,uint64_t numVerts,uint64_t numTris,Flags flags=Flags::None);
-		void UpdateDataPointers();
-		virtual void DoFinalize(Scene &scene) override;
+		Mesh(uint64_t numVerts,uint64_t numTris,Flags flags=Flags::None);
 		std::vector<Vector2> m_perVertexUvs = {};
 		std::vector<Vector4> m_perVertexTangents = {};
 		std::vector<float> m_perVertexTangentSigns = {};
 		std::vector<float> m_perVertexAlphas = {};
 		std::vector<PShader> m_subMeshShaders = {};
-		ccl::Mesh &m_mesh;
-		ccl::float4 *m_normals = nullptr;
-		ccl::float3 *m_tangents = nullptr;
-		float *m_tangentSigns = nullptr;
-		ccl::float2 *m_uvs = nullptr;
-		float *m_alphas = nullptr;
-		std::vector<ccl::float2> m_lightmapUvs = {};
+		std::vector<Vector2> m_lightmapUvs = {};
 		uint64_t m_numVerts = 0ull;
 		uint64_t m_numTris = 0ull;
 		Flags m_flags = Flags::None;
 
+		// Note: These are moved 1:1 into the ccl::Mesh structure during finalization
+		std::string m_name;
+		std::vector<Vector3> m_verts;
+		std::vector<int> m_triangles;
+		std::vector<Vector3> m_vertexNormals;
+		std::vector<Vector2> m_uvs;
+		std::vector<Vector3> m_uvTangents;
+		std::vector<float> m_uvTangentSigns;
+		std::optional<std::vector<float>> m_alphas {};
+		std::vector<Smooth> m_smooth;
+		std::vector<int> m_shader;
+		//std::vector<ccl::Mesh::SubdFace> m_subdFaces;
+		size_t m_numNGons = 0;
+		size_t m_numSubdFaces = 0;
+
 		std::vector<uint32_t> m_originShaderIndexTable;
 	};
 };
-REGISTER_BASIC_BITWISE_OPERATORS(raytracing::Mesh::Flags)
+REGISTER_BASIC_BITWISE_OPERATORS(unirender::Mesh::Flags)
 
 #endif

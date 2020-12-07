@@ -15,13 +15,16 @@
 #undef GetObject
 
 class DataStream;
-namespace raytracing
+namespace unirender
 {
 	class NodeManager;
 	class Scene;
 	class Mesh;
 	class Object;
 	class Shader;
+	using PShader = std::shared_ptr<Shader>;
+	using PMesh = std::shared_ptr<Mesh>;
+	using PObject = std::shared_ptr<Object>;
 	class DLLRTUTIL ShaderCache
 		: public std::enable_shared_from_this<ShaderCache>
 	{
@@ -58,7 +61,7 @@ namespace raytracing
 			HasUnbakedData = HasBakedData<<1u
 		};
 		ModelCacheChunk(ShaderCache &shaderCache);
-		ModelCacheChunk(DataStream &dsIn,raytracing::NodeManager &nodeManager);
+		ModelCacheChunk(DataStream &dsIn,unirender::NodeManager &nodeManager);
 		void Bake();
 		void GenerateUnbakedData(bool force=false);
 		
@@ -77,7 +80,7 @@ namespace raytracing
 		std::vector<std::shared_ptr<Object>> &GetObjects();
 
 		void Serialize(DataStream &dsOut);
-		void Deserialize(DataStream &dsIn,raytracing::NodeManager &nodeManager);
+		void Deserialize(DataStream &dsIn,unirender::NodeManager &nodeManager);
 
 		const std::vector<DataStream> &GetBakedObjectData() const;
 		const std::vector<DataStream> &GetBakedMeshData() const;
@@ -104,12 +107,12 @@ namespace raytracing
 	{
 	public:
 		static std::shared_ptr<ModelCache> Create();
-		static std::shared_ptr<ModelCache> Create(DataStream &ds,raytracing::NodeManager &nodeManager);
+		static std::shared_ptr<ModelCache> Create(DataStream &ds,unirender::NodeManager &nodeManager);
 
 		void Merge(ModelCache &other);
 
 		void Serialize(DataStream &dsOut);
-		void Deserialize(DataStream &dsIn,raytracing::NodeManager &nodeManager);
+		void Deserialize(DataStream &dsIn,unirender::NodeManager &nodeManager);
 
 		ModelCacheChunk &AddChunk(ShaderCache &shaderCache);
 		const std::vector<ModelCacheChunk> &GetChunks() const {return const_cast<ModelCache*>(this)->GetChunks();}
@@ -126,6 +129,6 @@ namespace raytracing
 		bool m_unique = false;
 	};
 };
-REGISTER_BASIC_BITWISE_OPERATORS(raytracing::ModelCacheChunk::Flags)
+REGISTER_BASIC_BITWISE_OPERATORS(unirender::ModelCacheChunk::Flags)
 
 #endif

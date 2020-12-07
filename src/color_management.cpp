@@ -10,7 +10,7 @@
 #include <sharedutils/util.h>
 #include <sharedutils/util_path.hpp>
 
-std::shared_ptr<util::ocio::ColorProcessor> raytracing::create_color_transform_processor(const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr)
+std::shared_ptr<util::ocio::ColorProcessor> unirender::create_color_transform_processor(const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr)
 {
 	auto ocioConfigLocation = util::Path::CreatePath(util::get_program_path());
 	ocioConfigLocation += "modules/open_color_io/configs/";

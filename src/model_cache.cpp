@@ -14,21 +14,21 @@
 #undef GetObject
 
 #pragma optimize("",off)
-std::shared_ptr<raytracing::ShaderCache> raytracing::ShaderCache::Create()
+std::shared_ptr<unirender::ShaderCache> unirender::ShaderCache::Create()
 {
 	return std::shared_ptr<ShaderCache>{new ShaderCache{}};
 }
-std::shared_ptr<raytracing::ShaderCache> raytracing::ShaderCache::Create(DataStream &ds,NodeManager &nodeManager)
+std::shared_ptr<unirender::ShaderCache> unirender::ShaderCache::Create(DataStream &ds,NodeManager &nodeManager)
 {
 	auto cache = Create();
 	cache->Deserialize(ds,nodeManager);
 	return cache;
 }
 
-const std::vector<std::shared_ptr<raytracing::Shader>> &raytracing::ShaderCache::GetShaders() const {return m_shaders;}
-std::vector<std::shared_ptr<raytracing::Shader>> &raytracing::ShaderCache::GetShaders() {return m_shaders;}
+const std::vector<std::shared_ptr<unirender::Shader>> &unirender::ShaderCache::GetShaders() const {return m_shaders;}
+std::vector<std::shared_ptr<unirender::Shader>> &unirender::ShaderCache::GetShaders() {return m_shaders;}
 
-size_t raytracing::ShaderCache::AddShader(Shader &shader)
+size_t unirender::ShaderCache::AddShader(Shader &shader)
 {
 	if(m_shaders.size() == m_shaders.capacity())
 		m_shaders.reserve(m_shaders.size() *1.5 +50);
@@ -36,16 +36,16 @@ size_t raytracing::ShaderCache::AddShader(Shader &shader)
 	return m_shaders.size() -1;
 }
 
-raytracing::PShader raytracing::ShaderCache::GetShader(uint32_t idx) const {return (idx < m_shaders.size()) ? m_shaders.at(idx) : nullptr;}
+unirender::PShader unirender::ShaderCache::GetShader(uint32_t idx) const {return (idx < m_shaders.size()) ? m_shaders.at(idx) : nullptr;}
 
-void raytracing::ShaderCache::Merge(const ShaderCache &other)
+void unirender::ShaderCache::Merge(const ShaderCache &other)
 {
 	m_shaders.reserve(m_shaders.size() +other.m_shaders.size());
 	for(auto &s : other.m_shaders)
 		m_shaders.push_back(s);
 }
 
-std::unordered_map<const raytracing::Shader*,size_t> raytracing::ShaderCache::GetShaderToIndexTable() const
+std::unordered_map<const unirender::Shader*,size_t> unirender::ShaderCache::GetShaderToIndexTable() const
 {
 	std::unordered_map<const Shader*,size_t> shaderToIndex;
 	shaderToIndex.reserve(m_shaders.size());
@@ -54,7 +54,7 @@ std::unordered_map<const raytracing::Shader*,size_t> raytracing::ShaderCache::Ge
 	return shaderToIndex;
 }
 
-void raytracing::ShaderCache::Serialize(DataStream &dsOut)
+void unirender::ShaderCache::Serialize(DataStream &dsOut)
 {
 	dsOut->Write<decltype(Scene::SERIALIZATION_VERSION)>(Scene::SERIALIZATION_VERSION);
 	dsOut->Write<uint32_t>(m_shaders.size());
@@ -68,7 +68,7 @@ void raytracing::ShaderCache::Serialize(DataStream &dsOut)
 		shaderToIndex[s.get()] = shaderIdx++;
 	}
 }
-void raytracing::ShaderCache::Deserialize(DataStream &dsIn,NodeManager &nodeManager)
+void unirender::ShaderCache::Deserialize(DataStream &dsIn,NodeManager &nodeManager)
 {
 	auto version = dsIn->Read<uint32_t>();
 	if(version < 3 || version > Scene::SERIALIZATION_VERSION)
@@ -85,17 +85,17 @@ void raytracing::ShaderCache::Deserialize(DataStream &dsIn,NodeManager &nodeMana
 
 //////////
 
-raytracing::ModelCacheChunk::ModelCacheChunk(ShaderCache &shaderCache)
+unirender::ModelCacheChunk::ModelCacheChunk(ShaderCache &shaderCache)
 	: m_shaderCache{shaderCache.shared_from_this()},m_serializationVersion{Scene::SERIALIZATION_VERSION}
 {}
-raytracing::ModelCacheChunk::ModelCacheChunk(DataStream &dsIn,raytracing::NodeManager &nodeManager)
+unirender::ModelCacheChunk::ModelCacheChunk(DataStream &dsIn,unirender::NodeManager &nodeManager)
 	: m_serializationVersion{Scene::SERIALIZATION_VERSION}
 {
 	Deserialize(dsIn,nodeManager);
 }
-const std::vector<DataStream> &raytracing::ModelCacheChunk::GetBakedObjectData() const {return m_bakedObjects;}
-const std::vector<DataStream> &raytracing::ModelCacheChunk::GetBakedMeshData() const {return m_bakedMeshes;}
-std::unordered_map<const raytracing::Mesh*,size_t> raytracing::ModelCacheChunk::GetMeshToIndexTable() const
+const std::vector<DataStream> &unirender::ModelCacheChunk::GetBakedObjectData() const {return m_bakedObjects;}
+const std::vector<DataStream> &unirender::ModelCacheChunk::GetBakedMeshData() const {return m_bakedMeshes;}
+std::unordered_map<const unirender::Mesh*,size_t> unirender::ModelCacheChunk::GetMeshToIndexTable() const
 {
 	std::unordered_map<const Mesh*,size_t> meshToIndex;
 	meshToIndex.reserve(m_meshes.size());
@@ -103,7 +103,7 @@ std::unordered_map<const raytracing::Mesh*,size_t> raytracing::ModelCacheChunk::
 		meshToIndex[m_meshes.at(i).get()] = i;
 	return meshToIndex;
 }
-void raytracing::ModelCacheChunk::Bake()
+void unirender::ModelCacheChunk::Bake()
 {
 	if(umath::is_flag_set(m_flags,Flags::HasBakedData))
 		return;
@@ -139,12 +139,12 @@ void raytracing::ModelCacheChunk::Bake()
 	m_flags |= Flags::HasBakedData;
 }
 
-const std::vector<std::shared_ptr<raytracing::Mesh>> &raytracing::ModelCacheChunk::GetMeshes() const {return const_cast<ModelCacheChunk*>(this)->GetMeshes();}
-std::vector<std::shared_ptr<raytracing::Mesh>> &raytracing::ModelCacheChunk::GetMeshes() {return m_meshes;}
-const std::vector<std::shared_ptr<raytracing::Object>> &raytracing::ModelCacheChunk::GetObjects() const {return const_cast<ModelCacheChunk*>(this)->GetObjects();}
-std::vector<std::shared_ptr<raytracing::Object>> &raytracing::ModelCacheChunk::GetObjects() {return m_objects;}
+const std::vector<std::shared_ptr<unirender::Mesh>> &unirender::ModelCacheChunk::GetMeshes() const {return const_cast<ModelCacheChunk*>(this)->GetMeshes();}
+std::vector<std::shared_ptr<unirender::Mesh>> &unirender::ModelCacheChunk::GetMeshes() {return m_meshes;}
+const std::vector<std::shared_ptr<unirender::Object>> &unirender::ModelCacheChunk::GetObjects() const {return const_cast<ModelCacheChunk*>(this)->GetObjects();}
+std::vector<std::shared_ptr<unirender::Object>> &unirender::ModelCacheChunk::GetObjects() {return m_objects;}
 
-size_t raytracing::ModelCacheChunk::AddMesh(Mesh &mesh)
+size_t unirender::ModelCacheChunk::AddMesh(Mesh &mesh)
 {
 	Unbake();
 	if(m_meshes.size() == m_meshes.capacity())
@@ -152,7 +152,7 @@ size_t raytracing::ModelCacheChunk::AddMesh(Mesh &mesh)
 	m_meshes.push_back(mesh.shared_from_this());
 	return m_meshes.size() -1;
 }
-size_t raytracing::ModelCacheChunk::AddObject(Object &obj)
+size_t unirender::ModelCacheChunk::AddObject(Object &obj)
 {
 	Unbake();
 	if(m_objects.size() == m_objects.capacity())
@@ -160,7 +160,7 @@ size_t raytracing::ModelCacheChunk::AddObject(Object &obj)
 	m_objects.push_back(obj.shared_from_this());
 	return m_objects.size() -1;
 }
-void raytracing::ModelCacheChunk::RemoveMesh(Mesh &mesh)
+void unirender::ModelCacheChunk::RemoveMesh(Mesh &mesh)
 {
 	auto it = std::find_if(m_meshes.begin(),m_meshes.end(),[&mesh](const std::shared_ptr<Mesh> &other) {
 		return other.get() == &mesh;
@@ -169,7 +169,7 @@ void raytracing::ModelCacheChunk::RemoveMesh(Mesh &mesh)
 		return;
 	m_meshes.erase(it);
 }
-void raytracing::ModelCacheChunk::RemoveObject(Object &obj)
+void unirender::ModelCacheChunk::RemoveObject(Object &obj)
 {
 	auto it = std::find_if(m_objects.begin(),m_objects.end(),[&obj](const std::shared_ptr<Object> &other) {
 		return other.get() == &obj;
@@ -179,10 +179,10 @@ void raytracing::ModelCacheChunk::RemoveObject(Object &obj)
 	m_objects.erase(it);
 }
 
-raytracing::PMesh raytracing::ModelCacheChunk::GetMesh(uint32_t idx) const {return (idx < m_meshes.size()) ? m_meshes.at(idx) : nullptr;}
-raytracing::PObject raytracing::ModelCacheChunk::GetObject(uint32_t idx) const {return (idx < m_objects.size()) ? m_objects.at(idx) : nullptr;}
+unirender::PMesh unirender::ModelCacheChunk::GetMesh(uint32_t idx) const {return (idx < m_meshes.size()) ? m_meshes.at(idx) : nullptr;}
+unirender::PObject unirender::ModelCacheChunk::GetObject(uint32_t idx) const {return (idx < m_objects.size()) ? m_objects.at(idx) : nullptr;}
 
-void raytracing::ModelCacheChunk::GenerateUnbakedData(bool force)
+void unirender::ModelCacheChunk::GenerateUnbakedData(bool force)
 {
 	if(umath::is_flag_set(m_flags,Flags::HasUnbakedData) && force == false)
 		return;
@@ -213,7 +213,7 @@ void raytracing::ModelCacheChunk::GenerateUnbakedData(bool force)
 	m_flags |= Flags::HasUnbakedData;
 }
 
-void raytracing::ModelCacheChunk::Unbake()
+void unirender::ModelCacheChunk::Unbake()
 {
 	if(umath::is_flag_set(m_flags,Flags::HasBakedData) == false)
 		return;
@@ -224,7 +224,7 @@ void raytracing::ModelCacheChunk::Unbake()
 	umath::remove_flag(m_flags,Flags::HasBakedData);
 }
 
-void raytracing::ModelCacheChunk::Serialize(DataStream &dsOut)
+void unirender::ModelCacheChunk::Serialize(DataStream &dsOut)
 {
 	Bake();
 	
@@ -249,7 +249,7 @@ void raytracing::ModelCacheChunk::Serialize(DataStream &dsOut)
 	fWriteList(m_bakedObjects);
 	fWriteList(m_bakedMeshes);
 }
-void raytracing::ModelCacheChunk::Deserialize(DataStream &dsIn,raytracing::NodeManager &nodeManager)
+void unirender::ModelCacheChunk::Deserialize(DataStream &dsIn,unirender::NodeManager &nodeManager)
 {
 	auto version = dsIn->Read<uint32_t>();
 	if(version < 3 || version > Scene::SERIALIZATION_VERSION)
@@ -276,41 +276,41 @@ void raytracing::ModelCacheChunk::Deserialize(DataStream &dsIn,raytracing::NodeM
 
 //////////
 
-std::shared_ptr<raytracing::ModelCache> raytracing::ModelCache::Create()
+std::shared_ptr<unirender::ModelCache> unirender::ModelCache::Create()
 {
 	return std::shared_ptr<ModelCache>{new ModelCache{}};
 }
 
-std::shared_ptr<raytracing::ModelCache> raytracing::ModelCache::Create(DataStream &ds,raytracing::NodeManager &nodeManager)
+std::shared_ptr<unirender::ModelCache> unirender::ModelCache::Create(DataStream &ds,unirender::NodeManager &nodeManager)
 {
 	auto cache = Create();
 	cache->Deserialize(ds,nodeManager);
 	return cache;
 }
 
-void raytracing::ModelCache::SetUnique(bool unique) {m_unique = unique;}
-bool raytracing::ModelCache::IsUnique() const {return m_unique;}
+void unirender::ModelCache::SetUnique(bool unique) {m_unique = unique;}
+bool unirender::ModelCache::IsUnique() const {return m_unique;}
 
-void raytracing::ModelCache::Merge(ModelCache &other)
+void unirender::ModelCache::Merge(ModelCache &other)
 {
 	m_chunks.reserve(m_chunks.size() +other.m_chunks.size());
 	for(auto &chunk : other.m_chunks)
 		m_chunks.push_back(chunk);
 }
 
-void raytracing::ModelCache::Bake()
+void unirender::ModelCache::Bake()
 {
 	for(auto &chunk : m_chunks)
 		chunk.Bake();
 }
 
-void raytracing::ModelCache::GenerateData()
+void unirender::ModelCache::GenerateData()
 {
 	for(auto &chunk : m_chunks)
 		chunk.GenerateUnbakedData(true);
 }
 
-void raytracing::ModelCache::Serialize(DataStream &dsOut)
+void unirender::ModelCache::Serialize(DataStream &dsOut)
 {
 	Bake();
 	dsOut->Write<decltype(Scene::SERIALIZATION_VERSION)>(Scene::SERIALIZATION_VERSION);
@@ -319,7 +319,7 @@ void raytracing::ModelCache::Serialize(DataStream &dsOut)
 	for(auto &chunk : m_chunks)
 		chunk.Serialize(dsOut);
 }
-void raytracing::ModelCache::Deserialize(DataStream &dsIn,raytracing::NodeManager &nodeManager)
+void unirender::ModelCache::Deserialize(DataStream &dsIn,unirender::NodeManager &nodeManager)
 {
 	auto version = dsIn->Read<uint32_t>();
 	if(version < 3 || version > Scene::SERIALIZATION_VERSION)
@@ -329,7 +329,7 @@ void raytracing::ModelCache::Deserialize(DataStream &dsIn,raytracing::NodeManage
 	for(auto i=decltype(numChunks){0u};i<numChunks;++i)
 		m_chunks.emplace_back(dsIn,nodeManager);
 }
-raytracing::ModelCacheChunk &raytracing::ModelCache::AddChunk(ShaderCache &shaderCache)
+unirender::ModelCacheChunk &unirender::ModelCache::AddChunk(ShaderCache &shaderCache)
 {
 	if(m_chunks.size() == m_chunks.capacity())
 		m_chunks.reserve(m_chunks.size() *1.5 +10);

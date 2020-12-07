@@ -29,7 +29,7 @@ namespace ccl
 };
 
 class DataStream;
-namespace raytracing
+namespace unirender
 {
 	enum class Channel : uint8_t
 	{
@@ -554,11 +554,11 @@ namespace raytracing
 		float m_irisUvRadius = 0.2f;
 	};
 };
-REGISTER_BASIC_BITWISE_OPERATORS(raytracing::Shader::Flags)
-REGISTER_BASIC_BITWISE_OPERATORS(raytracing::ShaderParticle::RenderFlags)
+REGISTER_BASIC_BITWISE_OPERATORS(unirender::Shader::Flags)
+REGISTER_BASIC_BITWISE_OPERATORS(unirender::ShaderParticle::RenderFlags)
 
 template<class TShader>
-	std::shared_ptr<TShader> raytracing::Shader::Create(Scene &scene,const std::string &name)
+	std::shared_ptr<TShader> unirender::Shader::Create(Scene &scene,const std::string &name)
 {
 	auto pShader = PShader{new TShader{scene,name}};
 	scene.m_shaders.push_back(pShader);
@@ -566,7 +566,7 @@ template<class TShader>
 }
 
 template<typename T>
-	bool raytracing::ShaderNode::SetInputArgument(const std::string &inputName,const T &arg)
+	bool unirender::ShaderNode::SetInputArgument(const std::string &inputName,const T &arg)
 {
 	auto it = std::find_if(m_shaderNode.inputs.begin(),m_shaderNode.inputs.end(),[&inputName](const ccl::ShaderInput *shInput) {
 		return ccl::string_iequals(shInput->socket_type.name.string(),inputName);

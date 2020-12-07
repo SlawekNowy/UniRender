@@ -12,21 +12,17 @@
 #include <render/camera.h>
 #include <render/scene.h>
 
-using namespace raytracing;
+using namespace unirender;
 
 #pragma optimize("",off)
 PCamera Camera::Create(Scene &scene)
 {
-	return PCamera{new Camera{scene,*scene->camera}};
+	return PCamera{new Camera{scene}};
 }
 
-Camera::Camera(Scene &scene,ccl::Camera &cam)
-	: WorldObject{},SceneObject{scene},m_camera{cam}
-{
-	cam.type = ccl::CameraType::CAMERA_PERSPECTIVE;
-	cam.matrix = ccl::transform_identity();
-	cam.interocular_distance = 0.065;
-}
+Camera::Camera(Scene &scene)
+	: WorldObject{},SceneObject{scene}
+{}
 
 util::WeakHandle<Camera> Camera::GetHandle()
 {
@@ -36,210 +32,58 @@ util::WeakHandle<Camera> Camera::GetHandle()
 void Camera::Serialize(DataStream &dsOut) const
 {
 	WorldObject::Serialize(dsOut);
-	dsOut->Write(m_camera.type);
-	dsOut->Write(m_camera.matrix);
-	dsOut->Write(m_camera.width);
-	dsOut->Write(m_camera.height);
-	dsOut->Write(m_camera.farclip);
-	dsOut->Write(m_camera.nearclip);
-	dsOut->Write(m_camera.fov);
-	dsOut->Write(m_camera.focaldistance);
-	dsOut->Write(m_camera.aperturesize);
-	dsOut->Write(m_camera.aperture_ratio);
-	dsOut->Write(m_camera.blades);
-	dsOut->Write(m_camera.bladesrotation);
-	dsOut->Write(m_camera.panorama_type);
-	dsOut->Write(m_camera.shuttertime);
-	dsOut->Write(m_camera.rolling_shutter_type);
-	dsOut->Write(m_camera.rolling_shutter_duration);
-	dsOut->Write(m_camera.fisheye_lens);
-	dsOut->Write(m_camera.fisheye_fov);
-	dsOut->Write(m_dofEnabled);
-
-	dsOut->Write(m_camera.interocular_distance);
-	dsOut->Write(m_camera.longitude_min);
-	dsOut->Write(m_camera.longitude_max);
-	dsOut->Write(m_camera.latitude_min);
-	dsOut->Write(m_camera.latitude_max);
-	dsOut->Write(m_camera.use_spherical_stereo);
-	dsOut->Write(m_stereoscopic);
+	Scene::SerializeDataBlock(*this,dsOut,offsetof(Camera,m_type));
 }
 void Camera::Deserialize(uint32_t version,DataStream &dsIn)
 {
 	WorldObject::Deserialize(version,dsIn);
-	m_camera.type = dsIn->Read<decltype(m_camera.type)>();
-	m_camera.matrix = dsIn->Read<decltype(m_camera.matrix)>();
-	m_camera.width = dsIn->Read<decltype(m_camera.width)>();
-	m_camera.height = dsIn->Read<decltype(m_camera.height)>();
-	m_camera.farclip = dsIn->Read<decltype(m_camera.farclip)>();
-	m_camera.nearclip = dsIn->Read<decltype(m_camera.nearclip)>();
-	m_camera.fov = dsIn->Read<decltype(m_camera.fov)>();
-	m_camera.focaldistance = dsIn->Read<decltype(m_camera.focaldistance)>();
-	m_camera.aperturesize = dsIn->Read<decltype(m_camera.aperturesize)>();
-	m_camera.aperture_ratio = dsIn->Read<decltype(m_camera.aperture_ratio)>();
-	m_camera.blades = dsIn->Read<decltype(m_camera.blades)>();
-	m_camera.bladesrotation = dsIn->Read<decltype(m_camera.bladesrotation)>();
-	m_camera.panorama_type = dsIn->Read<decltype(m_camera.panorama_type)>();
-	m_camera.shuttertime = dsIn->Read<decltype(m_camera.shuttertime)>();
-	m_camera.rolling_shutter_type = dsIn->Read<decltype(m_camera.rolling_shutter_type)>();
-	m_camera.rolling_shutter_duration = dsIn->Read<decltype(m_camera.rolling_shutter_duration)>();
-	m_camera.fisheye_lens = dsIn->Read<decltype(m_camera.fisheye_lens)>();
-	m_camera.fisheye_fov = dsIn->Read<decltype(m_camera.fisheye_fov)>();
-	m_dofEnabled = dsIn->Read<decltype(m_dofEnabled)>();
-
-	if(version < 1)
-		return;
-
-	m_camera.interocular_distance = dsIn->Read<decltype(m_camera.interocular_distance)>();
-	m_camera.longitude_min = dsIn->Read<decltype(m_camera.longitude_min)>();
-	m_camera.longitude_max = dsIn->Read<decltype(m_camera.longitude_max)>();
-	m_camera.latitude_min = dsIn->Read<decltype(m_camera.latitude_min)>();
-	m_camera.latitude_max = dsIn->Read<decltype(m_camera.latitude_max)>();
-	m_camera.use_spherical_stereo = dsIn->Read<decltype(m_camera.use_spherical_stereo)>();
-	m_stereoscopic = dsIn->Read<decltype(m_stereoscopic)>();
+	Scene::DeserializeDataBlock(*this,dsIn,offsetof(Camera,m_type));
 }
 
-void Camera::SetInterocularDistance(umath::Meter dist) {m_camera.interocular_distance = dist;}
+void Camera::SetInterocularDistance(umath::Millimeter dist) {m_interocularDistance = dist;}
 void Camera::SetEquirectangularHorizontalRange(umath::Degree range)
 {
-	range = umath::deg_to_rad(range);
-	m_camera.longitude_min = -range /2.f;
-	m_camera.longitude_max = range /2.f;
+	m_longitudeMin = -range /2.f;
+	m_longitudeMax = range /2.f;
 }
 void Camera::SetEquirectangularVerticalRange(umath::Degree range)
 {
-	range = umath::deg_to_rad(range);
-	m_camera.latitude_min = -range /2.f;
-	m_camera.latitude_max = range /2.f;
+	m_latitudeMin = -range /2.f;
+	m_latitudeMax = range /2.f;
 }
-void Camera::SetStereoscopic(bool stereo)
-{
-	m_camera.use_spherical_stereo = stereo;
-	m_stereoscopic = stereo;
-}
-bool Camera::IsStereoscopic() const {return m_stereoscopic && m_camera.type == ccl::CameraType::CAMERA_PANORAMA;}
-void Camera::SetStereoscopicEye(StereoEye eye)
-{
-	switch(eye)
-	{
-	case StereoEye::Left:
-		m_camera.stereo_eye = ccl::Camera::StereoEye::STEREO_LEFT;
-		break;
-	case StereoEye::Right:
-		m_camera.stereo_eye = ccl::Camera::StereoEye::STEREO_RIGHT;
-		break;
-	}
-}
+void Camera::SetStereoscopic(bool stereo) {m_stereoscopic = stereo;}
+bool Camera::IsStereoscopic() const {return m_stereoscopic && m_type == CameraType::Panorama;}
 
 void Camera::SetResolution(uint32_t width,uint32_t height)
 {
-	m_camera.width = width;
-	m_camera.height = height;
+	m_width = width;
+	m_height = height;
 }
 
 void Camera::GetResolution(uint32_t &width,uint32_t &height) const
 {
-	width = m_camera.width;
-	height = m_camera.height;
+	width = m_width;
+	height = m_height;
 }
 
-void Camera::SetFarZ(float farZ) {m_camera.farclip = Scene::ToCyclesLength(farZ);}
-void Camera::SetNearZ(float nearZ) {m_camera.nearclip = Scene::ToCyclesLength(nearZ);}
-void Camera::SetFOV(umath::Radian fov) {m_camera.fov = fov;}
-float Camera::GetAspectRatio() const {return static_cast<float>(m_camera.width) /static_cast<float>(m_camera.height);}
-float Camera::GetNearZ() const {return m_camera.nearclip;}
-float Camera::GetFarZ() const {return m_camera.farclip;}
-void Camera::SetCameraType(CameraType type)
-{
-	switch(type)
-	{
-	case CameraType::Perspective:
-		m_camera.type = ccl::CameraType::CAMERA_PERSPECTIVE;
-		break;
-	case CameraType::Orthographic:
-		m_camera.type = ccl::CameraType::CAMERA_ORTHOGRAPHIC;
-		break;
-	case CameraType::Panorama:
-		m_camera.type = ccl::CameraType::CAMERA_PANORAMA;
-		break;
-	}
-}
+void Camera::SetFarZ(umath::Meter farZ) {m_farZ = farZ;}
+void Camera::SetNearZ(umath::Meter nearZ) {m_nearZ = nearZ;}
+void Camera::SetFOV(umath::Degree fov) {m_fov = fov;}
+float Camera::GetAspectRatio() const {return static_cast<float>(m_width) /static_cast<float>(m_height);}
+void Camera::SetCameraType(CameraType type) {m_type = type;}
 void Camera::SetDepthOfFieldEnabled(bool enabled) {m_dofEnabled = enabled;}
-void Camera::SetFocalDistance(float focalDistance) {m_camera.focaldistance = Scene::ToCyclesLength(focalDistance);}
-void Camera::SetApertureSize(float size) {m_camera.aperturesize = size;}
-void Camera::SetBokehRatio(float ratio) {m_camera.aperture_ratio = ratio;}
-void Camera::SetBladeCount(uint32_t numBlades) {m_camera.blades = numBlades;}
-void Camera::SetBladesRotation(float rotation) {m_camera.bladesrotation = rotation;}
+void Camera::SetFocalDistance(umath::Meter focalDistance) {m_focalDistance = focalDistance;}
+void Camera::SetApertureSize(float size) {m_apertureSize = size;}
+void Camera::SetBokehRatio(float ratio) {m_apertureRatio = ratio;}
+void Camera::SetBladeCount(uint32_t numBlades) {m_numBlades = numBlades;}
+void Camera::SetBladesRotation(umath::Degree rotation) {m_bladesRotation = rotation;}
 void Camera::SetApertureSizeFromFStop(float fstop,umath::Millimeter focalLength)
 {
-	SetApertureSize(umath::camera::calc_aperture_size_from_fstop(fstop,focalLength,m_camera.type == ccl::CameraType::CAMERA_ORTHOGRAPHIC));
+	SetApertureSize(umath::camera::calc_aperture_size_from_fstop(fstop,focalLength,m_type == CameraType::Orthographic));
 }
 void Camera::SetFOVFromFocalLength(umath::Millimeter focalLength,umath::Millimeter sensorSize)
 {
 	SetFOV(umath::camera::calc_fov_from_lens(sensorSize,focalLength,GetAspectRatio()));
 }
-void Camera::SetPanoramaType(PanoramaType type)
-{
-	switch(type)
-	{
-	case PanoramaType::Equirectangular:
-		m_camera.panorama_type = ccl::PanoramaType::PANORAMA_EQUIRECTANGULAR;
-		break;
-	case PanoramaType::FisheyeEquidistant:
-		m_camera.panorama_type = ccl::PanoramaType::PANORAMA_FISHEYE_EQUIDISTANT;
-		break;
-	case PanoramaType::FisheyeEquisolid:
-		m_camera.panorama_type = ccl::PanoramaType::PANORAMA_FISHEYE_EQUISOLID;
-		break;
-	case PanoramaType::Mirrorball:
-		m_camera.panorama_type = ccl::PanoramaType::PANORAMA_MIRRORBALL;
-		break;
-	}
-}
-void Camera::SetShutterTime(float timeInFrames) {m_camera.shuttertime = timeInFrames;}
-void Camera::SetRollingShutterEnabled(bool enabled)
-{
-	m_camera.rolling_shutter_type = enabled ? ccl::Camera::RollingShutterType::ROLLING_SHUTTER_TOP : ccl::Camera::RollingShutterType::ROLLING_SHUTTER_NONE;
-}
-void Camera::SetRollingShutterDuration(float duration)
-{
-	m_camera.rolling_shutter_duration = duration;
-}
-
-void Camera::DoFinalize(Scene &scene)
-{
-#ifdef ENABLE_MOTION_BLUR_TEST
-	SetShutterTime(1.f);
-#endif
-
-	if(m_dofEnabled == false)
-		m_camera.aperturesize = 0.f;
-	if(m_camera.type == ccl::CameraType::CAMERA_PANORAMA)
-	{
-		auto rot = GetRotation();
-		switch(m_camera.panorama_type)
-		{
-		case ccl::PanoramaType::PANORAMA_MIRRORBALL:
-			rot *= uquat::create(EulerAngles{-90.f,0.f,0.f});
-			break;
-		case ccl::PanoramaType::PANORAMA_FISHEYE_EQUISOLID:
-			m_camera.fisheye_lens = 10.5f;
-			m_camera.fisheye_fov = 180.f;
-			// No break is intentional!
-		default:
-			rot *= uquat::create(EulerAngles{-90.f,-90.f,0.f});
-			break;
-		}
-		SetRotation(rot);
-	}
-
-	m_camera.matrix = Scene::ToCyclesTransform(GetPose(),true);
-	m_camera.compute_auto_viewplane();
-
-	m_camera.tag_update();
-	m_camera.update(*GetScene());
-}
-
-ccl::Camera *Camera::operator->() {return &m_camera;}
-ccl::Camera *Camera::operator*() {return &m_camera;}
+void Camera::SetPanoramaType(PanoramaType type) {m_panoramaType = type;}
 #pragma optimize("",on)

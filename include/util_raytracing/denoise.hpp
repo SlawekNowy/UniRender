@@ -14,7 +14,7 @@
 
 namespace uimg {class ImageBuffer;};
 namespace oidn {class DeviceRef;};
-namespace raytracing
+namespace unirender
 {
 	struct DLLRTUTIL DenoiseInfo
 	{
