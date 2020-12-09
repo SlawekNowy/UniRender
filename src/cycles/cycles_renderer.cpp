@@ -721,7 +721,8 @@ void unirender::cycles::Renderer::ApplyPostProcessing(uimg::ImageBuffer &imgBuff
 		imgBuffer.FlipHorizontally();
 
 	// We will also always have to flip the image vertically, since the data seems to be bottom->top and we need it top->bottom
-	imgBuffer.FlipVertically();
+	if(renderMode != Scene::RenderMode::BakeDiffuseLighting)
+		imgBuffer.FlipVertically();
 	imgBuffer.ClearAlpha();
 }
 
@@ -1545,7 +1546,8 @@ unirender::Object *unirender::cycles::Renderer::FindObject(const std::string &ob
 	}
 	return nullptr;
 }
-
+#include <util_image.hpp>
+#include <fsys/filesystem.h>
 void unirender::cycles::Renderer::StartTextureBaking(RenderWorker &worker)
 {
 	// Baking cannot be done with cycles directly, we will have to
@@ -1564,10 +1566,10 @@ void unirender::cycles::Renderer::StartTextureBaking(RenderWorker &worker)
 		{
 		case Scene::RenderMode::BakeAmbientOcclusion:
 		case Scene::RenderMode::BakeDiffuseLighting:
-			if(albedoOnly)
+			/*if(albedoOnly)
 				ccl::Pass::add(ccl::PASS_DIFFUSE_COLOR,m_cclScene->film->passes);
 			else
-				ccl::Pass::add(ccl::PASS_LIGHT,m_cclScene->film->passes);
+				ccl::Pass::add(ccl::PASS_LIGHT,m_cclScene->film->passes);*/
 			break;
 		case Scene::RenderMode::BakeNormals:
 			break;
@@ -1593,8 +1595,14 @@ void unirender::cycles::Renderer::StartTextureBaking(RenderWorker &worker)
 			ccl::vector<ccl::Pass> passes;
 			if(m_renderMode == Scene::RenderMode::BakeDiffuseLighting)
 			{
+				//ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
+				//ccl::Pass::add(ccl::PassType::PASS_LIGHT,passes,"light");
 				ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
 				ccl::Pass::add(ccl::PassType::PASS_LIGHT,passes,"light");
+				//ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_COLOR,passes,"diffuse_color");
+				//ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_DIRECT,passes,"diffuse_direct");
+				//ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_INDIRECT,passes,"diffuse_indirect");
+				m_cclScene->film->display_pass = ccl::PassType::PASS_COMBINED;
 			}
 			else
 			{
@@ -1623,6 +1631,14 @@ void unirender::cycles::Renderer::StartTextureBaking(RenderWorker &worker)
 			film.display_pass = displayPass;*/
 		}
 
+		// Multiple importance sampling doesn't work properly with lightmap baking
+		// and causes hard light edges
+		for(auto *l : m_cclScene->lights)
+		{
+			l->use_mis = false;
+			l->tag_update(m_cclScene);
+		}
+
 		m_cclScene->film->tag_update(m_cclScene);
 		m_cclScene->integrator->tag_update(m_cclScene);
 		
@@ -1639,7 +1655,7 @@ void unirender::cycles::Renderer::StartTextureBaking(RenderWorker &worker)
 			bake_pass_filter = ccl::BAKE_FILTER_AO;
 			break;
 		case Scene::RenderMode::BakeDiffuseLighting:
-			if(albedoOnly)
+			/*if(albedoOnly)
 			{
 				shaderType = ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;
 				bake_pass_filter = ccl::BAKE_FILTER_DIFFUSE | ccl::BAKE_FILTER_COLOR;
@@ -1648,14 +1664,18 @@ void unirender::cycles::Renderer::StartTextureBaking(RenderWorker &worker)
 			{
 				shaderType = ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;//ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;
 				bake_pass_filter = 510 &~ccl::BAKE_FILTER_COLOR &~ccl::BAKE_FILTER_GLOSSY;//ccl::BakePassFilterCombos::BAKE_FILTER_COMBINED;//ccl::BAKE_FILTER_DIFFUSE | ccl::BAKE_FILTER_INDIRECT | ccl::BAKE_FILTER_DIRECT;
-			}
+			}*/
+			//shaderType = ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;
+			shaderType = ccl::ShaderEvalType::SHADER_EVAL_COMBINED;
+			bake_pass_filter = 255;//ccl::BAKE_FILTER_DIFFUSE;
 			break;
 		case Scene::RenderMode::BakeNormals:
 			shaderType = ccl::ShaderEvalType::SHADER_EVAL_NORMAL;
 			bake_pass_filter = 0;
 			break;
 		}
-		bake_pass_filter = ccl::BakeManager::shader_type_to_pass_filter(shaderType,bake_pass_filter);
+		if(m_renderMode != Scene::RenderMode::BakeDiffuseLighting)
+			bake_pass_filter = ccl::BakeManager::shader_type_to_pass_filter(shaderType,bake_pass_filter);
 		if(worker.IsCancelled())
 			return;
 

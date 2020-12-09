@@ -8,6 +8,7 @@
 #ifndef __UTIL_RAYTRACING_TILEMANAGER_HPP__
 #define __UTIL_RAYTRACING_TILEMANAGER_HPP__
 
+#include "definitions.hpp"
 #include <cinttypes>
 #include <vector>
 #include <mutex>
@@ -24,7 +25,7 @@ namespace util::ocio {class ColorProcessor;};
 namespace unirender
 {
 	enum class ColorTransform : uint8_t;
-	class TileManager
+	class DLLRTUTIL TileManager
 	{
 	public:
 		struct TileData
