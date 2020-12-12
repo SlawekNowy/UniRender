@@ -1666,8 +1666,8 @@ void unirender::cycles::Renderer::StartTextureBaking(RenderWorker &worker)
 				bake_pass_filter = 510 &~ccl::BAKE_FILTER_COLOR &~ccl::BAKE_FILTER_GLOSSY;//ccl::BakePassFilterCombos::BAKE_FILTER_COMBINED;//ccl::BAKE_FILTER_DIFFUSE | ccl::BAKE_FILTER_INDIRECT | ccl::BAKE_FILTER_DIRECT;
 			}*/
 			//shaderType = ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;
-			shaderType = ccl::ShaderEvalType::SHADER_EVAL_COMBINED;
-			bake_pass_filter = 255;//ccl::BAKE_FILTER_DIFFUSE;
+			shaderType = ccl::ShaderEvalType::SHADER_EVAL_COMBINED;//ccl::ShaderEvalType::SHADER_EVAL_DIFFUSE;
+			bake_pass_filter = 255;//255 &~ccl::BAKE_FILTER_COLOR;//ccl::BAKE_FILTER_DIFFUSE;
 			break;
 		case Scene::RenderMode::BakeNormals:
 			shaderType = ccl::ShaderEvalType::SHADER_EVAL_NORMAL;
@@ -1823,7 +1823,7 @@ void unirender::cycles::Renderer::StartTextureBaking(RenderWorker &worker)
 				if(m_colorTransformProcessor == nullptr)
 					m_scene->HandleError("Unable to initialize color transform processor: " +err);
 				else
-					m_colorTransformProcessor->Apply(*imgBuffer,err,10.f /* exposure */,1.f /* gamma correction */);
+					m_colorTransformProcessor->Apply(*imgBuffer,err,0.f /* exposure */,1.f /* gamma correction */);
 			}
 			if(worker.IsCancelled())
 				return;
@@ -1855,6 +1855,16 @@ void unirender::cycles::Renderer::StartTextureBaking(RenderWorker &worker)
 
 		if(worker.IsCancelled())
 			return;
+
+		auto exposure = m_scene->GetSceneInfo().exposure;
+		if(exposure != 1.f)
+		{
+			for(auto &pxView : *imgBuffer)
+			{
+				for(auto channel : {uimg::ImageBuffer::Channel::Red,uimg::ImageBuffer::Channel::Green,uimg::ImageBuffer::Channel::Blue})
+					pxView.SetValue(channel,pxView.GetFloatValue(channel) *exposure);
+			}
+		}
 
 		if(umath::is_flag_set(m_scene->GetStateFlags(),Scene::StateFlags::OutputResultWithHDRColors) == false)
 		{
