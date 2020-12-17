@@ -320,6 +320,27 @@ std::vector<unirender::PLight> &unirender::Scene::GetLights() {return m_lights;}
 void unirender::Scene::Finalize()
 {
 	m_camera->Finalize(*this);
+
+	m_camera->SetId(0);
+	uint32_t id = 0;
+	for(auto &light : m_lights)
+		light->SetId(id++);
+
+	uint32_t meshId = 0;
+	uint32_t objId = 0;
+	uint32_t shaderId = 0;
+	for(auto &mdlCache : GetModelCaches())
+	{
+		for(auto &chunk : mdlCache->GetChunks())
+		{
+			for(auto &mesh : chunk.GetMeshes())
+				mesh->SetId(meshId++);
+			for(auto &obj : chunk.GetObjects())
+				obj->SetId(objId++);
+			for(auto &shader : chunk.GetShaderCache().GetShaders())
+				shader->SetId(shaderId++);
+		}
+	}
 }
 
 bool unirender::Scene::IsProgressive() const {return m_createInfo.progressive;}

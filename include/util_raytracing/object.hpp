@@ -15,7 +15,6 @@
 #include <optional>
 #include <functional>
 
-namespace ccl {class Object;};
 class DataStream;
 namespace unirender
 {

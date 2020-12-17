@@ -382,8 +382,8 @@ void unirender::cycles::Renderer::SyncMesh(const unirender::Mesh &mesh)
 	if(mesh.HasAlphas())
 	{
 		auto &alphas = mesh.GetAlphas();
-		cclMesh->attributes.add(Mesh::ALPHA_ATTRIBUTE_TYPE);
-		initialize_attribute<float,float>(*cclMesh,Mesh::ALPHA_ATTRIBUTE_TYPE,*alphas,[](const float &v) -> float {return v;});
+		cclMesh->attributes.add(ALPHA_ATTRIBUTE_TYPE);
+		initialize_attribute<float,float>(*cclMesh,ALPHA_ATTRIBUTE_TYPE,*alphas,[](const float &v) -> float {return v;});
 	}
 
 	auto &shaders = mesh.GetSubMeshShaders();

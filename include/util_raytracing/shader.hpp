@@ -5,578 +5,434 @@
 * Copyright (c) 2020 Florian Weischer
 */
 
-#ifndef __PR_CYCLES_SHADER_HPP__
-#define __PR_CYCLES_SHADER_HPP__
+#ifndef __UNIRENDER_SHADER_HPP__
+#define __UNIRENDER_SHADER_HPP__
 
 #include "definitions.hpp"
+#include "data_value.hpp"
+#include "exception.hpp"
 #include "scene_object.hpp"
-#include "shader_nodes.hpp"
 #include <memory>
-#include <string>
-#include <vector>
-#include <optional>
-#include <mathutil/umath.h>
-#include <mathutil/color.h>
-#include <sharedutils/util_event_reply.hpp>
-#include <sharedutils/alpha_mode.hpp>
+#include <functional>
+#include "shader_nodes.hpp"
+#include <sharedutils/datastream.h>
+#include <sharedutils/util_virtual_shared_from_this.hpp>
 
-#if 0
-namespace ccl
-{
-	class Scene; class Shader; class ShaderGraph; class ShaderNode; class ShaderInput; class ShaderOutput;
-	enum NodeMathType : int32_t;
-	enum AttributeStandard : int32_t;
-};
-
-class DataStream;
 namespace unirender
 {
-	enum class Channel : uint8_t
+	class NodeDesc;
+	class GroupNodeDesc;
+	struct NodeSocketDesc;
+	struct DLLRTUTIL NodeDescLink
 	{
-		Red = 0,
-		Green,
-		Blue,
-		Alpha
+		Socket fromSocket;
+		Socket toSocket;
+		void Serialize(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const;
+		void Deserialize(GroupNodeDesc &groupNode,DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable);
 	};
 
-	class Scene;
-	class Shader;
-	class ShaderNode;
-	using PShaderNode = std::shared_ptr<ShaderNode>;
-	using PShader = std::shared_ptr<Shader>;
-	struct Socket;
-	class CCLShader;
-	class ShaderDesc;
-	struct UVHandler;
-	class DLLRTUTIL Shader
-		: public SceneObject,
-		public std::enable_shared_from_this<Shader>
+	enum class SocketIO : uint8_t
 	{
-	public:
-		template<class TShader>
-			static std::shared_ptr<TShader> Create(Scene &scene,const std::string &name);
-		static PShader Create(Scene &scene,DataStream &dsIn,uint32_t version);
+		None = 0u,
+		In = 1u,
+		Out = In<<1u
+	};
 
-		enum class Flags : uint8_t
-		{
-			None = 0u,
-			EmissionFromAlbedoAlpha = 1u,
-			AdditiveByColor = EmissionFromAlbedoAlpha<<1u
-		};
-
-		enum class TextureType : uint8_t
-		{
-			Albedo = 0u,
-			Normal,
-			Roughness,
-			Metalness,
-			Emission,
-			Specular,
-
-			Count
-		};
-
-		util::WeakHandle<Shader> GetHandle();
-
-		virtual void DoFinalize() override;
-
-		Scene &GetScene() const;
-		const std::string &GetName() const;
-		const std::string &GetMeshName() const;
-		void SetMeshName(const std::string &meshName);
-		bool HasFlag(Flags flags) const;
-		void SetFlags(Flags flags,bool enabled);
-		Flags GetFlags() const;
-		void SetUVHandler(TextureType type,const std::shared_ptr<UVHandler> &uvHandler);
-		const std::shared_ptr<UVHandler> &GetUVHandler(TextureType type) const;
-
+	struct NodeSocketDesc
+	{
+		SocketIO io = SocketIO::None;
+		DataValue dataValue {};
 		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn,uint32_t version);
-
-		void SetAlphaMode(AlphaMode alphaMode,float alphaCutoff=0.5f);
-		AlphaMode GetAlphaMode() const;
-		float GetAlphaCutoff() const;
-
-		void SetAlphaFactor(float factor);
-		float GetAlphaFactor() const;
-
-		void SetUVHandlers(const std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> &handlers);
-		const std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> &GetUVHandlers() const;
-
-		std::shared_ptr<CCLShader> GenerateCCLShader(const ShaderDesc &desc,const std::function<void(const std::string&)> &errorLog=nullptr);
-		std::shared_ptr<CCLShader> GenerateCCLShader(ccl::Shader &cclShader,const ShaderDesc &desc,const std::function<void(const std::string&)> &errorLog=nullptr);
-	protected:
-		Shader(Scene &scene,const std::string &name);
-		bool SetupCCLShader(CCLShader &cclShader);
-		virtual bool InitializeCCLShader(CCLShader &cclShader)=0;
-		virtual void DoSerialize(DataStream &dsIn) const=0;
-		virtual void DoDeserialize(DataStream &dsIn,uint32_t version)=0;
-
-		std::string m_name;
-		std::string m_meshName;
-		Flags m_flags = Flags::None;
-		AlphaMode m_alphaMode = AlphaMode::Opaque;
-		float m_alphaCutoff = 0.5f;
-		float m_alphaFactor = 1.f;
-		Scene &m_scene;
-		std::array<std::shared_ptr<UVHandler>,umath::to_integral(TextureType::Count)> m_uvHandlers = {};
+		static NodeSocketDesc Deserialize(DataStream &dsIn);
 	};
-
-	class ShaderModuleSpriteSheet;
-	enum class SpriteSheetFrame : uint8_t
-	{
-		First = 0,
-		Second
-	};
-
-	class DLLRTUTIL ShaderNode
-		: public std::enable_shared_from_this<ShaderNode>
+	
+	using NodeIndex = uint32_t;
+	using NodeTypeId = uint32_t;
+	class DLLRTUTIL NodeDesc
+		: public std::enable_shared_from_this<NodeDesc>
 	{
 	public:
-		static PShaderNode Create(const std::string &name);
-		util::WeakHandle<ShaderNode> GetHandle();
-		ccl::ShaderNode *operator->();
-		ccl::ShaderNode *operator*();
+		static std::shared_ptr<NodeDesc> Create(GroupNodeDesc *parent);
+
+		NodeDesc(const NodeDesc&)=delete;
+		NodeDesc(NodeDesc&&)=delete;
+		NodeDesc &operator=(const NodeDesc&)=delete;
+		virtual ~NodeDesc()=default;
+		std::string GetName() const;
+		const std::string &GetTypeName() const;
+		std::string ToString() const;
+		virtual bool IsGroupNode() const {return false;}
+
+		NodeIndex GetIndex() const;
+
+		operator Socket() const;
+		Socket operator-() const {return static_cast<Socket>(*this).operator-();}
+		Socket operator+(float f) const {return static_cast<Socket>(*this).operator+(f);}
+		Socket operator-(float f) const {return static_cast<Socket>(*this).operator-(f);}
+		Socket operator*(float f) const {return static_cast<Socket>(*this).operator*(f);}
+		Socket operator/(float f) const {return static_cast<Socket>(*this).operator/(f);}
+		Socket operator^(float f) const {return static_cast<Socket>(*this).operator^(f);}
+		Socket operator%(float f) const {return static_cast<Socket>(*this).operator%(f);}
+		Socket operator<(float f) const {return static_cast<Socket>(*this).operator<(f);}
+		Socket operator<=(float f) const {return static_cast<Socket>(*this).operator<=(f);}
+		Socket operator>(float f) const {return static_cast<Socket>(*this).operator>(f);}
+		Socket operator>=(float f) const {return static_cast<Socket>(*this).operator>=(f);}
+		Socket operator+(const Vector3 &v) const {return static_cast<Socket>(*this).operator+(v);}
+		Socket operator-(const Vector3 &v) const {return static_cast<Socket>(*this).operator-(v);}
+		Socket operator*(const Vector3 &v) const {return static_cast<Socket>(*this).operator*(v);}
+		Socket operator/(const Vector3 &v) const {return static_cast<Socket>(*this).operator/(v);}
+		Socket operator%(const Vector3 &v) const {return static_cast<Socket>(*this).operator%(v);}
+		Socket operator+(const Socket &s) const {return static_cast<Socket>(*this).operator+(s);}
+		Socket operator-(const Socket &s) const {return static_cast<Socket>(*this).operator-(s);}
+		Socket operator*(const Socket &s) const {return static_cast<Socket>(*this).operator*(s);}
+		Socket operator/(const Socket &s) const {return static_cast<Socket>(*this).operator/(s);}
+		Socket operator^(const Socket &s) const {return static_cast<Socket>(*this).operator^(s);}
+		Socket operator%(const Socket &s) const {return static_cast<Socket>(*this).operator%(s);}
+		Socket operator<(const Socket &s) const {return static_cast<Socket>(*this).operator<(s);}
+		Socket operator<=(const Socket &s) const {return static_cast<Socket>(*this).operator<=(s);}
+		Socket operator>(const Socket &s) const {return static_cast<Socket>(*this).operator>(s);}
+		Socket operator>=(const Socket &s) const {return static_cast<Socket>(*this).operator>=(s);}
+
+		template<SocketType type>
+			Socket RegisterSocket(const std::string &name,SocketIO io=SocketIO::None)
+		{
+			assert(io == SocketIO::Out || type == SocketType::Closure);
+			return RegisterSocket(name,DataValue{type,nullptr},io);
+		}
+
+		template<SocketType type,typename T>
+			Socket RegisterSocket(const std::string &name,const T &def,SocketIO io=SocketIO::None)
+		{
+			if constexpr(std::is_enum_v<T>)
+				return RegisterSocket(name,DataValue::Create<std::underlying_type_t<T>,type>(static_cast<std::underlying_type_t<T>>(def)),io);
+			else
+				return RegisterSocket(name,DataValue::Create<T,type>(def),io);
+		}
+		Socket RegisterSocket(const std::string &name,const DataValue &value,SocketIO io=SocketIO::None);
+		void RegisterPrimaryOutputSocket(const std::string &name);
 
 		template<typename T>
-			bool SetInputArgument(const std::string &inputName,const T &arg);
+			void SetProperty(const std::string &name,const T &value)
+		{
+			if constexpr(std::is_enum_v<T>)
+				SetProperty<std::underlying_type_t<T>>(name,static_cast<std::underlying_type_t<T>>(value));
+			else
+				SetProperty<T>(m_properties,name,value);
+		}
+
+		template<typename T>
+			std::optional<T> GetPropertyValue(const std::string &name) const
+		{
+			auto it = m_properties.find(name);
+			if(it == m_properties.end())
+				return {};
+			auto &prop = it->second;
+			return prop.GetValue<T>();
+		}
+
+		virtual void SerializeNodes(DataStream &dsOut) const;
+		virtual void DeserializeNodes(DataStream &dsIn);
+		std::optional<Socket> FindInputSocket(const std::string &name);
+		std::optional<Socket> FindOutputSocket(const std::string &name);
+		std::optional<Socket> FindProperty(const std::string &name);
+
+		Socket GetInputSocket(const std::string &name);
+		Socket GetOutputSocket(const std::string &name);
+		Socket GetProperty(const std::string &name);
+		std::optional<Socket> GetPrimaryOutputSocket() const;
+
+		NodeSocketDesc *FindInputSocketDesc(const std::string &name);
+		NodeSocketDesc *FindOutputSocketDesc(const std::string &name);
+		NodeSocketDesc *FindPropertyDesc(const std::string &name);
+		NodeSocketDesc *FindSocketDesc(const Socket &socket);
+
+		GroupNodeDesc *GetParent() const;
+		void SetParent(GroupNodeDesc *parent);
+
+		const std::unordered_map<std::string,NodeSocketDesc> &GetInputs() const;
+		const std::unordered_map<std::string,NodeSocketDesc> &GetOutputs() const;
+		const std::unordered_map<std::string,NodeSocketDesc> &GetProperties() const;
+		
+		// Internal use only
+		void SetTypeName(const std::string &typeName);
+	protected:
+		template<class TNodeDesc>
+			static std::shared_ptr<TNodeDesc> Create(GroupNodeDesc *parent);
+		NodeDesc();
+
+		template<typename T>
+			void SetProperty(std::unordered_map<std::string,NodeSocketDesc> &properties,const std::string &name,const T &value)
+		{
+			auto it = properties.find(name);
+			if(it == properties.end())
+			{
+				it = m_inputs.find(name);
+				assert(it != m_inputs.end());
+				if(it == m_inputs.end())
+					throw Exception{"No property named '" +name +"' found for node of type '" +GetTypeName() +"'!"};
+			}
+			
+			auto &prop = it->second;
+			it->second.dataValue.value = ToTypeValue<T>(value,prop.dataValue.type);
+			assert(it->second.dataValue.value != nullptr);
+			if(it->second.dataValue.value == nullptr)
+				throw Exception{"Invalid argument type '" +std::string{typeid(value).name()} +"' for property '" +name +"' of type " +to_string(prop.dataValue.type) +"!"};
+		}
 	private:
-		friend CCLShader;
-		ShaderNode(const std::string &name);
-		ccl::ShaderInput *FindInput(const std::string &inputName);
-		ccl::ShaderOutput *FindOutput(const std::string &outputName);
+		template<typename T>
+			std::shared_ptr<void> ToTypeValue(const T &v,SocketType type)
+		{
+			if constexpr(std::is_same_v<T,EulerAngles>)
+				return ToTypeValue(Vector3{umath::deg_to_rad(v.p),umath::deg_to_rad(v.y),umath::deg_to_rad(v.r)},type);
+			else if constexpr(std::is_same_v<T,umath::Transform> || std::is_same_v<T,umath::ScaledTransform>)
+				return ToTypeValue(Mat4x3{v.ToMatrix()});
+			switch(type)
+			{
+			case SocketType::Bool:
+			{
+				if constexpr(std::is_convertible_v<T,bool>)
+					return std::make_shared<bool>(static_cast<bool>(v));
+				return nullptr;
+			}
+			case SocketType::Float:
+			{
+				if constexpr(std::is_convertible_v<T,float>)
+					return std::make_shared<float>(static_cast<float>(v));
+				return nullptr;
+			}
+			case SocketType::Int:
+			case SocketType::Enum:
+			{
+				if constexpr(std::is_convertible_v<T,int32_t>)
+					return std::make_shared<int32_t>(static_cast<int32_t>(v));
+				return nullptr;
+			}
+			case SocketType::UInt:
+			{
+				if constexpr(std::is_convertible_v<T,uint32_t>)
+					return std::make_shared<uint32_t>(static_cast<uint32_t>(v));
+				return nullptr;
+			}
+			case SocketType::Color:
+			case SocketType::Vector:
+			case SocketType::Point:
+			case SocketType::Normal:
+			{
+				if constexpr(std::is_convertible_v<T,Vector3>)
+					return std::make_shared<Vector3>(static_cast<Vector3>(v));
+				return nullptr;
+			}
+			case SocketType::Point2:
+			{
+				if constexpr(std::is_convertible_v<T,Vector2>)
+					return std::make_shared<Vector2>(static_cast<Vector2>(v));
+				return nullptr;
+			}
+			case SocketType::String:
+			{
+				if constexpr(std::is_convertible_v<T,std::string>)
+					return std::make_shared<std::string>(static_cast<std::string>(v));
+				return nullptr;
+			}
+			case SocketType::Transform:
+			{
+				if constexpr(std::is_convertible_v<T,Mat4x3>)
+					return std::make_shared<Mat4x3>(static_cast<Mat4x3>(v));
+				return nullptr;
+			}
+			case SocketType::FloatArray:
+			{
+				if constexpr(std::is_convertible_v<T,std::vector<float>>)
+					return std::make_shared<std::vector<float>>(static_cast<std::vector<float>>(v));
+				return nullptr;
+			}
+			case SocketType::ColorArray:
+			{
+				if constexpr(std::is_convertible_v<T,std::vector<Vector3>>)
+					return std::make_shared<std::vector<Vector3>>(static_cast<std::vector<Vector3>>(v));
+				return nullptr;
+			}
+			}
+			static_assert(umath::to_integral(SocketType::Count) == 16);
+			return nullptr;
+		}
+		std::string m_typeName;
 		std::string m_name;
+		std::unordered_map<std::string,NodeSocketDesc> m_inputs;
+		std::unordered_map<std::string,NodeSocketDesc> m_outputs;
+		std::unordered_map<std::string,NodeSocketDesc> m_properties;
+		std::optional<std::string> m_primaryOutputSocket {};
+		std::weak_ptr<GroupNodeDesc> m_parent {};
 	};
 
-	class ShaderModuleAlbedo;
-	class DLLRTUTIL ShaderAlbedoSet
+	enum class TextureType : uint8_t
+	{
+		EquirectangularImage,
+		ColorImage,
+		NonColorImage,
+		NormalMap,
+		Count
+	};
+
+	class NodeManager;
+	class DLLRTUTIL GroupNodeDesc
+		: public NodeDesc
 	{
 	public:
-		virtual ~ShaderAlbedoSet()=default;
+		static std::shared_ptr<GroupNodeDesc> Create(NodeManager &nodeManager,GroupNodeDesc *parent=nullptr);
+		const std::vector<std::shared_ptr<NodeDesc>> &GetChildNodes() const;
+		const std::vector<NodeDescLink> &GetLinks() const;
+		virtual bool IsGroupNode() const override {return true;}
 
-		void SetAlbedoMap(const std::string &albedoMap);
-		const std::optional<std::string> &GetAlbedoMap() const;
+		NodeDesc *FindNode(const std::string &name);
+		NodeDesc *FindNodeByType(const std::string &type);
+		std::optional<NodeIndex> FindNodeIndex(NodeDesc &node) const;
+		NodeDesc *GetNodeByIndex(NodeIndex idx) const;
 
-		void SetColorFactor(const Vector4 &colorFactor);
-		const Vector4 &GetColorFactor() const;
+		NodeDesc &AddNode(const std::string &typeName);
+		NodeDesc &AddNode(NodeTypeId id);
+		Socket AddMathNode(const Socket &socket0,const Socket &socket1,nodes::math::MathType mathOp);
+		NodeDesc &AddVectorMathNode(const Socket &socket0,const Socket &socket1,nodes::vector_math::MathType mathOp);
+		Socket CombineRGB(const Socket &r,const Socket &g,const Socket &b);
+		NodeDesc &SeparateRGB(const Socket &rgb);
+		NodeDesc &AddImageTextureNode(const std::string &fileName,TextureType type=TextureType::ColorImage);
+		NodeDesc &AddImageTextureNode(const Socket &fileNameSocket,TextureType type=TextureType::ColorImage);
+		Socket AddNormalMapNode(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,float strength=1.f);
+		Socket AddConstantNode(float f);
+		Socket AddConstantNode(const Vector3 &v);
+		Socket Mix(const Socket &socket0,const Socket &socket1,const Socket &fac);
+		Socket Mix(const Socket &socket0,const Socket &socket1,const Socket &fac,nodes::mix::Mix type);
+		Socket Invert(const Socket &socket,const std::optional<Socket> &fac={});
+		Socket ToGrayScale(const Socket &socket);
+		void Link(const Socket &fromSocket,const Socket &toSocket);
+		void Link(NodeDesc &fromNode,const std::string &fromSocket,NodeDesc &toNode,const std::string &toSocket);
+		void Serialize(DataStream &dsOut);
+		void Deserialize(DataStream &dsOut);
+	protected:
+		virtual void SerializeNodes(DataStream &dsOut) const override;
+		void SerializeLinks(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable);
 
-		const std::optional<ImageTextureNode> &GetAlbedoNode() const;
-
-		std::optional<ImageTextureNode> AddAlbedoMap(ShaderModuleAlbedo &albedoModule,CCLShader &shader);
-
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
+		virtual void DeserializeNodes(DataStream &dsIn) override;
+		void DeserializeLinks(DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable);
+		
+		unirender::NodeDesc &AddNormalMapNodeDesc(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,float strength=1.f);
+		unirender::NodeDesc &AddImageTextureNode(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,TextureType type);
+		GroupNodeDesc(NodeManager &nodeManager);
 	private:
-		std::optional<std::string> m_albedoMap {};
-		std::optional<ImageTextureNode> m_albedoNode {};
-		Vector4 m_colorFactor = {1.f,1.f,1.f,1.f};
+		std::vector<std::shared_ptr<NodeDesc>> m_nodes = {};
+		std::vector<NodeDescLink> m_links = {};
+		NodeManager &m_nodeManager;
 	};
 
-	class DLLRTUTIL ShaderModuleSpriteSheet
+	class DLLRTUTIL Shader final
+		: public std::enable_shared_from_this<Shader>,
+		public BaseObject
 	{
 	public:
-		struct SpriteSheetData
+		enum class Pass : uint8_t
 		{
-			std::pair<Vector2,Vector2> uv0;
-			std::string albedoMap2 {};
-			std::pair<Vector2,Vector2> uv1;
-			float interpFactor = 0.f;
+			Combined = 0,
+			Albedo,
+			Normal,
+			Depth
 		};
-		void SetSpriteSheetData(
-			const Vector2 &uv0Min,const Vector2 &uv0Max,
-			const std::string &albedoMap2,const Vector2 &uv1Min,const Vector2 &uv1Max,
-			float interpFactor
-		);
-		void SetSpriteSheetData(const SpriteSheetData &spriteSheetData);
-		const std::optional<SpriteSheetData> &GetSpriteSheetData() const;
-
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
-	private:
-		std::optional<SpriteSheetData> m_spriteSheetData {};
-	};
-
-	class DLLRTUTIL ShaderModuleAlbedo
-	{
-	public:
-		virtual ~ShaderModuleAlbedo()=default;
-
-		void SetEmissionFromAlbedoAlpha(Shader &shader,bool b);
-
-		const ShaderAlbedoSet &GetAlbedoSet() const;
-		ShaderAlbedoSet &GetAlbedoSet();
-
-		const ShaderAlbedoSet &GetAlbedoSet2() const;
-		ShaderAlbedoSet &GetAlbedoSet2();
-
-		void SetUseVertexAlphasForBlending(bool useAlphasForBlending);
-		bool ShouldUseVertexAlphasForBlending() const;
-
-		void SetWrinkleStretchMap(const std::string &wrinkleStretchMap);
-		void SetWrinkleCompressMap(const std::string &wrinkleCompressMap);
-
-		bool GetAlbedoColorNode(const Shader &shader,CCLShader &cclShader,Socket &outColor,NumberSocket *optOutAlpha=nullptr);
-		void LinkAlbedo(const Shader &shader,const Socket &color,const NumberSocket *optLinkAlpha=nullptr,bool useAlphaIfFlagSet=true,NumberSocket *optOutAlpha=nullptr);
-		void LinkAlbedoToBSDF(const Shader &shader,const Socket &bsdf);
-
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
-	protected:
-		virtual void InitializeAlbedoColor(Socket &inOutColor);
-		virtual void InitializeAlbedoAlpha(const Socket &inAlbedoColor,NumberSocket &inOutAlpha);
-	private:
-		bool SetupAlbedoNodes(CCLShader &shader,Socket &outColor,NumberSocket &outAlpha);
-		ShaderAlbedoSet m_albedoSet = {};
-		ShaderAlbedoSet m_albedoSet2 = {};
-		std::optional<std::string> m_wrinkleStretchMap;
-		std::optional<std::string> m_wrinkleCompressMap;
-		bool m_useVertexAlphasForBlending = false;
-	};
-
-	class DLLRTUTIL ShaderModuleNormal
-		: public ShaderModuleAlbedo
-	{
-	public:
-		void SetNormalMap(const std::string &normalMap);
-		const std::optional<std::string> &GetNormalMap() const;
-
-		void SetNormalMapSpace(NormalMapNode::Space space);
-		NormalMapNode::Space GetNormalMapSpace() const;
-
-		std::optional<Socket> AddNormalMap(CCLShader &shader);
-		void LinkNormal(const Socket &normal);
-		void LinkNormalToBSDF(const Socket &bsdf);
-
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
-	private:
-		std::optional<std::string> m_normalMap;
-		std::optional<Socket> m_normalSocket = {};
-		NormalMapNode::Space m_space = NormalMapNode::Space::Tangent;
-	};
-
-	class DLLRTUTIL ShaderModuleMetalness
-	{
-	public:
-		virtual ~ShaderModuleMetalness()=default;
-		void SetMetalnessMap(const std::string &metalnessMap,Channel channel=Channel::Blue);
-		void SetMetalnessFactor(float metalnessFactor);
-
-		std::optional<NumberSocket> AddMetalnessMap(CCLShader &shader);
-		void LinkMetalness(const NumberSocket &metalness);
-
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
-	private:
-		std::optional<std::string> m_metalnessMap;
-		Channel m_metalnessChannel = Channel::Blue;
-		std::optional<NumberSocket> m_metalnessSocket = {};
-		std::optional<float> m_metalnessFactor = {};
-	};
-
-	class DLLRTUTIL ShaderModuleRoughness
-	{
-	public:
-		virtual ~ShaderModuleRoughness()=default;
-		void SetRoughnessMap(const std::string &roughnessMap,Channel channel=Channel::Green);
-		void SetSpecularMap(const std::string &specularMap,Channel channel=Channel::Green);
-
-		void SetRoughnessFactor(float roughness);
-
-		std::optional<NumberSocket> AddRoughnessMap(CCLShader &shader);
-		void LinkRoughness(const NumberSocket &roughness);
-
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
-	private:
-		std::optional<std::string> m_roughnessMap;
-		std::optional<std::string> m_specularMap;
-		Channel m_roughnessChannel = Channel::Green;
-
-		std::optional<NumberSocket> m_roughnessSocket = {};
-		std::optional<float> m_roughnessFactor = {};
-	};
-
-	class DLLRTUTIL ShaderModuleEmission
-	{
-	public:
-		virtual ~ShaderModuleEmission()=default;
-		void SetEmissionMap(const std::string &emissionMap);
-		void SetEmissionFactor(const Vector3 &factor);
-		const Vector3 &GetEmissionFactor() const;
-		void SetEmissionIntensity(float intensity);
-		float GetEmissionIntensity() const;
-		const std::optional<std::string> &GetEmissionMap() const;
-
-		std::optional<Socket> AddEmissionMap(CCLShader &shader);
-		void LinkEmission(const Socket &emission);
-
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn);
-	protected:
-		virtual void InitializeEmissionColor(Socket &inOutColor);
-	private:
-		std::optional<std::string> m_emissionMap;
-		Vector3 m_emissionFactor = {0.f,0.f,0.f};
-		float m_emissionIntensity = 1.f;
-
-		std::optional<Socket> m_emissionSocket = {};
-	};
-
-	class DLLRTUTIL ShaderModuleIOR
-	{
-	public:
-		virtual ~ShaderModuleIOR()=default;
-		void SetIOR(float ior);
-		float GetIOR() const;
-
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn,uint32_t version);
-	private:
-		float m_ior = 1.45f;
-	};
-
-	/////////////////////
-
-	class DLLRTUTIL ShaderGeneric
-		: public Shader
-	{
-	protected:
-		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
-		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
-		using Shader::Shader;
-	};
-
-	class DLLRTUTIL ShaderAlbedo
-		: public Shader,
-		public ShaderModuleAlbedo,
-		public ShaderModuleSpriteSheet
-	{
-	protected:
-		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
-		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
-		using Shader::Shader;
-	};
-
-	class DLLRTUTIL ShaderColorTest
-		: public Shader
-	{
-	protected:
-		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
-		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
-		using Shader::Shader;
-	};
-
-	class DLLRTUTIL ShaderVolumeScatter
-		: public Shader
-	{
-	protected:
-		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
-		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
-		using Shader::Shader;
-	};
-
-	class DLLRTUTIL ShaderNormal
-		: public Shader,
-		public ShaderModuleNormal,
-		public ShaderModuleSpriteSheet
-	{
-	protected:
-		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
-		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
-		using Shader::Shader;
-	};
-
-	class DLLRTUTIL ShaderDepth
-		: public Shader,
-		public ShaderModuleAlbedo,
-		public ShaderModuleSpriteSheet
-	{
-	public:
-		void SetFarZ(float farZ);
-	protected:
-		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
-		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
-		using Shader::Shader;
-	private:
-		float m_farZ = 1.f;
-	};
-
-	class DLLRTUTIL ShaderToon
-		: public Shader,
-		public ShaderModuleNormal,
-		public ShaderModuleSpriteSheet,
-		public ShaderModuleRoughness
-	{
-	public:
-		void SetSpecularColor(const Vector3 &col);
-		void SetShadeColor(const Vector3 &col);
-		void SetDiffuseSize(float size);
-		void SetDiffuseSmooth(float smooth);
-		void SetSpecularSize(float specSize);
-		void SetSpecularSmooth(float smooth);
-	protected:
-		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
-		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
-		using Shader::Shader;
-	private:
-		Vector3 m_specularColor {0.1f,0.1f,0.1f};
-		Vector3 m_shadeColor {0.701102f,0.318547f,0.212231f};
-		float m_diffuseSize = 0.9f;
-		float m_diffuseSmooth = 0.f;
-		float m_specularSize = 0.2f;
-		float m_specularSmooth = 0.f;
-	};
-
-	class DLLRTUTIL ShaderGlass
-		: public Shader,
-		public ShaderModuleNormal,
-		public ShaderModuleRoughness,
-		public ShaderModuleSpriteSheet,
-		public ShaderModuleIOR
-	{
-	protected:
-		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
-		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
-		using Shader::Shader;
-	};
-
-	class DLLRTUTIL ShaderPBR
-		: public Shader,
-		public ShaderModuleNormal,
-		public ShaderModuleRoughness,
-		public ShaderModuleMetalness,
-		public ShaderModuleEmission,
-		public ShaderModuleSpriteSheet,
-		public ShaderModuleIOR
-	{
-	public:
-		void SetMetallic(float metallic);
-		void SetSpecular(float specular);
-		void SetSpecularTint(float specularTint);
-		void SetAnisotropic(float anisotropic);
-		void SetAnisotropicRotation(float anisotropicRotation);
-		void SetSheen(float sheen);
-		void SetSheenTint(float sheenTint);
-		void SetClearcoat(float clearcoat);
-		void SetClearcoatRoughness(float clearcoatRoughness);
-		void SetTransmission(float transmission);
-		void SetTransmissionRoughness(float transmissionRoughness);
-
-		// Subsurface scattering
-		void SetSubsurface(float subsurface);
-		void SetSubsurfaceColorFactor(const Vector3 &color);
-		void SetSubsurfaceMethod(PrincipledBSDFNode::SubsurfaceMethod method);
-		void SetSubsurfaceRadius(const Vector3 &radius);
-	protected:
-		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
-		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
-		virtual util::EventReply InitializeTransparency(CCLShader &cclShader,ImageTextureNode &albedoNode,const NumberSocket &alphaSocket) const;
-		using Shader::Shader;
-	private:
-		// Default settings (Taken from Blender)
-		float m_metallic = 0.f;
-		std::optional<float> m_specular {};
-		float m_specularTint = 0.f;
-		float m_anisotropic = 0.f;
-		float m_anisotropicRotation = 0.f;
-		float m_sheen = 0.f;
-		float m_sheenTint = 0.5f;
-		float m_clearcoat = 0.f;
-		float m_clearcoatRoughness = 0.03f;
-		float m_transmission = 0.f;
-		float m_transmissionRoughness = 0.f;
-
-		// Subsurface scattering
-		float m_subsurface = 0.f;
-		Vector3 m_subsurfaceColorFactor = {1.f,1.f,1.f};
-		PrincipledBSDFNode::SubsurfaceMethod m_subsurfaceMethod = PrincipledBSDFNode::SubsurfaceMethod::Burley;
-		Vector3 m_subsurfaceRadius = {0.f,0.f,0.f};
-	};
-
-	class DLLRTUTIL ShaderParticle
-		: public ShaderPBR
-	{
-	public:
-		enum class RenderFlags : uint32_t
+		template<class TShader>
+			static std::shared_ptr<TShader> Create()
 		{
-			None = 0u,
-			AdditiveByColor = 1u
-		};
+			auto shader = std::shared_ptr<TShader>{new TShader{}};
+			shader->Initialize();
+			return shader;
+		}
+		~Shader()=default;
 
-		using ShaderPBR::ShaderPBR;
-		void SetRenderFlags(RenderFlags flags);
-		void SetColor(const Color &color);
-		const Color &GetColor() const;
+		void SetActivePass(Pass pass);
+		std::shared_ptr<unirender::GroupNodeDesc> GetActivePassNode() const;
+
+		void Serialize(DataStream &dsOut) const;
+		void Deserialize(DataStream &dsIn,NodeManager &nodeManager);
+
+		std::shared_ptr<unirender::GroupNodeDesc> combinedPass = nullptr;
+		std::shared_ptr<unirender::GroupNodeDesc> albedoPass = nullptr;
+		std::shared_ptr<unirender::GroupNodeDesc> normalPass = nullptr;
+		std::shared_ptr<unirender::GroupNodeDesc> depthPass = nullptr;
+
+		void Finalize();
 	protected:
-		virtual bool InitializeCCLShader(CCLShader &cclShader) override;
-		virtual void DoSerialize(DataStream &dsIn) const override;
-		virtual void DoDeserialize(DataStream &dsIn,uint32_t version) override;
-		virtual util::EventReply InitializeTransparency(CCLShader &cclShader,ImageTextureNode &albedoNode,const NumberSocket &alphaSocket) const override;
-		virtual void InitializeAlbedoColor(Socket &inOutColor) override;
-		virtual void InitializeAlbedoAlpha(const Socket &inAlbedoColor,NumberSocket &inOutAlpha) override;
-		virtual void InitializeEmissionColor(Socket &inOutColor) override;
+		void Initialize();
 	private:
-		RenderFlags m_renderFlags = RenderFlags::None;
-		Color m_color = Color::White;
+		Shader();
+		Pass m_activePass = Pass::Combined;
 	};
 
-	struct DLLRTUTIL UVHandler
+	using GenericShader = Shader;
+
+	struct DLLRTUTIL NodeType
 	{
-		static std::shared_ptr<UVHandler> Create(DataStream &inDs);
-		virtual std::optional<Socket> InitializeNodes(CCLShader &shader)=0;
-		virtual void Serialize(DataStream &dsOut) const=0;
-		virtual void Deserialize(DataStream &dsIn)=0;
+		std::string typeName;
+		std::function<std::shared_ptr<NodeDesc>(GroupNodeDesc*)> factory = nullptr;
+	};
+	class DLLRTUTIL NodeManager
+		: public std::enable_shared_from_this<NodeManager>
+	{
+	public:
+		static std::shared_ptr<NodeManager> Create();
+		NodeTypeId RegisterNodeType(const std::string &typeName,const std::function<std::shared_ptr<NodeDesc>(GroupNodeDesc*)> &factory);
+		std::optional<NodeTypeId> FindNodeTypeId(const std::string &typeName) const;
+
+		template<typename TNode>
+			NodeTypeId RegisterNodeType(const std::string &typeName)
+		{
+			return RegisterNodeType(typeName,[]() -> std::shared_ptr<Node> {return std::shared_ptr<TNode>{new TNode{}};});
+		}
+
+		void RegisterNodeTypes();
+		std::shared_ptr<NodeDesc> CreateNode(const std::string &typeName,GroupNodeDesc *parent=nullptr) const;
+		std::shared_ptr<NodeDesc> CreateNode(NodeTypeId id,GroupNodeDesc *parent=nullptr) const;
+	private:
+		NodeManager()=default;
+		std::vector<NodeType> m_nodeTypes;
 	};
 
-	struct DLLRTUTIL UVHandlerEye
-		: public UVHandler
-	{
-		UVHandlerEye(const Vector4 &irisProjU,const Vector4 &irisProjV,float dilationFactor,float maxDilationFactor,float irisUvRadius);
-		UVHandlerEye()=default;
-		virtual std::optional<Socket> InitializeNodes(CCLShader &shader) override;
-		virtual void Serialize(DataStream &dsOut) const override;
-		virtual void Deserialize(DataStream &dsIn) override;
-	private:
-		Vector4 m_irisProjU = {};
-		Vector4 m_irisProjV = {};
-		float m_dilationFactor = 0.5f;
-		float m_maxDilationFactor = 1.0f;
-		float m_irisUvRadius = 0.2f;
-	};
+	// TODO: Change these to std::string once C++20 is properly supported by Visual Studio
+	constexpr auto *NODE_MATH = "math";
+	constexpr auto *NODE_HSV = "hsv";
+	constexpr auto *NODE_SEPARATE_XYZ = "separate_xyz";
+	constexpr auto *NODE_COMBINE_XYZ = "combine_xyz";
+	constexpr auto *NODE_SEPARATE_RGB = "separate_rgb";
+	constexpr auto *NODE_COMBINE_RGB = "combine_rgb";
+	constexpr auto *NODE_GEOMETRY = "geometry";
+	constexpr auto *NODE_CAMERA_INFO = "camera_info";
+	constexpr auto *NODE_IMAGE_TEXTURE = "image_texture";
+	constexpr auto *NODE_ENVIRONMENT_TEXTURE = "environment_texture";
+	constexpr auto *NODE_MIX_CLOSURE = "mix_closure";
+	constexpr auto *NODE_ADD_CLOSURE = "add_closure";
+	constexpr auto *NODE_BACKGROUND_SHADER = "background_shader";
+	constexpr auto *NODE_TEXTURE_COORDINATE = "texture_coordinate";
+	constexpr auto *NODE_MAPPING = "mapping";
+	constexpr auto *NODE_SCATTER_VOLUME = "scatter_volume";
+	constexpr auto *NODE_EMISSION = "emission";
+	constexpr auto *NODE_COLOR = "color";
+	constexpr auto *NODE_ATTRIBUTE = "attribute";
+	constexpr auto *NODE_LIGHT_PATH = "light_path";
+	constexpr auto *NODE_TRANSPARENT_BSDF = "transparent_bsdf";
+	constexpr auto *NODE_TRANSLUCENT_BSDF = "translucent_bsdf";
+	constexpr auto *NODE_DIFFUSE_BSDF = "diffuse_bsdf";
+	constexpr auto *NODE_NORMAL_MAP = "normal_map";
+	constexpr auto *NODE_PRINCIPLED_BSDF = "principled_bsdf";
+	constexpr auto *NODE_TOON_BSDF = "toon_bsdf";
+	constexpr auto *NODE_GLASS_BSDF = "glass_bsdf";
+	constexpr auto *NODE_OUTPUT = "output";
+	constexpr auto *NODE_VECTOR_MATH = "vector_math";
+	constexpr auto *NODE_MIX = "mix";
+	constexpr auto *NODE_RGB_TO_BW = "rgb_to_bw";
+	constexpr auto *NODE_INVERT = "invert";
+	constexpr auto *NODE_VECTOR_TRANSFORM = "vector_transform";
+	constexpr auto *NODE_RGB_RAMP = "rgb_ramp";
+	constexpr auto *NODE_LAYER_WEIGHT = "layer_weight";
+	static_assert(NODE_COUNT == 35,"Increase this number if new node types are added!");
 };
-REGISTER_BASIC_BITWISE_OPERATORS(unirender::Shader::Flags)
-REGISTER_BASIC_BITWISE_OPERATORS(unirender::ShaderParticle::RenderFlags)
 
-template<class TShader>
-	std::shared_ptr<TShader> unirender::Shader::Create(Scene &scene,const std::string &name)
-{
-	auto pShader = PShader{new TShader{scene,name}};
-	scene.m_shaders.push_back(pShader);
-	return std::static_pointer_cast<TShader>(pShader);
-}
-
-template<typename T>
-	bool unirender::ShaderNode::SetInputArgument(const std::string &inputName,const T &arg)
-{
-	auto it = std::find_if(m_shaderNode.inputs.begin(),m_shaderNode.inputs.end(),[&inputName](const ccl::ShaderInput *shInput) {
-		return ccl::string_iequals(shInput->socket_type.name.string(),inputName);
-		});
-	if(it == m_shaderNode.inputs.end())
-		return false;
-	auto *input = *it;
-	input->set(arg);
-	return true;
-}
-#endif
+DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc);
+DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::GroupNodeDesc &desc);
 
 #endif

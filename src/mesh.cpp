@@ -20,7 +20,7 @@ const std::string unirender::Mesh::TANGENT_SIGN_POSTIFX = ".tangent_sign";
 unirender::PMesh unirender::Mesh::Create(const std::string &name,uint64_t numVerts,uint64_t numTris,Flags flags)
 {
 	auto meshWrapper = PMesh{new Mesh{numVerts,numTris,flags}};
-	meshWrapper->m_name = name;
+	meshWrapper->SetName(name);
 	meshWrapper->m_vertexNormals.resize(numVerts);
 	meshWrapper->m_uvs.resize(numTris *3);
 	meshWrapper->m_uvTangents.resize(numTris *3);
@@ -100,7 +100,7 @@ void unirender::Mesh::Serialize(DataStream &dsOut,const std::function<std::optio
 {
 	auto numVerts = umath::min(m_numVerts,m_verts.size());
 	auto numTris = umath::min(m_numTris,m_triangles.size() /3);
-	dsOut->WriteString(m_name);
+	dsOut->WriteString(GetName());
 	dsOut->Write(m_flags);
 	dsOut->Write<decltype(m_numVerts)>(numVerts);
 	dsOut->Write<decltype(m_numTris)>(numTris);
@@ -370,7 +370,6 @@ std::vector<unirender::PShader> &unirender::Mesh::GetSubMeshShaders() {return m_
 uint64_t unirender::Mesh::GetVertexCount() const {return m_numVerts;}
 uint64_t unirender::Mesh::GetTriangleCount() const {return m_numTris;}
 uint32_t unirender::Mesh::GetVertexOffset() const {return m_verts.size();}
-const std::string &unirender::Mesh::GetName() const {return m_name;}
 bool unirender::Mesh::HasAlphas() const {return umath::is_flag_set(m_flags,Flags::HasAlphas);}
 bool unirender::Mesh::HasWrinkles() const {return umath::is_flag_set(m_flags,Flags::HasWrinkles);}
 

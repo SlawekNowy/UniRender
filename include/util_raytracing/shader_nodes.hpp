@@ -13,7 +13,6 @@
 #include "exception.hpp"
 #include <sharedutils/util_hash.hpp>
 #include <mathutil/color.h>
-#include <render/nodes.h>
 #include <optional>
 #include <functional>
 
@@ -29,10 +28,40 @@ namespace ccl
 };
 namespace unirender
 {
+	enum class ColorSpace : uint8_t
+	{
+		Srgb = 0,
+		Raw,
+		Auto,
+
+		Count
+	};
+
+	enum class EnvironmentProjection : uint8_t
+	{
+		Equirectangular = 0,
+		MirrorBall,
+
+		Count
+	};
+
+	enum class ClosureType : uint32_t
+	{
+		None = 0,
+		BsdfMicroFacetMultiGgxGlass,
+		BssrdfPrincipled,
+		BsdfDiffuseToon,
+		BsdfMicroFacetGgxGlass,
+
+		Count
+	};
+
 	class Shader;
 	class NodeDesc;
 	class GroupNodeDesc;
 	struct MathNode;
+	namespace nodes::math {enum class MathType : uint32_t;};
+	namespace nodes::vector_math {enum class MathType : uint32_t;};
 	struct DLLRTUTIL Socket
 	{
 		Socket()=default;
@@ -85,7 +114,7 @@ namespace unirender
 		Socket operator>(const Socket &socket) const;
 		Socket operator>=(const Socket &socket) const;
 	private:
-		Socket ApplyOperator(const Socket &other,ccl::NodeMathType opType,std::optional<ccl::NodeVectorMathType> opTypeVec,float(*applyValue)(float,float)) const;
+		Socket ApplyOperator(const Socket &other,nodes::math::MathType opType,std::optional<nodes::vector_math::MathType> opTypeVec,float(*applyValue)(float,float)) const;
 		Socket ApplyComparisonOperator(const Socket &other,bool(*op)(float,float),Socket(*opNode)(GroupNodeDesc&,const Socket&,const Socket&)) const;
 		// Socket can either be a concrete value (e.g. float), OR an input or output of a node
 		std::optional<DataValue> m_value {};
@@ -112,6 +141,52 @@ namespace unirender
 			constexpr auto *IN_VALUE3 = "value3";
 
 			constexpr auto *OUT_VALUE = "value";
+
+			enum class MathType : uint32_t
+			{
+				Add = 0u,
+				Subtract,
+				Multiply,
+				Divide,
+				Sine,
+				Cosine,
+				Tangent,
+				ArcSine,
+				ArcCosine,
+				ArcTangent,
+				Power,
+				Logarithm,
+				Minimum,
+				Maximum,
+				Round,
+				LessThan,
+				GreaterThan,
+				Modulo,
+				Absolute,
+				ArcTan2,
+				Floor,
+				Ceil,
+				Fraction,
+				Sqrt,
+				InvSqrt,
+				Sign,
+				Exponent,
+				Radians,
+				Degrees,
+				SinH,
+				CosH,
+				TanH,
+				Trunc,
+				Snap,
+				Wrap,
+				Compare,
+				MultiplyAdd,
+				PingPong,
+				SmoothMin,
+				SmoothMax,
+
+				Count
+			};
 		};
 		namespace hsv
 		{
@@ -188,6 +263,46 @@ namespace unirender
 
 			constexpr auto *OUT_COLOR = "color";
 			constexpr auto *OUT_ALPHA = "alpha";
+
+			enum class AlphaType : uint32_t
+			{
+				Unassociated = 0,
+				Associated,
+				ChannelPacked,
+				Ignore,
+				Auto,
+
+				Count
+			};
+
+			enum class InterpolationType : uint32_t
+			{
+				Linear = 0,
+				Closest,
+				Cubic,
+				Smart,
+
+				Count
+			};
+
+			enum class ExtensionType : uint32_t
+			{
+				Repeat = 0,
+				Extend,
+				Clip,
+
+				Count
+			};
+
+			enum class Projection : uint32_t
+			{
+				Flat = 0,
+				Box,
+				Sphere,
+				Tube,
+
+				Count
+			};
 		};
 		namespace environment_texture
 		{
@@ -248,6 +363,16 @@ namespace unirender
 			constexpr auto *IN_SCALE = "scale";
 
 			constexpr auto *OUT_VECTOR = "vector";
+
+			enum class Type : uint32_t
+			{
+				Point = 0,
+				Texture,
+				Vector,
+				Normal,
+
+				Count
+			};
 		};
 		namespace scatter_volume
 		{
@@ -331,6 +456,15 @@ namespace unirender
 			constexpr auto *IN_COLOR = "color";
 
 			constexpr auto *OUT_NORMAL = "normal";
+
+			enum class Space : uint32_t
+			{
+				Tangent = 0,
+				Object,
+				World,
+
+				Count
+			};
 		};
 		namespace principled_bsdf
 		{
@@ -400,6 +534,35 @@ namespace unirender
 
 			constexpr auto *OUT_VALUE = "value";
 			constexpr auto *OUT_VECTOR = "vector";
+			
+			enum class MathType : uint32_t
+			{
+				Add = 0u,
+				Subtract,
+				Multiply,
+				Divide,
+
+				CrossProduct,
+				Project,
+				Reflect,
+				DotProduct,
+
+				Distance,
+				Length,
+				Scale,
+				Normalize,
+
+				Snap,
+				Floor,
+				Ceil,
+				Modulo,
+				Fraction,
+				Absolute,
+				Minimum,
+				Maximum,
+
+				Count
+			};
 		};
 		namespace mix
 		{
@@ -410,6 +573,31 @@ namespace unirender
 			constexpr auto *IN_COLOR2 = "color2";
 
 			constexpr auto *OUT_COLOR = "color";
+
+			enum class Mix : uint32_t
+			{
+				Blend = 0,
+				Add,
+				Mul,
+				Sub,
+				Screen,
+				Div,
+				Diff,
+				Dark,
+				Light,
+				Overlay,
+				Dodge,
+				Burn,
+				Hue,
+				Sat,
+				Val,
+				Color,
+				Soft,
+				Linear,
+				Clamp,
+
+				Count
+			};
 		};
 		namespace rgb_to_bw
 		{
@@ -432,6 +620,25 @@ namespace unirender
 			constexpr auto *IN_VECTOR = "vector";
 
 			constexpr auto *OUT_VECTOR = "vector";
+
+			enum class Type : uint32_t
+			{
+				None = 0,
+				Vector,
+				Point,
+				Normal,
+
+				Count
+			};
+
+			enum class ConvertSpace : uint32_t
+			{
+				World = 0,
+				Object,
+				Camera,
+
+				Count
+			};
 		};
 		namespace rgb_ramp
 		{

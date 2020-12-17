@@ -17,6 +17,7 @@
 // Source: blender/intern/cycles/blender/blender_mesh.cpp
 
 #include "util_raytracing/mesh.hpp"
+#include "util_raytracing/cycles/renderer.hpp"
 #include <render/mesh.h>
 #include <mikktspace.h>
 
@@ -198,7 +199,7 @@ static void mikk_set_tangent_space(const SMikkTSpaceContext *context,
   }
 }
 
-void unirender::compute_tangents(
+void unirender::cycles::compute_tangents(
     ccl::Mesh *mesh, bool need_sign, bool active_render)
 {
     const char *layer_name = nullptr;

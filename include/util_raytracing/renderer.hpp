@@ -74,6 +74,7 @@ namespace unirender
 		std::vector<unirender::TileManager::TileData> GetRenderedTileBatch();
 	protected:
 		Renderer(const Scene &scene);
+		bool Initialize();
 		friend RenderWorker;
 		enum class ImageRenderStage : uint8_t
 		{

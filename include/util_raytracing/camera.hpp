@@ -14,7 +14,6 @@
 #include <memory>
 #include <optional>
 
-namespace ccl {class Camera;};
 class DataStream;
 namespace unirender
 {

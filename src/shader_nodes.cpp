@@ -69,7 +69,7 @@ unirender::Socket unirender::Socket::operator<(float f) const {return operator<(
 unirender::Socket unirender::Socket::operator<=(float f) const {return operator<=(Socket{f});}
 unirender::Socket unirender::Socket::operator>(float f) const {return operator>(Socket{f});}
 unirender::Socket unirender::Socket::operator>=(float f) const {return operator>=(Socket{f});}
-unirender::Socket unirender::Socket::ApplyOperator(const Socket &other,ccl::NodeMathType opType,std::optional<ccl::NodeVectorMathType> opTypeVec,float(*applyValue)(float,float)) const
+unirender::Socket unirender::Socket::ApplyOperator(const Socket &other,nodes::math::MathType opType,std::optional<nodes::vector_math::MathType> opTypeVec,float(*applyValue)(float,float)) const
 {
 	auto srcType = GetType();
 	auto dstType = other.GetType();
@@ -166,12 +166,12 @@ unirender::Socket unirender::Socket::ApplyOperator(const Socket &other,ccl::Node
 	// Case #1
 	return parent->AddMathNode(*this,other,opType);
 }
-unirender::Socket unirender::Socket::operator+(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_ADD,ccl::NodeVectorMathType::NODE_VECTOR_MATH_ADD,[](float a,float b) -> float {return a +b;});}
-unirender::Socket unirender::Socket::operator-(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_SUBTRACT,ccl::NodeVectorMathType::NODE_VECTOR_MATH_SUBTRACT,[](float a,float b) -> float {return a -b;});}
-unirender::Socket unirender::Socket::operator*(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_MULTIPLY,ccl::NodeVectorMathType::NODE_VECTOR_MATH_MULTIPLY,[](float a,float b) -> float {return a *b;});}
-unirender::Socket unirender::Socket::operator/(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_DIVIDE,ccl::NodeVectorMathType::NODE_VECTOR_MATH_DIVIDE,[](float a,float b) -> float {return a /b;});}
-unirender::Socket unirender::Socket::operator%(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_MODULO,ccl::NodeVectorMathType::NODE_VECTOR_MATH_MODULO,[](float a,float b) -> float {return fmodf(a,b);});}
-unirender::Socket unirender::Socket::operator^(const Socket &socket) const {return ApplyOperator(socket,ccl::NodeMathType::NODE_MATH_POWER,{},[](float a,float b) -> float {return powf(a,b);});}
+unirender::Socket unirender::Socket::operator+(const Socket &socket) const {return ApplyOperator(socket,unirender::nodes::math::MathType::Add,unirender::nodes::vector_math::MathType::Add,[](float a,float b) -> float {return a +b;});}
+unirender::Socket unirender::Socket::operator-(const Socket &socket) const {return ApplyOperator(socket,unirender::nodes::math::MathType::Subtract,unirender::nodes::vector_math::MathType::Subtract,[](float a,float b) -> float {return a -b;});}
+unirender::Socket unirender::Socket::operator*(const Socket &socket) const {return ApplyOperator(socket,unirender::nodes::math::MathType::Multiply,unirender::nodes::vector_math::MathType::Multiply,[](float a,float b) -> float {return a *b;});}
+unirender::Socket unirender::Socket::operator/(const Socket &socket) const {return ApplyOperator(socket,unirender::nodes::math::MathType::Divide,unirender::nodes::vector_math::MathType::Divide,[](float a,float b) -> float {return a /b;});}
+unirender::Socket unirender::Socket::operator%(const Socket &socket) const {return ApplyOperator(socket,unirender::nodes::math::MathType::Modulo,unirender::nodes::vector_math::MathType::Modulo,[](float a,float b) -> float {return fmodf(a,b);});}
+unirender::Socket unirender::Socket::operator^(const Socket &socket) const {return ApplyOperator(socket,unirender::nodes::math::MathType::Power,{},[](float a,float b) -> float {return powf(a,b);});}
 
 constexpr float COMPARISON_EPSILON = 0.00001f;
 unirender::Socket unirender::Socket::ApplyComparisonOperator(const Socket &other,bool(*op)(float,float),Socket(*opNode)(GroupNodeDesc&,const Socket&,const Socket&)) const
@@ -196,25 +196,25 @@ unirender::Socket unirender::Socket::ApplyComparisonOperator(const Socket &other
 unirender::Socket unirender::Socket::operator<(const Socket &socket) const
 {
 	return ApplyComparisonOperator(socket,[](float a,float b) -> bool {return a < b;},[](GroupNodeDesc &node,const Socket &a,const Socket &b) -> Socket {
-		return node.AddMathNode(a,b,ccl::NodeMathType::NODE_MATH_LESS_THAN);
+		return node.AddMathNode(a,b,nodes::math::MathType::LessThan);
 	});
 }
 unirender::Socket unirender::Socket::operator<=(const Socket &socket) const
 {
 	return ApplyComparisonOperator(socket,[](float a,float b) -> bool {return a <= b;},[](GroupNodeDesc &node,const Socket &a,const Socket &b) -> Socket {
-		return node.AddMathNode(a,b +COMPARISON_EPSILON,ccl::NodeMathType::NODE_MATH_LESS_THAN);
+		return node.AddMathNode(a,b +COMPARISON_EPSILON,nodes::math::MathType::LessThan);
 	});
 }
 unirender::Socket unirender::Socket::operator>(const Socket &socket) const
 {
 	return ApplyComparisonOperator(socket,[](float a,float b) -> bool {return a > b;},[](GroupNodeDesc &node,const Socket &a,const Socket &b) -> Socket {
-		return node.AddMathNode(a,b,ccl::NodeMathType::NODE_MATH_GREATER_THAN);
+		return node.AddMathNode(a,b,nodes::math::MathType::GreaterThan);
 	});
 }
 unirender::Socket unirender::Socket::operator>=(const Socket &socket) const
 {
 	return ApplyComparisonOperator(socket,[](float a,float b) -> bool {return a >= b;},[](GroupNodeDesc &node,const Socket &a,const Socket &b) -> Socket {
-		return node.AddMathNode(a,b -COMPARISON_EPSILON,ccl::NodeMathType::NODE_MATH_GREATER_THAN);
+		return node.AddMathNode(a,b -COMPARISON_EPSILON,nodes::math::MathType::GreaterThan);
 	});
 }
 

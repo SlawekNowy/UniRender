@@ -15,7 +15,6 @@
 #include <mathutil/uvec.h>
 #include <memory>
 
-namespace ccl {class Light;};
 namespace unirender
 {
 	using Lumen = float;

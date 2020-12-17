@@ -15,15 +15,11 @@
 #include <optional>
 #include <mathutil/uvec.h>
 #include <sharedutils/util.h>
-#include <kernel/kernel_types.h>
 
-namespace ccl {class Mesh; class Attribute; struct float4; struct float3; struct float2;};
 class DataStream;
 namespace unirender
 {
-	void compute_tangents(ccl::Mesh *mesh,bool need_sign,bool active_render);
 	class Shader;
-	class CCLShader;
 	class Scene;
 	class Mesh;
 	class ShaderCache;
@@ -43,7 +39,6 @@ namespace unirender
 		static const std::string TANGENT_POSTFIX;
 		static const std::string TANGENT_SIGN_POSTIFX;
 		using Smooth = uint8_t; // Boolean value
-		static constexpr ccl::AttributeStandard ALPHA_ATTRIBUTE_TYPE = ccl::AttributeStandard::ATTR_STD_POINTINESS;
 
 		static PMesh Create(const std::string &name,uint64_t numVerts,uint64_t numTris,Flags flags=Flags::None);
 		static PMesh Create(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader);
@@ -56,20 +51,12 @@ namespace unirender
 
 		void Merge(const Mesh &other);
 
-		/*const ccl::float4 *GetNormals() const;
-		const ccl::float3 *GetTangents() const;
-		const float *GetTangentSigns() const;
-		const float *GetAlphas() const;
-		const float *GetWrinkleFactors() const;
-		const ccl::float2 *GetUVs() const;
-		const ccl::float2 *GetLightmapUVs() const;*/
 		const std::vector<PShader> &GetSubMeshShaders() const;
 		std::vector<PShader> &GetSubMeshShaders();
 		void SetLightmapUVs(std::vector<Vector2> &&lightmapUvs);
 		uint64_t GetVertexCount() const;
 		uint64_t GetTriangleCount() const;
 		uint32_t GetVertexOffset() const;
-		const std::string &GetName() const;
 		bool HasAlphas() const;
 		bool HasWrinkles() const;
 
@@ -90,6 +77,7 @@ namespace unirender
 		const std::optional<std::vector<float>> &GetAlphas() const {return m_alphas;}
 		const std::vector<Smooth> &GetSmooth() const {return m_smooth;}
 		const std::vector<int> &GetShaders() const {return m_shader;}
+		const std::vector<Vector2> &GetPerVertexUvs() const {return m_perVertexUvs;}
 
 		// For internal use only
 		std::vector<uint32_t> &GetOriginalShaderIndexTable() {return m_originShaderIndexTable;}
@@ -106,7 +94,6 @@ namespace unirender
 		Flags m_flags = Flags::None;
 
 		// Note: These are moved 1:1 into the ccl::Mesh structure during finalization
-		std::string m_name;
 		std::vector<Vector3> m_verts;
 		std::vector<int> m_triangles;
 		std::vector<Vector3> m_vertexNormals;
@@ -116,7 +103,6 @@ namespace unirender
 		std::optional<std::vector<float>> m_alphas {};
 		std::vector<Smooth> m_smooth;
 		std::vector<int> m_shader;
-		//std::vector<ccl::Mesh::SubdFace> m_subdFaces;
 		size_t m_numNGons = 0;
 		size_t m_numSubdFaces = 0;
 

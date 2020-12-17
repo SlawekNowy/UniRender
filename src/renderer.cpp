@@ -8,7 +8,11 @@
 #include "util_raytracing/renderer.hpp"
 #include "util_raytracing/model_cache.hpp"
 #include "util_raytracing/mesh.hpp"
+#include "util_raytracing/light.hpp"
+#include "util_raytracing/object.hpp"
 #include "util_raytracing/scene.hpp"
+#include "util_raytracing/camera.hpp"
+#include "util_raytracing/shader.hpp"
 
 #pragma optimize("",off)
 unirender::RenderWorker::RenderWorker(Renderer &renderer)
@@ -85,4 +89,23 @@ void unirender::Renderer::OnParallelWorkerCancelled()
 	// StopRendering();
 }
 std::vector<unirender::TileManager::TileData> unirender::Renderer::GetRenderedTileBatch() {return m_tileManager.GetRenderedTileBatch();}
+bool unirender::Renderer::Initialize()
+{
+	m_scene->GetCamera().Finalize(*m_scene);
+	for(auto &light : m_scene->GetLights())
+		light->Finalize(*m_scene);
+
+	auto &mdlCache = m_renderData.modelCache;
+	mdlCache->GenerateData();
+	for(auto &chunk : mdlCache->GetChunks())
+	{
+		for(auto &o : chunk.GetObjects())
+			o->Finalize(*m_scene);
+		for(auto &o : chunk.GetMeshes())
+			o->Finalize(*m_scene);
+	}
+	for(auto &shader : m_renderData.shaderCache->GetShaders())
+		shader->Finalize();
+	return true;
+}
 #pragma optimize("",on)

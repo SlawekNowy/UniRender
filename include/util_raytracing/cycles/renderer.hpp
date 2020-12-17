@@ -18,11 +18,13 @@
 namespace unirender {class Scene; namespace cycles {class Renderer;};};
 namespace unirender::cycles
 {
+	DLLRTUTIL void compute_tangents(ccl::Mesh *mesh,bool need_sign,bool active_render);
 	class DLLRTUTIL Renderer
 		: public unirender::Renderer
 	{
 	public:
 		static std::shared_ptr<Renderer> Create(const unirender::Scene &scene);
+		static constexpr ccl::AttributeStandard ALPHA_ATTRIBUTE_TYPE = ccl::AttributeStandard::ATTR_STD_POINTINESS;
 
 		virtual ~Renderer() override;
 		virtual void Wait() override;

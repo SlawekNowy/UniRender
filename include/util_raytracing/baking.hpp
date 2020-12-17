@@ -17,6 +17,7 @@
 #ifndef __PR_CYCLES_UTIL_BAKING_HPP__
 #define __PR_CYCLES_UTIL_BAKING_HPP__
 
+#include "definitions.hpp"
 #include "render/bake.h"
 #include <util_image_buffer.hpp>
 #include <cinttypes>
@@ -31,7 +32,7 @@ namespace unirender
 	{
 		// Note: These are various utility functions from the blender repository, which are required
 		// for baking with cycles.
-		struct BakePixel {
+		struct DLLRTUTIL BakePixel {
 			int primitive_id, object_id;
 			float uv[2];
 			float du_dx, du_dy;
@@ -43,15 +44,15 @@ namespace unirender
 			std::shared_ptr<uimg::ImageBuffer> rect;
 		} ImBuf;
 
-		void prepare_bake_data(const cycles::Renderer &renderer,Object &o,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs=false);
-		void populate_bake_data(ccl::BakeData *data,
+		DLLRTUTIL void prepare_bake_data(const cycles::Renderer &renderer,Object &o,BakePixel *pixelArray,uint32_t numPixels,uint32_t imgWidth,uint32_t imgHeight,bool useLightmapUvs=false);
+		DLLRTUTIL void populate_bake_data(ccl::BakeData *data,
 			const int object_id,
 			BakePixel *pixel_array,
 			const int num_pixels);
-		unsigned char unit_float_to_uchar_clamp(float val);
-		unsigned short unit_float_to_ushort_clamp(float val);
-		void RE_bake_mask_fill(const std::vector<BakePixel> pixel_array, const size_t num_pixels, char *mask);
-		void RE_bake_margin(ImBuf *ibuf, std::vector<uint8_t> &mask, const int margin);
+		DLLRTUTIL unsigned char unit_float_to_uchar_clamp(float val);
+		DLLRTUTIL unsigned short unit_float_to_ushort_clamp(float val);
+		DLLRTUTIL void RE_bake_mask_fill(const std::vector<BakePixel> pixel_array, const size_t num_pixels, char *mask);
+		DLLRTUTIL void RE_bake_margin(ImBuf *ibuf, std::vector<uint8_t> &mask, const int margin);
 	};
 }
 
