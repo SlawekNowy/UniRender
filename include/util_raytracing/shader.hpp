@@ -127,7 +127,7 @@ namespace unirender
 			if(it == m_properties.end())
 				return {};
 			auto &prop = it->second;
-			return prop.GetValue<T>();
+			return prop.dataValue.ToValue<T>();
 		}
 
 		virtual void SerializeNodes(DataStream &dsOut) const;
