@@ -69,11 +69,13 @@ namespace unirender::cycles
 		void InitializeNormalPass(bool reloadShaders);
 		void InitializePassShaders(const std::function<std::shared_ptr<GroupNodeDesc>(const Shader&)> &fGetPassDesc);
 		void AddSkybox(const std::string &texture);
-		unirender::Renderer::RenderStageResult StartNextRenderImageStage(RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye eyeStage);
+		virtual util::EventReply HandleRenderStage(RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye eyeStage,unirender::Renderer::RenderStageResult *optResult=nullptr) override;
 		void WaitForRenderStage(RenderWorker &worker,float baseProgress,float progressMultiplier,const std::function<unirender::Renderer::RenderStageResult()> &fOnComplete);
 		void StartTextureBaking(RenderWorker &worker);
 		virtual void PrepareCyclesSceneForRendering() override;
-		bool UpdateStereo(unirender::RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye &eyeStage);
+		virtual bool UpdateStereoEye(unirender::RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye &eyeStage) override;
+		virtual void CloseRenderScene() override;
+		virtual void FinalizeImage(uimg::ImageBuffer &imgBuf) override;
 		void ReloadProgressiveRender(bool clearExposure=true,bool waitForPreviousCompletion=false);
 		Vector2i GetTileSize() const;
 

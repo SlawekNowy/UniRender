@@ -12,6 +12,7 @@
 #include "data_value.hpp"
 #include "exception.hpp"
 #include "scene_object.hpp"
+#include "util_raytracing/hair.hpp"
 #include <memory>
 #include <functional>
 #include "shader_nodes.hpp"
@@ -139,12 +140,14 @@ namespace unirender
 		Socket GetInputSocket(const std::string &name);
 		Socket GetOutputSocket(const std::string &name);
 		Socket GetProperty(const std::string &name);
+		Socket GetInputOrProperty(const std::string &name);
 		std::optional<Socket> GetPrimaryOutputSocket() const;
 
 		NodeSocketDesc *FindInputSocketDesc(const std::string &name);
 		NodeSocketDesc *FindOutputSocketDesc(const std::string &name);
 		NodeSocketDesc *FindPropertyDesc(const std::string &name);
 		NodeSocketDesc *FindSocketDesc(const Socket &socket);
+		NodeSocketDesc *FindInputOrPropertyDesc(const std::string &name);
 
 		GroupNodeDesc *GetParent() const;
 		void SetParent(GroupNodeDesc *parent);
@@ -351,6 +354,10 @@ namespace unirender
 		void Serialize(DataStream &dsOut) const;
 		void Deserialize(DataStream &dsIn,NodeManager &nodeManager);
 
+		const std::optional<HairConfig> &GetHairConfig() const {return m_hairConfig;}
+		void SetHairConfig(const HairConfig &hairConfig) {m_hairConfig = hairConfig;}
+		void ClearHairConfig() {m_hairConfig = {};}
+
 		std::shared_ptr<unirender::GroupNodeDesc> combinedPass = nullptr;
 		std::shared_ptr<unirender::GroupNodeDesc> albedoPass = nullptr;
 		std::shared_ptr<unirender::GroupNodeDesc> normalPass = nullptr;
@@ -362,6 +369,7 @@ namespace unirender
 	private:
 		Shader();
 		Pass m_activePass = Pass::Combined;
+		std::optional<HairConfig> m_hairConfig {};
 	};
 
 	using GenericShader = Shader;

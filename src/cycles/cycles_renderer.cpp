@@ -1164,8 +1164,11 @@ static void validate_session(ccl::Scene &scene)
 	}
 }
 
-unirender::Renderer::RenderStageResult unirender::cycles::Renderer::StartNextRenderImageStage(RenderWorker &worker,ImageRenderStage stage,StereoEye eyeStage)
+util::EventReply unirender::cycles::Renderer::HandleRenderStage(RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye eyeStage,unirender::Renderer::RenderStageResult *optResult)
 {
+	auto handled = unirender::Renderer::HandleRenderStage(worker,stage,eyeStage,optResult);
+	if(handled == util::EventReply::Handled)
+		return handled;
 	switch(stage)
 	{
 	case ImageRenderStage::InitializeScene:
@@ -1198,12 +1201,12 @@ unirender::Renderer::RenderStageResult unirender::cycles::Renderer::StartNextRen
 				default:
 					throw std::invalid_argument{"Invalid render mode " +std::to_string(umath::to_integral(m_renderMode))};
 				}
-				StartNextRenderImageStage(worker,initialRenderStage,stereoscopic ? StereoEye::Left : StereoEye::None);
+				StartNextRenderStage(worker,initialRenderStage,stereoscopic ? StereoEye::Left : StereoEye::None);
 				worker.Start();
 			}
 			else
 			{
-				StartNextRenderImageStage(worker,ImageRenderStage::Bake,StereoEye::None);
+				StartNextRenderStage(worker,ImageRenderStage::Bake,StereoEye::None);
 				worker.Start();
 			}
 			return RenderStageResult::Continue;
@@ -1237,20 +1240,20 @@ unirender::Renderer::RenderStageResult unirender::cycles::Renderer::StartNextRen
 				resultImageBuffer = FinalizeCyclesScene();
 				// ApplyPostProcessing(*resultImageBuffer,m_renderMode);
 
-				if(UpdateStereo(worker,stage,eyeStage))
+				if(UpdateStereoEye(worker,stage,eyeStage))
 				{
 					worker.Start(); // Lighting stage for the left eye is triggered by the user, but we have to start it manually for the right eye
 					return RenderStageResult::Continue;
 				}
 
 				if(m_scene->ShouldDenoise() == false)
-					return StartNextRenderImageStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
+					return StartNextRenderStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
 				if(m_scene->GetDenoiseMode() == Scene::DenoiseMode::Fast)
 				{
 					// Skip albedo/normal render passes and just go straight to denoising
-					return StartNextRenderImageStage(worker,ImageRenderStage::Denoise,eyeStage);
+					return StartNextRenderStage(worker,ImageRenderStage::Denoise,eyeStage);
 				}
-				return StartNextRenderImageStage(worker,ImageRenderStage::Albedo,eyeStage);
+				return StartNextRenderStage(worker,ImageRenderStage::Albedo,eyeStage);
 			});
 		});
 		break;
@@ -1271,10 +1274,10 @@ unirender::Renderer::RenderStageResult unirender::cycles::Renderer::StartNextRen
 				albedoImageBuffer = FinalizeCyclesScene();
 				// ApplyPostProcessing(*albedoImageBuffer,m_renderMode);
 
-				if(UpdateStereo(worker,stage,eyeStage))
+				if(UpdateStereoEye(worker,stage,eyeStage))
 					return RenderStageResult::Continue;
 
-				return StartNextRenderImageStage(worker,ImageRenderStage::Normal,eyeStage);
+				return StartNextRenderStage(worker,ImageRenderStage::Normal,eyeStage);
 			});
 		});
 		worker.Start();
@@ -1296,105 +1299,15 @@ unirender::Renderer::RenderStageResult unirender::cycles::Renderer::StartNextRen
 				normalImageBuffer = FinalizeCyclesScene();
 				// ApplyPostProcessing(*normalImageBuffer,m_renderMode);
 
-				if(UpdateStereo(worker,stage,eyeStage))
+				if(UpdateStereoEye(worker,stage,eyeStage))
 					return RenderStageResult::Continue;
 
-				return StartNextRenderImageStage(worker,ImageRenderStage::Denoise,eyeStage);
+				return StartNextRenderStage(worker,ImageRenderStage::Denoise,eyeStage);
 			});
 		});
 		worker.Start();
 		break;
 	}
-	case ImageRenderStage::Denoise:
-	{
-		// Denoise
-		DenoiseInfo denoiseInfo {};
-		auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
-		denoiseInfo.hdr = true;
-		denoiseInfo.width = resultImageBuffer->GetWidth();
-		denoiseInfo.height = resultImageBuffer->GetHeight();
-
-		static auto dbgAlbedo = false;
-		static auto dbgNormals = false;
-		if(dbgAlbedo)
-			m_resultImageBuffer = m_albedoImageBuffer;
-		else if(dbgNormals)
-			m_resultImageBuffer = m_normalImageBuffer;
-		else
-		{
-			auto &albedoImageBuffer = GetAlbedoImageBuffer(eyeStage);
-			auto &normalImageBuffer = GetNormalImageBuffer(eyeStage);
-			resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
-			if(albedoImageBuffer)
-				albedoImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
-			if(normalImageBuffer)
-				normalImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
-
-			/*{
-				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf.png","wb");
-				if(f0)
-					uimg::save_image(f0,*resultImageBuffer,uimg::ImageFormat::PNG);
-			}
-			{
-				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf_albedo.png","wb");
-				if(f0)
-					uimg::save_image(f0,*albedoImageBuffer,uimg::ImageFormat::PNG);
-			}
-			{
-				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf_normal.png","wb");
-				if(f0)
-					uimg::save_image(f0,*normalImageBuffer,uimg::ImageFormat::PNG);
-			}*/
-
-			denoise(denoiseInfo,*resultImageBuffer,albedoImageBuffer.get(),normalImageBuffer.get(),[this,&worker](float progress) -> bool {
-				return !worker.IsCancelled();
-			});
-		}
-
-		if(UpdateStereo(worker,stage,eyeStage))
-			return RenderStageResult::Continue;
-
-		return StartNextRenderImageStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
-	}
-	case ImageRenderStage::FinalizeImage:
-	{
-		auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
-		if(m_colorTransformProcessor) // TODO: Should we really apply color transform if we're not denoising?
-		{
-			std::string err;
-			if(m_colorTransformProcessor->Apply(*resultImageBuffer,err,0.f,m_scene->GetGamma()) == false)
-				m_scene->HandleError("Unable to apply color transform: " +err);
-		}
-		resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGBA_HDR);
-		resultImageBuffer->ClearAlpha();
-		if(m_scene->IsProgressive() == false) // If progressive, our tile manager will have already flipped the image
-			resultImageBuffer->Flip(true,true);
-		if(UpdateStereo(worker,stage,eyeStage))
-			return RenderStageResult::Continue;
-		if(eyeStage == StereoEye::Left)
-			return StartNextRenderImageStage(worker,ImageRenderStage::MergeStereoscopic,StereoEye::None);
-		return StartNextRenderImageStage(worker,ImageRenderStage::Finalize,StereoEye::None);
-	}
-	case ImageRenderStage::MergeStereoscopic:
-	{
-		auto &imgLeft = m_resultImageBuffer.at(umath::to_integral(StereoEye::Left));
-		auto &imgRight = m_resultImageBuffer.at(umath::to_integral(StereoEye::Right));
-		auto w = imgLeft->GetWidth();
-		auto h = imgLeft->GetHeight();
-		auto imgComposite = uimg::ImageBuffer::Create(w,h *2,imgLeft->GetFormat());
-		auto *dataSrcLeft = imgLeft->GetData();
-		auto *dataSrcRight = imgRight->GetData();
-		auto *dataDst = imgComposite->GetData();
-		memcpy(dataDst,dataSrcLeft,imgLeft->GetSize());
-		memcpy(static_cast<uint8_t*>(dataDst) +imgLeft->GetSize(),dataSrcRight,imgRight->GetSize());
-		m_resultImageBuffer.at(umath::to_integral(StereoEye::Left)) = imgComposite;
-		m_resultImageBuffer.at(umath::to_integral(StereoEye::Right)) = nullptr;
-		return StartNextRenderImageStage(worker,ImageRenderStage::Finalize,StereoEye::None);
-	}
-	case ImageRenderStage::Finalize:
-		// We're done here
-		CloseCyclesScene();
-		return RenderStageResult::Complete;
 	case ImageRenderStage::SceneAlbedo:
 	case ImageRenderStage::SceneNormals:
 	case ImageRenderStage::SceneDepth:
@@ -1416,19 +1329,21 @@ unirender::Renderer::RenderStageResult unirender::cycles::Renderer::StartNextRen
 				resultImageBuffer = FinalizeCyclesScene();
 				// ApplyPostProcessing(*resultImageBuffer,m_renderMode);
 
-				if(UpdateStereo(worker,stage,eyeStage))
+				if(UpdateStereoEye(worker,stage,eyeStage))
 				{
 					worker.Start(); // Initial stage for the left eye is triggered by the user, but we have to start it manually for the right eye
 					return RenderStageResult::Continue;
 				}
 
-				return StartNextRenderImageStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
+				return StartNextRenderStage(worker,ImageRenderStage::FinalizeImage,eyeStage);
 			});
 		});
 		break;
 	}
 	}
-	return RenderStageResult::Continue;
+	if(optResult)
+		*optResult = unirender::Renderer::RenderStageResult::Continue;
+	return util::EventReply::Handled;
 }
 
 void unirender::cycles::Renderer::WaitForRenderStage(RenderWorker &worker,float baseProgress,float progressMultiplier,const std::function<RenderStageResult()> &fOnComplete)
@@ -1475,14 +1390,14 @@ void unirender::cycles::Renderer::WaitForRenderStage(RenderWorker &worker,float 
 		worker.SetStatus(util::JobStatus::Successful);
 }
 
-bool unirender::cycles::Renderer::UpdateStereo(unirender::RenderWorker &worker,ImageRenderStage stage,StereoEye &eyeStage)
+bool unirender::cycles::Renderer::UpdateStereoEye(unirender::RenderWorker &worker,ImageRenderStage stage,StereoEye &eyeStage)
 {
 	if(eyeStage == StereoEye::Left)
 	{
 		// Switch to right eye
 		m_cclScene->camera->stereo_eye = ccl::Camera::StereoEye::STEREO_RIGHT;
 		ReloadProgressiveRender(false);
-		StartNextRenderImageStage(worker,stage,StereoEye::Right);
+		StartNextRenderStage(worker,stage,StereoEye::Right);
 		return true;
 	}
 	else if(eyeStage == StereoEye::Right)
@@ -1922,6 +1837,14 @@ void unirender::cycles::Renderer::FinalizeAndCloseCyclesScene()
 	CloseCyclesScene();
 }
 
+void unirender::cycles::Renderer::CloseRenderScene() {CloseCyclesScene();}
+
+void unirender::cycles::Renderer::FinalizeImage(uimg::ImageBuffer &imgBuf)
+{
+	if(m_scene->IsProgressive() == false) // If progressive, our tile manager will have already flipped the image
+		imgBuf.Flip(true,true);
+}
+
 void unirender::cycles::Renderer::SetupRenderSettings(
 	ccl::Scene &scene,ccl::Session &session,ccl::BufferParams &bufferParams,unirender::Scene::RenderMode renderMode,
 	uint32_t maxTransparencyBounces
@@ -2122,7 +2045,7 @@ util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> unirender::cycles::Rendere
 {
 	auto job = util::create_parallel_job<RenderWorker>(*this);
 	auto &worker = static_cast<RenderWorker&>(job.GetWorker());
-	StartNextRenderImageStage(worker,ImageRenderStage::InitializeScene,StereoEye::None);
+	StartNextRenderStage(worker,ImageRenderStage::InitializeScene,StereoEye::None);
 	return job;
 }
 #pragma optimize("",on)

@@ -12,6 +12,7 @@
 #include "util_raytracing/tilemanager.hpp"
 #include <sharedutils/util_parallel_job.hpp>
 #include <sharedutils/util.h>
+#include <sharedutils/util_event_reply.hpp>
 #include <cinttypes>
 
 namespace unirender
@@ -100,8 +101,13 @@ namespace unirender
 			Continue
 		};
 		void OnParallelWorkerCancelled();
+		unirender::Renderer::RenderStageResult StartNextRenderStage(RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye eyeStage);
+		virtual util::EventReply HandleRenderStage(RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye eyeStage,unirender::Renderer::RenderStageResult *optResult=nullptr);
 		virtual void PrepareCyclesSceneForRendering();
+		virtual bool UpdateStereoEye(unirender::RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye &eyeStage)=0;
 		virtual void SetCancelled(const std::string &msg="Cancelled by application.")=0;
+		virtual void CloseRenderScene()=0;
+		virtual void FinalizeImage(uimg::ImageBuffer &imgBuf) {};
 
 		std::shared_ptr<Scene> m_scene = nullptr;
 		TileManager m_tileManager {};

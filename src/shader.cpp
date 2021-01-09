@@ -129,6 +129,13 @@ unirender::Socket unirender::NodeDesc::GetProperty(const std::string &name)
 		throw Exception{ToString() +" has no property named '" +name +"'!"};
 	return *socket;
 }
+unirender::Socket unirender::NodeDesc::GetInputOrProperty(const std::string &name)
+{
+	auto socket = FindInputSocket(name);
+	if(socket.has_value())
+		return *socket;
+	return GetProperty(name);
+}
 std::optional<unirender::Socket> unirender::NodeDesc::GetPrimaryOutputSocket() const {return m_primaryOutputSocket ? const_cast<NodeDesc*>(this)->FindOutputSocket(*m_primaryOutputSocket) : std::optional<unirender::Socket>{};}
 unirender::NodeSocketDesc *unirender::NodeDesc::FindInputSocketDesc(const std::string &name)
 {
@@ -160,6 +167,13 @@ unirender::NodeSocketDesc *unirender::NodeDesc::FindSocketDesc(const Socket &soc
 	if(socket.IsOutputSocket())
 		return FindOutputSocketDesc(socketName);
 	return FindInputSocketDesc(socketName);
+}
+unirender::NodeSocketDesc *unirender::NodeDesc::FindInputOrPropertyDesc(const std::string &name)
+{
+	auto *inputDesc = FindInputSocketDesc(name);
+	if(inputDesc == nullptr)
+		inputDesc = FindPropertyDesc(name);
+	return inputDesc;
 }
 unirender::GroupNodeDesc *unirender::NodeDesc::GetParent() const {return m_parent.lock().get();}
 void unirender::NodeDesc::SetParent(GroupNodeDesc *parent) {m_parent = parent ? std::static_pointer_cast<GroupNodeDesc>(parent->shared_from_this()) : std::weak_ptr<GroupNodeDesc>{};}
@@ -654,6 +668,14 @@ void unirender::Shader::Serialize(DataStream &dsOut) const
 		if(passes.at(i))
 			flags |= 1<<i;
 	}
+	
+	dsOut->Write<bool>(m_hairConfig.has_value());
+	if(m_hairConfig.has_value())
+	{
+		auto &hairConfig = *m_hairConfig;
+		dsOut->Write(*m_hairConfig);
+	}
+
 	dsOut->Write<uint32_t>(flags);
 	for(auto &pass : passes)
 	{
@@ -665,6 +687,13 @@ void unirender::Shader::Serialize(DataStream &dsOut) const
 void unirender::Shader::Deserialize(DataStream &dsIn,NodeManager &nodeManager)
 {
 	std::array<std::reference_wrapper<std::shared_ptr<unirender::GroupNodeDesc>>,4> passes = {combinedPass,albedoPass,normalPass,depthPass};
+
+	auto hasHairConfig = dsIn->Read<bool>();
+	if(hasHairConfig)
+		m_hairConfig = dsIn->Read<unirender::HairConfig>();
+	else
+		m_hairConfig = {};
+
 	auto flags = dsIn->Read<uint32_t>();
 	for(auto i=decltype(passes.size()){0u};i<passes.size();++i)
 	{
