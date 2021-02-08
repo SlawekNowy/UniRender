@@ -6,8 +6,13 @@
 */
 
 #include "util_raytracing/scene_object.hpp"
+#include "util_raytracing/object.hpp"
 
 #pragma optimize("",off)
+static unirender::BaseObject *target = nullptr;
+unirender::BaseObject::BaseObject()
+{}
+unirender::BaseObject::~BaseObject() {}
 unirender::Scene &unirender::SceneObject::GetScene() const {return m_scene;}
 unirender::SceneObject::SceneObject(Scene &scene)
 	: m_scene{scene}

@@ -19,7 +19,8 @@ namespace unirender
 	class DLLRTUTIL BaseObject
 	{
 	public:
-		virtual ~BaseObject()=default;
+		BaseObject();
+		virtual ~BaseObject();
 		void Finalize(Scene &scene,bool force=false);
 
 		void SetHash(const util::MurmurHash3 &hash) {m_hash = hash;}

@@ -485,6 +485,41 @@ void unirender::cycles::Renderer::SyncCamera(const unirender::Camera &cam)
 	cclCam.matrix = Scene::ToCyclesTransform(pose,true);
 	cclCam.compute_auto_viewplane();
 
+	//
+	std::cout<<"Camera settings:"<<std::endl;
+	std::cout<<"Width: "<<cclCam.width<<std::endl;
+	std::cout<<"Height: "<<cclCam.height<<std::endl;
+	std::cout<<"NearZ: "<<cclCam.nearclip<<std::endl;
+	std::cout<<"FarZ: "<<cclCam.farclip<<std::endl;
+	std::cout<<"FOV: "<<umath::rad_to_deg(cclCam.fov)<<std::endl;
+	std::cout<<"Focal Distance: "<<cclCam.focaldistance<<std::endl;
+	std::cout<<"Aperture Size: "<<cclCam.aperturesize<<std::endl;
+	std::cout<<"Aperture Ratio: "<<cclCam.aperture_ratio<<std::endl;
+	std::cout<<"Blades: "<<cclCam.blades<<std::endl;
+	std::cout<<"Blades Rotation: "<<cclCam.bladesrotation<<std::endl;
+	std::cout<<"Interocular Distance: "<<cclCam.interocular_distance<<std::endl;
+	std::cout<<"Longitude Max: "<<cclCam.longitude_max<<std::endl;
+	std::cout<<"Longitude Min: "<<cclCam.longitude_min<<std::endl;
+	std::cout<<"Latitude Max: "<<cclCam.latitude_max<<std::endl;
+	std::cout<<"Latitude Min: "<<cclCam.latitude_min<<std::endl;
+	std::cout<<"Use Spherical Stereo: "<<cclCam.use_spherical_stereo<<std::endl;
+	std::cout<<"Matrix: ";
+	auto first = true;
+	for(uint8_t i=0;i<3;++i)
+	{
+		for(uint8_t j=0;j<4;++j)
+		{
+			auto v = cclCam.matrix[i][j];
+			if(first)
+				first = false;
+			else
+				std::cout<<",";
+			std::cout<<v;
+		}
+	}
+	std::cout<<std::endl;
+	//
+
 	cclCam.tag_update();
 	cclCam.update(&**this);
 }
@@ -812,6 +847,7 @@ bool unirender::cycles::Renderer::Initialize(unirender::Scene &scene)
 		}
 	}
 	
+	// TODO: Move this to shared code
 	if(createInfo.colorTransform.has_value())
 	{
 		std::string err;
