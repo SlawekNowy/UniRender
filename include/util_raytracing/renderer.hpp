@@ -17,6 +17,11 @@
 
 namespace unirender
 {
+	DLLRTUTIL void set_log_handler(const std::function<void(const std::string)> &logHandler=nullptr);
+	DLLRTUTIL const std::function<void(const std::string)> &get_log_handler();
+
+	DLLRTUTIL void set_module_lookup_location(const std::string &location);
+
 	class ModelCache;
 	class ShaderCache;
 	class Renderer;
@@ -44,6 +49,7 @@ namespace unirender
 	class Scene;
 	class Mesh;
 	class Shader;
+	class Object;
 	class DLLRTUTIL Renderer
 		: public std::enable_shared_from_this<Renderer>
 	{
@@ -56,6 +62,11 @@ namespace unirender
 
 			None = std::numeric_limits<uint8_t>::max()
 		};
+		static std::shared_ptr<Renderer> Create(const unirender::Scene &scene,const std::string &rendererIdentifier);
+		static constexpr const char *OUTPUT_COLOR = "COLOR";
+		static constexpr const char *OUTPUT_ALBEDO = "ALBEDO";
+		static constexpr const char *OUTPUT_NORMAL = "NORMAL";
+		static constexpr const char *OUTPUT_DEPTH = "DEPTH";
 
 		virtual ~Renderer()=default;
 		virtual void Wait()=0;
@@ -68,6 +79,7 @@ namespace unirender
 
 		std::shared_ptr<Mesh> FindRenderMeshByHash(const util::MurmurHash3 &hash) const;
 
+		bool ShouldUseTransparentSky() const;
 		Scene &GetScene() {return *m_scene;}
 		const Scene &GetScene() const {return const_cast<Renderer*>(this)->GetScene();}
 		TileManager &GetTileManager() {return m_tileManager;}
@@ -76,6 +88,7 @@ namespace unirender
 	protected:
 		Renderer(const Scene &scene);
 		bool Initialize();
+		Object *FindObject(const std::string &objectName) const;
 		friend RenderWorker;
 		enum class ImageRenderStage : uint8_t
 		{
@@ -107,7 +120,8 @@ namespace unirender
 		virtual bool UpdateStereoEye(unirender::RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye &eyeStage)=0;
 		virtual void SetCancelled(const std::string &msg="Cancelled by application.")=0;
 		virtual void CloseRenderScene()=0;
-		virtual void FinalizeImage(uimg::ImageBuffer &imgBuf) {};
+		virtual void FinalizeImage(uimg::ImageBuffer &imgBuf,StereoEye eyeStage) {};
+		std::pair<uint32_t,std::string> AddOutput(const std::string &type);
 
 		std::shared_ptr<Scene> m_scene = nullptr;
 		TileManager m_tileManager {};
@@ -121,12 +135,11 @@ namespace unirender
 		std::condition_variable m_progressiveCondition {};
 		std::mutex m_progressiveMutex {};
 		std::shared_ptr<util::ocio::ColorProcessor> m_colorTransformProcessor = nullptr;
-		std::shared_ptr<uimg::ImageBuffer> &GetResultImageBuffer(StereoEye eye=StereoEye::Left);
-		std::shared_ptr<uimg::ImageBuffer> &GetAlbedoImageBuffer(StereoEye eye=StereoEye::Left);
-		std::shared_ptr<uimg::ImageBuffer> &GetNormalImageBuffer(StereoEye eye=StereoEye::Left);
-		std::array<std::shared_ptr<uimg::ImageBuffer>,umath::to_integral(StereoEye::Count)> m_resultImageBuffer = {};
-		std::array<std::shared_ptr<uimg::ImageBuffer>,umath::to_integral(StereoEye::Count)> m_normalImageBuffer = {};
-		std::array<std::shared_ptr<uimg::ImageBuffer>,umath::to_integral(StereoEye::Count)> m_albedoImageBuffer = {};
+
+		std::shared_ptr<uimg::ImageBuffer> &GetResultImageBuffer(const std::string &type,StereoEye eye=StereoEye::Left);
+		std::unordered_map<std::string,std::array<std::shared_ptr<uimg::ImageBuffer>,umath::to_integral(StereoEye::Count)>> m_resultImageBuffers = {};
+		std::unordered_map<std::string,uint32_t> m_outputs {};
+		uint32_t m_nextOutputIndex = 0;
 	};
 };
 

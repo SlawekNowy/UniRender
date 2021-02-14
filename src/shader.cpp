@@ -267,6 +267,226 @@ unirender::NodeDesc *unirender::GroupNodeDesc::GetNodeByIndex(NodeIndex idx) con
 		return nullptr;
 	return m_nodes.at(idx).get();
 }
+std::vector<std::shared_ptr<unirender::NodeDesc>>::iterator unirender::GroupNodeDesc::ResolveGroupNodes(std::vector<std::shared_ptr<unirender::NodeDesc>>::iterator itParent)
+{
+	auto pnode = shared_from_this(); // Unused, but we need to ensure the node stays valid for the remainder of this function
+	auto &children = const_cast<std::vector<std::shared_ptr<unirender::NodeDesc>>&>(GetChildNodes());
+	for(auto it=children.begin();it!=children.end();)
+	{
+		auto &child = *it;
+		if(child->IsGroupNode() == false)
+		{
+			++it;
+			continue;
+		}
+		it = static_cast<unirender::GroupNodeDesc&>(*child).ResolveGroupNodes(it);
+	}
+	
+	auto *parent = GetParent();
+	if(parent == nullptr)
+		return {};
+
+	auto &links = GetLinks();
+	auto &parentLinks = const_cast<std::vector<unirender::NodeDescLink>&>(parent->GetLinks());
+	parentLinks.reserve(links.size() +GetInputs().size() +GetOutputs().size());
+
+	// We need to re-direct the incoming and outgoing links for the group node, which all reside in the parent node.
+	// There are several cases we have to consider:
+	// 1) Input socket does *not* have an incoming link: Its default value has to be applied to whatever node it's linked to in the group node.
+	// 1.1) Socket is not linked to anything: We can just ignore the socket entirely
+	// 1.2) The node the socket is linked to is an output socket of this group node, or an input-socket of a non-group node within this group node: We'll assign the default value from the input socket to the output socket. In this case it'll be resolved when we resolve the output sockets.
+	// 2) Input socket *does* have an incoming link:
+	// 2.1) Socket is not linked to anything: We don't need to do anything
+	// 2.2) The node the socket is linked to is an output socket of this group node, or an input-socket of a non-group node within this group node: We'll redirect the incoming socket directly to the linked socket. In this case it'll be resolved when we resolve the output sockets.
+	std::unordered_map<unirender::Socket,unirender::NodeDescLink*> incomingLinks;
+	std::unordered_map<unirender::Socket,std::vector<unirender::NodeDescLink*>> outgoingLinks;
+	for(auto &link : parentLinks)
+	{
+		if(link.toSocket.GetNode() == this)
+		{
+			assert(!link.toSocket.IsOutputSocket());
+			incomingLinks[link.toSocket] = &link;
+		}
+		else if(link.fromSocket.GetNode() == this)
+		{
+			assert(link.fromSocket.IsOutputSocket());
+			auto it = outgoingLinks.find(link.fromSocket);
+			if(it == outgoingLinks.end())
+				it = outgoingLinks.insert(std::make_pair(link.fromSocket,std::vector<unirender::NodeDescLink*>{})).first;
+			it->second.push_back(&link);
+		}
+	}
+
+	std::unordered_map<unirender::Socket,std::vector<unirender::NodeDescLink*>> internalLinksFromInputs;
+	std::unordered_map<unirender::Socket,unirender::NodeDescLink*> internalLinksToOutputs;
+	for(auto &link : links)
+	{
+		if(link.fromSocket.GetNode() == this)
+		{
+			assert(!link.fromSocket.IsOutputSocket());
+			auto it = internalLinksFromInputs.find(link.fromSocket);
+			if(it == internalLinksFromInputs.end())
+				it = internalLinksFromInputs.insert(std::make_pair(link.fromSocket,std::vector<unirender::NodeDescLink*>{})).first;
+			it->second.push_back(const_cast<unirender::NodeDescLink*>(&link));
+		}
+		if(link.toSocket.GetNode() == this)
+		{
+			assert(link.toSocket.IsOutputSocket());
+			internalLinksToOutputs[link.toSocket] = const_cast<unirender::NodeDescLink*>(&link);
+		}
+	}
+
+	std::queue<unirender::Socket> clearParentLinks {};
+	std::queue<unirender::NodeDescLink> newParentLinks {};
+	auto fResolveInput = [this,&incomingLinks,&parentLinks,&clearParentLinks,&newParentLinks,&internalLinksFromInputs,&internalLinksToOutputs](const std::string &socketName) {
+		unirender::Socket socket {*this,socketName,false /* output */};
+		auto it = incomingLinks.find(socket);
+		if(it == incomingLinks.end())
+		{
+			// Case 1)
+			auto itInput = internalLinksFromInputs.find(socket);
+			if(itInput == internalLinksFromInputs.end())
+			{
+				// Case 1.1)
+				return;
+			}
+			// Case 1.2)
+			std::string inputSocketName,outputSocketName;
+			socket.GetNode(inputSocketName);
+			auto &links = itInput->second;
+			for(auto *link : links)
+			{
+				auto *outputNode = link->toSocket.GetNode(outputSocketName);
+				if(link->toSocket.IsOutputSocket())
+				{
+					outputNode->FindOutputSocketDesc(outputSocketName)->dataValue = FindInputOrPropertyDesc(inputSocketName)->dataValue;
+					auto it = internalLinksToOutputs.find(link->toSocket);
+					assert(it != internalLinksToOutputs.end());
+					internalLinksToOutputs.erase(it);
+				}
+				else
+					outputNode->FindInputOrPropertyDesc(outputSocketName)->dataValue = FindInputOrPropertyDesc(inputSocketName)->dataValue;
+			}
+			return;
+		}
+		// Case 2)
+		auto itInput = internalLinksFromInputs.find(socket);
+		if(itInput == internalLinksFromInputs.end())
+		{
+			// Case 2.1)
+			return;
+		}
+		// Case 2.2)
+		// Note: We need to update the parent links, but we can't do so directly, because that would invalidate the
+		// links in incomingLinks and outgoingLinks, so we'll queue the updates here and do them further below.
+		clearParentLinks.push(it->second->toSocket);
+		auto &links = itInput->second;
+		for(auto *link : links)
+		{
+			newParentLinks.push({it->second->fromSocket,link->toSocket});
+			if(link->toSocket.IsOutputSocket())
+			{
+				auto itOutput = internalLinksToOutputs.find(link->toSocket);
+				assert(itOutput != internalLinksToOutputs.end());
+				itOutput->second->fromSocket = it->second->fromSocket;
+			}
+		}
+	};
+
+	// Resolve properties
+	for(auto &prop : GetProperties())
+		fResolveInput(prop.first);
+
+	// Resolve inputs
+	for(auto &input : GetInputs())
+		fResolveInput(input.first);
+
+	// Now we also have to handle the outputs:
+	// 1) Output socket does *not* have an outgoing link: We can ignore the socket entirely
+	// 2) Output socket *does* have an outgoing link:
+	// 2.1) Socket has no input link: Just assign default value
+	// 2.2) Socket has input from non-group node within this group node: Re-direct the from-socket of the outgoing link to the from-socket of the output socket
+
+	// Resolve outputs
+	for(auto &output : GetOutputs())
+	{
+		unirender::Socket socket {*this,output.first,true /* output */};
+		auto it = outgoingLinks.find(socket);
+		if(it == outgoingLinks.end())
+		{
+			// Case 1)
+			continue;
+		}
+		auto itOutput = internalLinksToOutputs.find(socket);
+		if(itOutput == internalLinksToOutputs.end())
+		{
+			// Case 2.1)
+			std::string toSocketName;
+			for(auto *link : it->second)
+			{
+				auto *toSocketNode = link->toSocket.GetNode(toSocketName);
+				std::string outputSocketName;
+				socket.GetNode(outputSocketName);
+				toSocketNode->FindInputOrPropertyDesc(toSocketName)->dataValue = FindOutputSocketDesc(outputSocketName)->dataValue;
+			}
+			auto itParentLink = std::find_if(parentLinks.begin(),parentLinks.end(),[&socket](const unirender::NodeDescLink &link) {
+				return link.fromSocket == socket;
+			});
+			assert(itParentLink != parentLinks.end());
+			parentLinks.erase(itParentLink);
+			continue;
+		}
+		// Case 2.2
+		for(auto *link : it->second)
+			link->fromSocket = itOutput->second->fromSocket;
+	}
+
+	// Update input/output links
+	while(clearParentLinks.empty() == false)
+	{
+		auto &sock = clearParentLinks.front();
+
+		auto it = std::find_if(parentLinks.begin(),parentLinks.end(),[&sock](const unirender::NodeDescLink &link) {
+			return link.toSocket == sock;
+		});
+		assert(it != parentLinks.end());
+		parentLinks.erase(it);
+
+		clearParentLinks.pop();
+	}
+
+	parentLinks.reserve(parentLinks.size() +newParentLinks.size());
+	while(newParentLinks.empty() == false)
+	{
+		auto &link = newParentLinks.front();
+		parentLinks.push_back(link);
+		newParentLinks.pop();
+	}
+	//
+	
+	// Move non-group nodes and links to parent
+	auto &parentChildren = const_cast<std::vector<std::shared_ptr<unirender::NodeDesc>>&>(parent->GetChildNodes());
+	itParent = parentChildren.erase(itParent);
+	auto iParent = itParent -parentChildren.begin();
+	parentChildren.reserve(parentChildren.size() +children.size());
+	for(auto &child : children)
+	{
+		assert(!child->IsGroupNode());
+		if(child->IsGroupNode())
+			throw std::runtime_error{"Unresolved child group node"};
+		parentChildren.push_back(child);
+	}
+
+	parentLinks.reserve(parentLinks.size() +links.size());
+	for(auto &link : links)
+	{
+		if(link.fromSocket.GetNode() == this || link.toSocket.GetNode() == this)
+			continue;
+		parentLinks.push_back(link);
+	}
+	return parentChildren.begin() +iParent;
+}
+void unirender::GroupNodeDesc::ResolveGroupNodes() {ResolveGroupNodes({});}
 unirender::NodeDesc &unirender::GroupNodeDesc::AddNode(const std::string &typeName)
 {
 	if(m_nodes.size() == m_nodes.capacity())
@@ -872,6 +1092,15 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterPrimaryOutputSocket(nodes::image_texture::OUT_COLOR);
 		return desc;
 	});
+	RegisterNodeType(NODE_NORMAL_TEXTURE,[](GroupNodeDesc *parent) {
+		auto desc = NodeDesc::Create(parent);
+		desc->RegisterSocket<unirender::SocketType::String>(nodes::normal_texture::IN_FILENAME,STString{});
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::normal_texture::IN_STRENGTH,1.f);
+
+		desc->RegisterSocket<unirender::SocketType::Normal>(nodes::normal_texture::OUT_NORMAL,SocketIO::Out);
+		desc->RegisterPrimaryOutputSocket(nodes::normal_texture::OUT_NORMAL);
+		return desc;
+	});
 	RegisterNodeType(NODE_ENVIRONMENT_TEXTURE,[](GroupNodeDesc *parent) {
 		auto desc = NodeDesc::Create(parent);
 		desc->RegisterSocket<unirender::SocketType::String>(nodes::environment_texture::IN_FILENAME,STString{});
@@ -1192,7 +1421,7 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterPrimaryOutputSocket(nodes::layer_weight::OUT_FRESNEL);
 		return desc;
 	});
-	static_assert(NODE_COUNT == 35,"Increase this number if new node types are added!");
+	static_assert(NODE_COUNT == 36,"Increase this number if new node types are added!");
 }
 
 std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc) {os<<desc.ToString(); return os;}

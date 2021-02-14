@@ -69,6 +69,30 @@ unirender::Socket unirender::Socket::operator<(float f) const {return operator<(
 unirender::Socket unirender::Socket::operator<=(float f) const {return operator<=(Socket{f});}
 unirender::Socket unirender::Socket::operator>(float f) const {return operator>(Socket{f});}
 unirender::Socket unirender::Socket::operator>=(float f) const {return operator>=(Socket{f});}
+unirender::GroupNodeDesc *unirender::Socket::GetCommonGroupNode(const Socket &other) const
+{
+	unirender::GroupNodeDesc *target = nullptr;
+	// Note: We have to handle a special case if either socket is an input socket.
+	// This is only allowed if the input socket belongs to a group node and the operation was applied within
+	// that group node, in which case we have to add the op node to the group node instead of the parent node.
+	if(!IsConcreteValue() && !IsOutputSocket())
+	{
+		auto node = m_nodeSocketRef.node.lock();
+		target = node && node->IsGroupNode() ? static_cast<unirender::GroupNodeDesc*>(node.get()) : nullptr;
+	}
+	else if(!other.IsConcreteValue() && !other.IsOutputSocket())
+	{
+		auto node = other.m_nodeSocketRef.node.lock();
+		target = node && node->IsGroupNode() ? static_cast<unirender::GroupNodeDesc*>(node.get()) : nullptr;
+	}
+	else
+	{
+		auto &ref = IsConcreteValue() ? other.m_nodeSocketRef : m_nodeSocketRef;
+		auto node = ref.node.lock();
+		target = node ? node->GetParent() : nullptr;
+	}
+	return target;
+}
 unirender::Socket unirender::Socket::ApplyOperator(const Socket &other,nodes::math::MathType opType,std::optional<nodes::vector_math::MathType> opTypeVec,float(*applyValue)(float,float)) const
 {
 	auto srcType = GetType();
@@ -120,12 +144,8 @@ unirender::Socket unirender::Socket::ApplyOperator(const Socket &other,nodes::ma
 		return applyValue(*valSrc,*valDst);
 	}
 
-	auto &ref = IsConcreteValue() ? other.m_nodeSocketRef : m_nodeSocketRef;
-	if(ref.node.expired())
-		return 0.f; // Invalid case
-	auto node = ref.node.lock();
-	auto *parent = node->GetParent();
-	if(parent == nullptr)
+	auto *target = GetCommonGroupNode(other);
+	if(target == nullptr)
 		return 0.f; // Invalid case
 
 	if(is_vector_type(srcType))
@@ -135,18 +155,18 @@ unirender::Socket unirender::Socket::ApplyOperator(const Socket &other,nodes::ma
 		if(is_vector_type(dstType))
 		{
 			// Case #4
-			auto &n = parent->AddVectorMathNode(*this,other,*opTypeVec);
+			auto &n = target->AddVectorMathNode(*this,other,*opTypeVec);
 			return *n.GetPrimaryOutputSocket();
 		}
 		if(is_numeric_type(dstType) == false)
 			return 0.f; // Invalid case
 		// Case #3
-		auto &vDst = parent->AddNode(NODE_COMBINE_XYZ);
-		parent->Link(other,vDst.GetInputSocket(nodes::combine_xyz::IN_X));
-		parent->Link(other,vDst.GetInputSocket(nodes::combine_xyz::IN_Y));
-		parent->Link(other,vDst.GetInputSocket(nodes::combine_xyz::IN_Z));
+		auto &vDst = target->AddNode(NODE_COMBINE_XYZ);
+		target->Link(other,vDst.GetInputSocket(nodes::combine_xyz::IN_X));
+		target->Link(other,vDst.GetInputSocket(nodes::combine_xyz::IN_Y));
+		target->Link(other,vDst.GetInputSocket(nodes::combine_xyz::IN_Z));
 		
-		auto &n = parent->AddVectorMathNode(*this,vDst,*opTypeVec);
+		auto &n = target->AddVectorMathNode(*this,vDst,*opTypeVec);
 		return *n.GetPrimaryOutputSocket();
 	}
 	if(is_vector_type(dstType))
@@ -154,17 +174,17 @@ unirender::Socket unirender::Socket::ApplyOperator(const Socket &other,nodes::ma
 		if(opTypeVec.has_value() == false || is_numeric_type(srcType) == false)
 			return 0.f; // Invalid case
 		// Case #2
-		auto &vSrc = parent->AddNode(NODE_COMBINE_XYZ);
-		parent->Link(*this,vSrc.GetInputSocket(nodes::combine_xyz::IN_X));
-		parent->Link(*this,vSrc.GetInputSocket(nodes::combine_xyz::IN_Y));
-		parent->Link(*this,vSrc.GetInputSocket(nodes::combine_xyz::IN_Z));
+		auto &vSrc = target->AddNode(NODE_COMBINE_XYZ);
+		target->Link(*this,vSrc.GetInputSocket(nodes::combine_xyz::IN_X));
+		target->Link(*this,vSrc.GetInputSocket(nodes::combine_xyz::IN_Y));
+		target->Link(*this,vSrc.GetInputSocket(nodes::combine_xyz::IN_Z));
 		
-		auto &n = parent->AddVectorMathNode(vSrc,other,*opTypeVec);
+		auto &n = target->AddVectorMathNode(vSrc,other,*opTypeVec);
 		return *n.GetPrimaryOutputSocket();
 	}
 
 	// Case #1
-	return parent->AddMathNode(*this,other,opType);
+	return target->AddMathNode(*this,other,opType);
 }
 unirender::Socket unirender::Socket::operator+(const Socket &socket) const {return ApplyOperator(socket,unirender::nodes::math::MathType::Add,unirender::nodes::vector_math::MathType::Add,[](float a,float b) -> float {return a +b;});}
 unirender::Socket unirender::Socket::operator-(const Socket &socket) const {return ApplyOperator(socket,unirender::nodes::math::MathType::Subtract,unirender::nodes::vector_math::MathType::Subtract,[](float a,float b) -> float {return a -b;});}
@@ -184,14 +204,10 @@ unirender::Socket unirender::Socket::ApplyComparisonOperator(const Socket &other
 			return {}; // Invalid case
 		return op(*valSrc,*valDst);
 	}
-	auto &ref = IsConcreteValue() ? other.m_nodeSocketRef : m_nodeSocketRef;
-	if(ref.node.expired())
+	auto *target = GetCommonGroupNode(other);
+	if(target == nullptr)
 		return 0.f; // Invalid case
-	auto node = ref.node.lock();
-	auto *parent = node->GetParent();
-	if(parent == nullptr)
-		return 0.f; // Invalid case
-	return opNode(*parent,*this,other);
+	return opNode(*target,*this,other);
 }
 unirender::Socket unirender::Socket::operator<(const Socket &socket) const
 {
@@ -235,13 +251,37 @@ void unirender::Socket::Link(const Socket &other)
 {
 	if(IsConcreteValue() && other.IsConcreteValue())
 		throw Exception{"Cannot link two concrete sockets!"};
-	auto *node = GetNode();
+	auto *node0 = GetNode();
+	auto *node1 = other.GetNode();
+	if(!node0 && !node1)
+	{
+		// Unreachable
+		throw Exception{"Attempted to link two non-concrete sockets that don't belong to any socket! This should never happen!"};
+	}
+	unirender::GroupNodeDesc *node = nullptr;
+	if(node0 && !node1)
+		node = node0->GetParent();
+	else if(!node0 && node1)
+		node = node1->GetParent();
+	else if(node0 == node1)
+	{
+		// Special case where an input socket in a group node is linked directly to
+		// one of its output sockets. This is the only case where a node can link to itself!
+		assert(node0->IsGroupNode());
+		node = node0->IsGroupNode() ? static_cast<unirender::GroupNodeDesc*>(node0) : nullptr;
+	}
+	else if(node0->GetParent() == node1->GetParent())
+	{
+		// Different nodes linked together; only allowed if they share the same parent
+		node = node0->GetParent();
+	}
+	else if(node0->GetParent() == node1)
+		node = node0->GetParent(); // Link from group node input/output socket to socket of other node within node group
+	else if(node1->GetParent() == node0)
+		node = node1->GetParent(); // Link from group node input/output socket to socket of other node within node group
 	if(node == nullptr)
-		node = other.GetNode();
-	auto *parent = node ? node->GetParent() : nullptr;
-	if(parent == nullptr)
 		return;
-	parent->Link(*this,other);
+	node->Link(*this,other);
 }
 std::string unirender::Socket::ToString() const
 {

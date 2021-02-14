@@ -64,6 +64,7 @@
 #pragma optimize("",off)
 void unirender::Scene::CreateInfo::Serialize(DataStream &ds) const
 {
+	ds->WriteString(renderer);
 	ds->Write(reinterpret_cast<const uint8_t*>(this),offsetof(CreateInfo,colorTransform));
 	ds->Write<bool>(colorTransform.has_value());
 	if(colorTransform.has_value())
@@ -74,8 +75,10 @@ void unirender::Scene::CreateInfo::Serialize(DataStream &ds) const
 			ds->WriteString(*colorTransform->lookName);
 	}
 }
-void unirender::Scene::CreateInfo::Deserialize(DataStream &ds)
+void unirender::Scene::CreateInfo::Deserialize(DataStream &ds,uint32_t version)
 {
+	if(version >= 6u)
+		renderer = ds->ReadString();
 	ds->Read(this,offsetof(CreateInfo,colorTransform));
 	auto hasColorTransform = ds->Read<bool>();
 	if(hasColorTransform == false)
@@ -370,7 +373,7 @@ void unirender::Scene::Save(DataStream &dsOut,const std::string &rootDir,const S
 
 	auto absSky = GetAbsSkyPath(m_sceneInfo.sky);
 	dsOut->WriteString(absSky.has_value() ? ToRelativePath(*absSky) : "");
-	dsOut->Write(reinterpret_cast<const uint8_t*>(&m_sceneInfo.skyAngles),sizeof(SceneInfo) -offsetof(SceneInfo,skyAngles));
+	dsOut->Write(reinterpret_cast<const uint8_t*>(&m_sceneInfo.transparentSky),sizeof(SceneInfo) -offsetof(SceneInfo,transparentSky));
 
 	dsOut->Write(m_stateFlags);
 	
@@ -441,14 +444,14 @@ bool unirender::Scene::ReadSerializationHeader(DataStream &dsIn,RenderMode &outR
 	if(version > SERIALIZATION_VERSION || version < 3)
 		return false;
 	outVersion = version;
-	outCreateInfo.Deserialize(dsIn);
+	outCreateInfo.Deserialize(dsIn,version);
 	outRenderMode = dsIn->Read<RenderMode>();
 	outSerializationData.outputFileName = dsIn->ReadString();
 
 	if(optOutSceneInfo)
 	{
 		optOutSceneInfo->sky = ToAbsolutePath(dsIn->ReadString());
-		dsIn->Read(&optOutSceneInfo->skyAngles,sizeof(SceneInfo) -offsetof(SceneInfo,skyAngles));
+		dsIn->Read(&optOutSceneInfo->transparentSky,sizeof(SceneInfo) -offsetof(SceneInfo,transparentSky));
 	}
 	return true;
 }
@@ -536,65 +539,6 @@ ccl::ShaderNode *unirender::Scene::FindShaderNode(ccl::ShaderGraph &graph,const 
 		return node->name == nodeName;
 		});
 	return (it != graph.nodes.end()) ? *it : nullptr;
-}
-
-ccl::float3 unirender::Scene::ToCyclesVector(const Vector3 &v)
-{
-	return ccl::float3{v.x,v.y,v.z};
-}
-
-Vector3 unirender::Scene::ToPragmaPosition(const ccl::float3 &pos)
-{
-	auto scale = util::pragma::units_to_metres(1.f);
-	Vector3 prPos {pos.x,pos.z,-pos.y};
-	prPos /= scale;
-	return prPos;
-}
-
-ccl::float3 unirender::Scene::ToCyclesPosition(const Vector3 &pos)
-{
-	auto scale = util::pragma::units_to_metres(1.f);
-#ifdef ENABLE_TEST_AMBIENT_OCCLUSION
-	ccl::float3 cpos {pos.x,-pos.z,pos.y};
-#else
-	ccl::float3 cpos {-pos.x,pos.y,pos.z};
-#endif
-	cpos *= scale;
-	return cpos;
-}
-
-ccl::float3 unirender::Scene::ToCyclesNormal(const Vector3 &n)
-{
-#ifdef ENABLE_TEST_AMBIENT_OCCLUSION
-	return ccl::float3{n.x,-n.z,n.y};
-#else
-	return ccl::float3{-n.x,n.y,n.z};
-#endif
-}
-
-ccl::float2 unirender::Scene::ToCyclesUV(const Vector2 &uv)
-{
-	return ccl::float2{uv.x,1.f -uv.y};
-}
-
-ccl::Transform unirender::Scene::ToCyclesTransform(const umath::ScaledTransform &t,bool applyRotOffset)
-{
-	Vector3 axis;
-	float angle;
-	uquat::to_axis_angle(t.GetRotation(),axis,angle);
-	auto cclT = ccl::transform_identity();
-	cclT = cclT *ccl::transform_rotate(angle,Scene::ToCyclesNormal(axis));
-	if(applyRotOffset)
-		cclT = cclT *ccl::transform_rotate(umath::deg_to_rad(90.f),ccl::float3{1.f,0.f,0.f});
-	cclT = ccl::transform_translate(Scene::ToCyclesPosition(t.GetOrigin())) *cclT;
-	cclT = cclT *ccl::transform_scale(Scene::ToCyclesVector(t.GetScale()));
-	return cclT;
-}
-
-float unirender::Scene::ToCyclesLength(float len)
-{
-	auto scale = util::pragma::units_to_metres(1.f);
-	return len *scale;
 }
 
 std::string unirender::Scene::ToRelativePath(const std::string &absPath)

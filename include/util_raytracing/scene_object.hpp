@@ -29,10 +29,10 @@ namespace unirender
 		const std::string &GetName() const {return m_name;}
 		void SetName(const std::string &name) {m_name = name;}
 		uint32_t GetId() const {return m_id;}
+		void SetId(uint32_t id) {m_id = id;}
 	protected:
 		friend unirender::Scene;
 		virtual void DoFinalize(Scene &scene);
-		void SetId(uint32_t id) {m_id = id;}
 	private:
 		bool m_bFinalized = false;
 		std::string m_name;

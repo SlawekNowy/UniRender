@@ -292,6 +292,7 @@ namespace unirender
 		std::optional<NodeIndex> FindNodeIndex(NodeDesc &node) const;
 		NodeDesc *GetNodeByIndex(NodeIndex idx) const;
 
+		void ResolveGroupNodes();
 		NodeDesc &AddNode(const std::string &typeName);
 		NodeDesc &AddNode(NodeTypeId id);
 		Socket AddMathNode(const Socket &socket0,const Socket &socket1,nodes::math::MathType mathOp);
@@ -318,6 +319,7 @@ namespace unirender
 		virtual void DeserializeNodes(DataStream &dsIn) override;
 		void DeserializeLinks(DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable);
 		
+		std::vector<std::shared_ptr<unirender::NodeDesc>>::iterator ResolveGroupNodes(std::vector<std::shared_ptr<unirender::NodeDesc>>::iterator itParent);
 		unirender::NodeDesc &AddNormalMapNodeDesc(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,float strength=1.f);
 		unirender::NodeDesc &AddImageTextureNode(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,TextureType type);
 		GroupNodeDesc(NodeManager &nodeManager);
@@ -411,6 +413,7 @@ namespace unirender
 	constexpr auto *NODE_GEOMETRY = "geometry";
 	constexpr auto *NODE_CAMERA_INFO = "camera_info";
 	constexpr auto *NODE_IMAGE_TEXTURE = "image_texture";
+	constexpr auto *NODE_NORMAL_TEXTURE = "normal_texture";
 	constexpr auto *NODE_ENVIRONMENT_TEXTURE = "environment_texture";
 	constexpr auto *NODE_MIX_CLOSURE = "mix_closure";
 	constexpr auto *NODE_ADD_CLOSURE = "add_closure";
@@ -437,7 +440,7 @@ namespace unirender
 	constexpr auto *NODE_VECTOR_TRANSFORM = "vector_transform";
 	constexpr auto *NODE_RGB_RAMP = "rgb_ramp";
 	constexpr auto *NODE_LAYER_WEIGHT = "layer_weight";
-	static_assert(NODE_COUNT == 35,"Increase this number if new node types are added!");
+	static_assert(NODE_COUNT == 36,"Increase this number if new node types are added!");
 };
 
 DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc);

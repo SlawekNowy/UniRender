@@ -93,6 +93,65 @@ static bool is_device_type_available(ccl::DeviceType type)
 	return ccl::Device::available_devices(DEVICE_MASK(type)).empty() == false;
 }
 
+ccl::float3 unirender::cycles::Renderer::ToCyclesVector(const Vector3 &v)
+{
+	return ccl::float3{v.x,v.y,v.z};
+}
+
+Vector3 unirender::cycles::Renderer::ToPragmaPosition(const ccl::float3 &pos)
+{
+	auto scale = util::pragma::units_to_metres(1.f);
+	Vector3 prPos {pos.x,pos.z,-pos.y};
+	prPos /= scale;
+	return prPos;
+}
+
+ccl::float3 unirender::cycles::Renderer::ToCyclesPosition(const Vector3 &pos)
+{
+	auto scale = util::pragma::units_to_metres(1.f);
+#ifdef ENABLE_TEST_AMBIENT_OCCLUSION
+	ccl::float3 cpos {pos.x,-pos.z,pos.y};
+#else
+	ccl::float3 cpos {-pos.x,pos.y,pos.z};
+#endif
+	cpos *= scale;
+	return cpos;
+}
+
+ccl::float3 unirender::cycles::Renderer::ToCyclesNormal(const Vector3 &n)
+{
+#ifdef ENABLE_TEST_AMBIENT_OCCLUSION
+	return ccl::float3{n.x,-n.z,n.y};
+#else
+	return ccl::float3{-n.x,n.y,n.z};
+#endif
+}
+
+ccl::float2 unirender::cycles::Renderer::ToCyclesUV(const Vector2 &uv)
+{
+	return ccl::float2{uv.x,1.f -uv.y};
+}
+
+ccl::Transform unirender::cycles::Renderer::ToCyclesTransform(const umath::ScaledTransform &t,bool applyRotOffset)
+{
+	Vector3 axis;
+	float angle;
+	uquat::to_axis_angle(t.GetRotation(),axis,angle);
+	auto cclT = ccl::transform_identity();
+	cclT = cclT *ccl::transform_rotate(angle,ToCyclesNormal(axis));
+	if(applyRotOffset)
+		cclT = cclT *ccl::transform_rotate(umath::deg_to_rad(90.f),ccl::float3{1.f,0.f,0.f});
+	cclT = ccl::transform_translate(ToCyclesPosition(t.GetOrigin())) *cclT;
+	cclT = cclT *ccl::transform_scale(ToCyclesVector(t.GetScale()));
+	return cclT;
+}
+
+float unirender::cycles::Renderer::ToCyclesLength(float len)
+{
+	auto scale = util::pragma::units_to_metres(1.f);
+	return len *scale;
+}
+
 std::shared_ptr<unirender::cycles::Renderer> unirender::cycles::Renderer::Create(const unirender::Scene &scene)
 {
 	auto renderer = std::shared_ptr<Renderer>{new Renderer{scene}};
@@ -298,7 +357,7 @@ void unirender::cycles::Renderer::SyncObject(const unirender::Object &obj)
 	auto *cclObj = new ccl::Object{};
 	m_cclScene->objects.push_back(cclObj);
 	m_objectToCclObject[&obj] = cclObj;
-	cclObj->tfm = Scene::ToCyclesTransform(obj.GetPose());
+	cclObj->tfm = ToCyclesTransform(obj.GetPose());
 	auto &mesh = obj.GetMesh();
 	cclObj->mesh = FindCclMesh(mesh);
 	// m_object.tag_update(*scene);
@@ -357,7 +416,7 @@ void unirender::cycles::Renderer::SyncMesh(const unirender::Mesh &mesh)
 	cclMesh->name = mesh.GetName();
 	cclMesh->reserve_mesh(mesh.GetVertexCount(),mesh.GetTriangleCount());
 	for(auto &v : mesh.GetVertices())
-		cclMesh->add_vertex(Scene::ToCyclesPosition(v));
+		cclMesh->add_vertex(ToCyclesPosition(v));
 	auto &tris = mesh.GetTriangles();
 	auto &shaderIds = mesh.GetShaders();
 	auto &smooth = mesh.GetSmooth();
@@ -366,9 +425,9 @@ void unirender::cycles::Renderer::SyncMesh(const unirender::Mesh &mesh)
 		cclMesh->add_triangle(tris[i],tris[i +1],tris[i +2],shaderIds[i /3],smooth[i /3]);
 
 	auto fToFloat4 = [](const ccl::float3 &v) -> ccl::float4 {return ccl::float4{v.x,v.y,v.z,0.f};};
-	initialize_attribute<Vector3,ccl::float4>(*cclMesh,ccl::ATTR_STD_VERTEX_NORMAL,mesh.GetVertexNormals(),[&fToFloat4](const Vector3 &v) -> ccl::float4 {return fToFloat4(Scene::ToCyclesNormal(v));});
-	initialize_attribute<Vector2,ccl::float2>(*cclMesh,ccl::ATTR_STD_UV,mesh.GetUvs(),[](const Vector2 &v) -> ccl::float2 {return Scene::ToCyclesUV(v);});
-	initialize_attribute<Vector3,ccl::float3>(*cclMesh,ccl::ATTR_STD_UV_TANGENT,mesh.GetUvTangents(),[](const Vector3 &v) -> ccl::float3 {return Scene::ToCyclesNormal(v);});
+	initialize_attribute<Vector3,ccl::float4>(*cclMesh,ccl::ATTR_STD_VERTEX_NORMAL,mesh.GetVertexNormals(),[&fToFloat4](const Vector3 &v) -> ccl::float4 {return fToFloat4(ToCyclesNormal(v));});
+	initialize_attribute<Vector2,ccl::float2>(*cclMesh,ccl::ATTR_STD_UV,mesh.GetUvs(),[](const Vector2 &v) -> ccl::float2 {return ToCyclesUV(v);});
+	initialize_attribute<Vector3,ccl::float3>(*cclMesh,ccl::ATTR_STD_UV_TANGENT,mesh.GetUvTangents(),[](const Vector3 &v) -> ccl::float3 {return ToCyclesNormal(v);});
 	initialize_attribute<float,float>(*cclMesh,ccl::ATTR_STD_UV_TANGENT_SIGN,mesh.GetUvTangentSigns(),[](const float &v) -> float {return v;});
 
 	auto *attrT = cclMesh->attributes.add(ccl::ATTR_STD_UV_TANGENT);
@@ -482,7 +541,7 @@ void unirender::cycles::Renderer::SyncCamera(const unirender::Camera &cam)
 		pose.SetRotation(rot);
 	}
 
-	cclCam.matrix = Scene::ToCyclesTransform(pose,true);
+	cclCam.matrix = ToCyclesTransform(pose,true);
 	cclCam.compute_auto_viewplane();
 
 	//
@@ -563,7 +622,7 @@ void unirender::cycles::Renderer::SyncLight(unirender::Scene &scene,const uniren
 	{
 		auto &rot = light.GetRotation();
 		auto forward = uquat::forward(rot);
-		cclLight->dir = unirender::Scene::ToCyclesNormal(forward);
+		cclLight->dir = ToCyclesNormal(forward);
 		auto innerConeAngle = umath::deg_to_rad(light.GetInnerConeAngle());
 		auto outerConeAngle = umath::deg_to_rad(light.GetOuterConeAngle());
 		cclLight->spot_smooth = (outerConeAngle > 0.f) ? (1.f -innerConeAngle /outerConeAngle) : 1.f;
@@ -574,7 +633,7 @@ void unirender::cycles::Renderer::SyncLight(unirender::Scene &scene,const uniren
 	{
 		auto &rot = light.GetRotation();
 		auto forward = uquat::forward(rot);
-		cclLight->dir = unirender::Scene::ToCyclesNormal(forward);
+		cclLight->dir = ToCyclesNormal(forward);
 		break;
 	}
 	case unirender::Light::Type::Area:
@@ -583,15 +642,15 @@ void unirender::cycles::Renderer::SyncLight(unirender::Scene &scene,const uniren
 		auto &axisV = light.GetAxisV();
 		auto sizeU = light.GetSizeU();
 		auto sizeV = light.GetSizeV();
-		cclLight->axisu = unirender::Scene::ToCyclesNormal(axisU);
-		cclLight->axisv = unirender::Scene::ToCyclesNormal(axisV);
-		cclLight->sizeu = unirender::Scene::ToCyclesLength(sizeU);
-		cclLight->sizev = unirender::Scene::ToCyclesLength(sizeV);
+		cclLight->axisu = ToCyclesNormal(axisU);
+		cclLight->axisv = ToCyclesNormal(axisV);
+		cclLight->sizeu = ToCyclesLength(sizeU);
+		cclLight->sizev = ToCyclesLength(sizeV);
 		cclLight->round = light.IsRound();
 
 		auto &rot = light.GetRotation();
 		auto forward = uquat::forward(rot);
-		cclLight->dir = unirender::Scene::ToCyclesNormal(forward);
+		cclLight->dir = ToCyclesNormal(forward);
 		break;
 	}
 	case unirender::Light::Type::Background:
@@ -626,8 +685,8 @@ void unirender::cycles::Renderer::SyncLight(unirender::Scene &scene,const uniren
 	watt *= scene.GetLightIntensityFactor();
 	auto &color = light.GetColor();
 	cclLight->strength = ccl::float3{color.r,color.g,color.b} *watt;
-	cclLight->size = unirender::Scene::ToCyclesLength(light.GetSize());
-	cclLight->co = unirender::Scene::ToCyclesPosition(light.GetPos());
+	cclLight->size = ToCyclesLength(light.GetSize());
+	cclLight->co = ToCyclesPosition(light.GetPos());
 	cclLight->samples = 4;
 	cclLight->max_bounces = 1'024;
 	cclLight->map_resolution = 2'048;
@@ -772,6 +831,12 @@ bool unirender::cycles::Renderer::Initialize(unirender::Scene &scene)
 	auto devInfo = InitializeDevice(scene);
 	if(devInfo.has_value() == false)
 		return false;
+	AddOutput(OUTPUT_COLOR);
+	if(m_scene->ShouldDenoise())
+	{
+		AddOutput(OUTPUT_ALBEDO);
+		AddOutput(OUTPUT_NORMAL);
+	}
 	InitializeSession(scene,*devInfo);
 	auto &createInfo = scene.GetCreateInfo();
 	auto bufferParams = GetBufferParameters();
@@ -1272,7 +1337,7 @@ util::EventReply unirender::cycles::Renderer::HandleRenderStage(RenderWorker &wo
 					std::unique_lock<std::mutex> lock {m_progressiveMutex};
 					m_progressiveCondition.wait(lock);
 				}
-				auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
+				auto &resultImageBuffer = GetResultImageBuffer(OUTPUT_COLOR,eyeStage);
 				resultImageBuffer = FinalizeCyclesScene();
 				// ApplyPostProcessing(*resultImageBuffer,m_renderMode);
 
@@ -1306,7 +1371,7 @@ util::EventReply unirender::cycles::Renderer::HandleRenderStage(RenderWorker &wo
 			m_cclSession->start();
 			WaitForRenderStage(worker,0.95f,0.025f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
 				m_cclSession->wait();
-				auto &albedoImageBuffer = GetAlbedoImageBuffer(eyeStage);
+				auto &albedoImageBuffer = GetResultImageBuffer(OUTPUT_ALBEDO,eyeStage);
 				albedoImageBuffer = FinalizeCyclesScene();
 				// ApplyPostProcessing(*albedoImageBuffer,m_renderMode);
 
@@ -1331,7 +1396,7 @@ util::EventReply unirender::cycles::Renderer::HandleRenderStage(RenderWorker &wo
 			m_cclSession->start();
 			WaitForRenderStage(worker,0.975f,0.025f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
 				m_cclSession->wait();
-				auto &normalImageBuffer = GetNormalImageBuffer(eyeStage);
+				auto &normalImageBuffer = GetResultImageBuffer(OUTPUT_NORMAL,eyeStage);
 				normalImageBuffer = FinalizeCyclesScene();
 				// ApplyPostProcessing(*normalImageBuffer,m_renderMode);
 
@@ -1361,7 +1426,7 @@ util::EventReply unirender::cycles::Renderer::HandleRenderStage(RenderWorker &wo
 			m_cclSession->start();
 			WaitForRenderStage(worker,0.f,1.f,[this,&worker,eyeStage,stage]() mutable -> RenderStageResult {
 				m_cclSession->wait();
-				auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
+				auto &resultImageBuffer = GetResultImageBuffer(OUTPUT_COLOR,eyeStage);
 				resultImageBuffer = FinalizeCyclesScene();
 				// ApplyPostProcessing(*resultImageBuffer,m_renderMode);
 
@@ -1485,18 +1550,6 @@ void unirender::cycles::Renderer::CloseCyclesScene()
 	m_cclSession = nullptr;
 }
 
-unirender::Object *unirender::cycles::Renderer::FindObject(const std::string &objectName) const
-{
-	for(auto &chunk : m_renderData.modelCache->GetChunks())
-	{
-		for(auto &obj : chunk.GetObjects())
-		{
-			if(obj->GetName() == objectName)
-				return obj.get();
-		}
-	}
-	return nullptr;
-}
 #include <util_image.hpp>
 #include <fsys/filesystem.h>
 void unirender::cycles::Renderer::StartTextureBaking(RenderWorker &worker)
@@ -1857,7 +1910,7 @@ void unirender::cycles::Renderer::StartTextureBaking(RenderWorker &worker)
 		if(worker.IsCancelled())
 			return;
 
-		GetResultImageBuffer() = imgBuffer;
+		GetResultImageBuffer(OUTPUT_COLOR) = imgBuffer;
 		// m_cclSession->params.write_render_cb(static_cast<ccl::uchar*>(imgBuffer->GetData()),imgWidth,imgHeight,4 /* channels */);
 		m_cclSession->params.write_render_cb = nullptr; // Make sure it's not called on destruction
 		worker.SetStatus(util::JobStatus::Successful,"Baking has been completed successfully!");
@@ -1869,13 +1922,13 @@ void unirender::cycles::Renderer::FinalizeAndCloseCyclesScene()
 {
 	auto stateFlags = m_scene->GetStateFlags();
 	if(m_cclSession && m_scene->IsRenderSceneMode(m_scene->GetRenderMode()) && m_renderingStarted)
-		GetResultImageBuffer() = FinalizeCyclesScene();
+		GetResultImageBuffer(OUTPUT_COLOR) = FinalizeCyclesScene();
 	CloseCyclesScene();
 }
 
 void unirender::cycles::Renderer::CloseRenderScene() {CloseCyclesScene();}
 
-void unirender::cycles::Renderer::FinalizeImage(uimg::ImageBuffer &imgBuf)
+void unirender::cycles::Renderer::FinalizeImage(uimg::ImageBuffer &imgBuf,StereoEye eyeStage)
 {
 	if(m_scene->IsProgressive() == false) // If progressive, our tile manager will have already flipped the image
 		imgBuf.Flip(true,true);

@@ -14,8 +14,11 @@
 #include "util_raytracing/camera.hpp"
 #include "util_raytracing/shader.hpp"
 #include "util_raytracing/denoise.hpp"
+#include "util_raytracing/cycles/renderer.hpp"
 #include <util_image_buffer.hpp>
 #include <util_ocio.hpp>
+#include <sharedutils/util_path.hpp>
+#include <sharedutils/util_library.hpp>
 
 #pragma optimize("",off)
 unirender::RenderWorker::RenderWorker(Renderer &renderer)
@@ -31,33 +34,64 @@ void unirender::RenderWorker::Wait()
 	util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::Wait();
 	m_renderer->Wait();
 }
-std::shared_ptr<uimg::ImageBuffer> unirender::RenderWorker::GetResult() {return m_renderer->GetResultImageBuffer();}
+std::shared_ptr<uimg::ImageBuffer> unirender::RenderWorker::GetResult() {return m_renderer->GetResultImageBuffer(unirender::Renderer::OUTPUT_COLOR);}
+
+///////////////////
+
+static std::string g_moduleLookupLocation {};
+void unirender::set_module_lookup_location(const std::string &location) {g_moduleLookupLocation = location;}
+std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(const unirender::Scene &scene,const std::string &rendererIdentifier)
+{
+	unirender::PRenderer renderer = nullptr;
+	if(rendererIdentifier == "cycles")
+		return unirender::cycles::Renderer::Create(scene);
+	static std::unordered_map<std::string,std::shared_ptr<util::Library>> g_rendererLibs {};
+	auto it = g_rendererLibs.find(rendererIdentifier);
+	if(it == g_rendererLibs.end())
+	{
+		auto moduleLocation = util::Path::CreatePath(util::get_program_path());
+		moduleLocation += g_moduleLookupLocation +rendererIdentifier +"/";
+
+		std::vector<std::string> additionalSearchDirectories;
+		additionalSearchDirectories.push_back(moduleLocation.GetString());
+		std::string err;
+		auto lib = util::Library::Load(moduleLocation.GetString() +"UniRender_" +rendererIdentifier,additionalSearchDirectories,&err);
+		if(lib == nullptr)
+		{
+			std::cout<<"Unable to load renderer module for '"<<rendererIdentifier<<"': "<<err<<std::endl;
+			return nullptr;
+		}
+		it = g_rendererLibs.insert(std::make_pair(rendererIdentifier,lib)).first;
+	}
+	auto &lib = it->second;
+	auto *func = lib->FindSymbolAddress<std::shared_ptr<unirender::Renderer>(*)(const unirender::Scene&)>("create_renderer");
+	if(func == nullptr)
+		return nullptr;
+	return func(scene);
+}
 
 ///////////////////
 
 unirender::Renderer::Renderer(const Scene &scene)
 	: m_scene{const_cast<Scene&>(scene).shared_from_this()}
 {}
-std::shared_ptr<uimg::ImageBuffer> &unirender::Renderer::GetResultImageBuffer(StereoEye eye)
+std::pair<uint32_t,std::string> unirender::Renderer::AddOutput(const std::string &type)
+{
+	auto it = m_outputs.find(type);
+	if(it == m_outputs.end())
+		it = m_outputs.insert(std::make_pair(type,m_nextOutputIndex++)).first;
+	return {it->second,type};
+}
+std::shared_ptr<uimg::ImageBuffer> &unirender::Renderer::GetResultImageBuffer(const std::string &type,StereoEye eye)
 {
 	if(eye == StereoEye::None)
 		eye = StereoEye::Left;
-	return m_resultImageBuffer.at(umath::to_integral(eye));
+	auto it = m_resultImageBuffers.find(type);
+	if(it == m_resultImageBuffers.end())
+		it = m_resultImageBuffers.insert(std::make_pair(type,std::array<std::shared_ptr<uimg::ImageBuffer>,umath::to_integral(StereoEye::Count)>{})).first;
+	return it->second.at(umath::to_integral(eye));
 }
 
-std::shared_ptr<uimg::ImageBuffer> &unirender::Renderer::GetAlbedoImageBuffer(StereoEye eye)
-{
-	if(eye == StereoEye::None)
-		eye = StereoEye::Left;
-	return m_albedoImageBuffer.at(umath::to_integral(eye));
-}
-
-std::shared_ptr<uimg::ImageBuffer> &unirender::Renderer::GetNormalImageBuffer(StereoEye eye)
-{
-	if(eye == StereoEye::None)
-		eye = StereoEye::Left;
-	return m_normalImageBuffer.at(umath::to_integral(eye));
-}
 unirender::Renderer::RenderStageResult unirender::Renderer::StartNextRenderStage(RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye eyeStage)
 {
 	auto result = RenderStageResult::Continue;
@@ -72,7 +106,7 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 	{
 		// Denoise
 		DenoiseInfo denoiseInfo {};
-		auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
+		auto &resultImageBuffer = GetResultImageBuffer(OUTPUT_COLOR,eyeStage);
 		denoiseInfo.hdr = true;
 		denoiseInfo.width = resultImageBuffer->GetWidth();
 		denoiseInfo.height = resultImageBuffer->GetHeight();
@@ -80,13 +114,13 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 		static auto dbgAlbedo = false;
 		static auto dbgNormals = false;
 		if(dbgAlbedo)
-			m_resultImageBuffer = m_albedoImageBuffer;
+			resultImageBuffer = GetResultImageBuffer(OUTPUT_ALBEDO,eyeStage);
 		else if(dbgNormals)
-			m_resultImageBuffer = m_normalImageBuffer;
+			resultImageBuffer = GetResultImageBuffer(OUTPUT_NORMAL,eyeStage);
 		else
 		{
-			auto &albedoImageBuffer = GetAlbedoImageBuffer(eyeStage);
-			auto &normalImageBuffer = GetNormalImageBuffer(eyeStage);
+			auto albedoImageBuffer = GetResultImageBuffer(OUTPUT_ALBEDO,eyeStage);
+			auto normalImageBuffer = GetResultImageBuffer(OUTPUT_NORMAL,eyeStage);
 			resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
 			if(albedoImageBuffer)
 				albedoImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
@@ -125,7 +159,7 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 	}
 	case ImageRenderStage::FinalizeImage:
 	{
-		auto &resultImageBuffer = GetResultImageBuffer(eyeStage);
+		auto &resultImageBuffer = GetResultImageBuffer(OUTPUT_COLOR,eyeStage);
 		if(m_colorTransformProcessor) // TODO: Should we really apply color transform if we're not denoising?
 		{
 			std::string err;
@@ -134,7 +168,7 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 		}
 		resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGBA_HDR);
 		resultImageBuffer->ClearAlpha();
-		FinalizeImage(*resultImageBuffer);
+		FinalizeImage(*resultImageBuffer,eyeStage);
 		if(UpdateStereoEye(worker,stage,eyeStage))
 		{
 			if(optResult)
@@ -147,8 +181,8 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 	}
 	case ImageRenderStage::MergeStereoscopic:
 	{
-		auto &imgLeft = m_resultImageBuffer.at(umath::to_integral(StereoEye::Left));
-		auto &imgRight = m_resultImageBuffer.at(umath::to_integral(StereoEye::Right));
+		auto &imgLeft = GetResultImageBuffer(OUTPUT_COLOR,StereoEye::Left);
+		auto &imgRight = GetResultImageBuffer(OUTPUT_COLOR,StereoEye::Right);
 		auto w = imgLeft->GetWidth();
 		auto h = imgLeft->GetHeight();
 		auto imgComposite = uimg::ImageBuffer::Create(w,h *2,imgLeft->GetFormat());
@@ -157,8 +191,8 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 		auto *dataDst = imgComposite->GetData();
 		memcpy(dataDst,dataSrcLeft,imgLeft->GetSize());
 		memcpy(static_cast<uint8_t*>(dataDst) +imgLeft->GetSize(),dataSrcRight,imgRight->GetSize());
-		m_resultImageBuffer.at(umath::to_integral(StereoEye::Left)) = imgComposite;
-		m_resultImageBuffer.at(umath::to_integral(StereoEye::Right)) = nullptr;
+		imgLeft = imgComposite;
+		imgRight = nullptr;
 		return HandleRenderStage(worker,ImageRenderStage::Finalize,StereoEye::None,optResult);
 	}
 	case ImageRenderStage::Finalize:
@@ -179,6 +213,7 @@ void unirender::Renderer::PrepareCyclesSceneForRendering()
 		m_renderData.modelCache->Merge(*mdlCache);
 	m_renderData.modelCache->Bake();
 }
+bool unirender::Renderer::ShouldUseTransparentSky() const {return m_scene->GetSceneInfo().transparentSky;}
 unirender::PMesh unirender::Renderer::FindRenderMeshByHash(const util::MurmurHash3 &hash) const
 {
 	// TODO: Do this via a lookup table
@@ -196,6 +231,18 @@ void unirender::Renderer::StopRendering()
 {
 	m_progressiveCondition.notify_one();
 	m_progressiveRunning = false;
+}
+unirender::Object *unirender::Renderer::FindObject(const std::string &objectName) const
+{
+	for(auto &chunk : m_renderData.modelCache->GetChunks())
+	{
+		for(auto &obj : chunk.GetObjects())
+		{
+			if(obj->GetName() == objectName)
+				return obj.get();
+		}
+	}
+	return nullptr;
 }
 void unirender::Renderer::OnParallelWorkerCancelled()
 {
@@ -223,4 +270,7 @@ bool unirender::Renderer::Initialize()
 		shader->Finalize();
 	return true;
 }
+static std::function<void(const std::string)> g_logHandler = nullptr;
+void unirender::set_log_handler(const std::function<void(const std::string)> &logHandler) {g_logHandler = logHandler;}
+const std::function<void(const std::string)> &unirender::get_log_handler() {return g_logHandler;}
 #pragma optimize("",on)

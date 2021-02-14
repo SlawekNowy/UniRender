@@ -58,6 +58,8 @@ namespace unirender
 		};
 		static std::shared_ptr<CCLShader> Create(cycles::Renderer &renderer,const GroupNodeDesc &desc);
 		static std::shared_ptr<CCLShader> Create(cycles::Renderer &renderer,ccl::Shader &cclShader,const GroupNodeDesc &desc,bool useCache=false);
+		static ccl::ShaderInput *FindInput(ccl::ShaderNode &node,const std::string &inputName);
+		static ccl::ShaderOutput *FindOutput(ccl::ShaderNode &node,const std::string &outputName);
 
 		~CCLShader();
 		void InitializeNodeGraph(const GroupNodeDesc &desc);
@@ -70,11 +72,18 @@ namespace unirender
 		void InitializeNode(const NodeDesc &desc,std::unordered_map<const NodeDesc*,ccl::ShaderNode*> &nodeToCclNode,const GroupSocketTranslationTable &groupIoSockets);
 		void ConvertGroupSocketsToNodes(const GroupNodeDesc &groupDesc,GroupSocketTranslationTable &outGroupIoSockets);
 		const ccl::SocketType *FindProperty(ccl::ShaderNode &node,const std::string &inputName) const;
-		ccl::ShaderInput *FindInput(ccl::ShaderNode &node,const std::string &inputName) const;
-		ccl::ShaderOutput *FindOutput(ccl::ShaderNode &node,const std::string &outputName) const;
 		void ApplySocketValue(const NodeSocketDesc &sockDesc,ccl::Node &node,const ccl::SocketType &sockType);
 		std::string GetCurrentInternalNodeName() const;
 	private:
+		struct BaseNodeWrapper
+		{
+			virtual ccl::ShaderInput *FindInput(const std::string &name,ccl::ShaderNode **outNode)=0;
+			virtual ccl::ShaderOutput *FindOutput(const std::string &name,ccl::ShaderNode **outNode)=0;
+			virtual const ccl::SocketType *FindProperty(const std::string &name,ccl::ShaderNode **outNode)=0;
+			virtual ccl::ShaderNode *GetOutputNode()=0;
+			virtual ~BaseNodeWrapper()=default;
+		};
+		std::unique_ptr<BaseNodeWrapper> ResolveCustomNode(const std::string &typeName);
 		ccl::ShaderNode *AddNode(const std::string &type);
 		ccl::Shader &m_cclShader;
 		ccl::ShaderGraph &m_cclGraph;

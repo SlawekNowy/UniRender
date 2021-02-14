@@ -415,15 +415,73 @@ void unirender::CCLShader::DoFinalize(Scene &scene)
 	m_cclShader.tag_update(m_renderer.GetCclScene());
 }
 
+std::unique_ptr<unirender::CCLShader::BaseNodeWrapper> unirender::CCLShader::ResolveCustomNode(const std::string &typeName)
+{
+	if(typeName == unirender::NODE_NORMAL_TEXTURE)
+	{
+		struct NormalNodeWrapper : public BaseNodeWrapper
+		{
+			virtual ccl::ShaderInput *FindInput(const std::string &name,ccl::ShaderNode **outNode) override
+			{
+				if(name == unirender::nodes::normal_texture::IN_STRENGTH)
+				{
+					*outNode = normalMapNode;
+					return unirender::CCLShader::FindInput(*normalMapNode,unirender::nodes::normal_map::IN_STRENGTH);
+				}
+				return nullptr;
+			}
+			virtual ccl::ShaderOutput *FindOutput(const std::string &name,ccl::ShaderNode **outNode) override
+			{
+				if(name == unirender::nodes::normal_texture::OUT_NORMAL)
+				{
+					*outNode = normalMapNode;
+					return unirender::CCLShader::FindOutput(*normalMapNode,unirender::nodes::normal_map::OUT_NORMAL);
+				}
+				return nullptr;
+			}
+			virtual const ccl::SocketType *FindProperty(const std::string &name,ccl::ShaderNode **outNode) override
+			{
+				if(name == unirender::nodes::normal_texture::IN_FILENAME)
+				{
+					*outNode = imageTexNode;
+					return imageTexNode->type->find_input(ccl::ustring{unirender::nodes::image_texture::IN_FILENAME});
+				}
+				return nullptr;
+			}
+			virtual ccl::ShaderNode *GetOutputNode() override {return normalMapNode;}
+			ccl::ImageTextureNode* imageTexNode = nullptr;
+			ccl::NormalMapNode *normalMapNode = nullptr;
+		};
+		auto wrapper = std::make_unique<NormalNodeWrapper>();
+		wrapper->imageTexNode = static_cast<ccl::ImageTextureNode*>(AddNode(unirender::NODE_IMAGE_TEXTURE));
+		assert(wrapper->imageTexNode);
+		wrapper->imageTexNode->colorspace = ccl::u_colorspace_raw;
+
+		auto *sep = static_cast<ccl::SeparateRGBNode*>(AddNode(unirender::NODE_SEPARATE_RGB));
+		m_cclGraph.connect(FindOutput(*wrapper->imageTexNode,unirender::nodes::image_texture::OUT_COLOR),FindInput(*sep,unirender::nodes::separate_rgb::IN_COLOR));
+
+		auto *cmb = static_cast<ccl::CombineRGBNode*>(AddNode(unirender::NODE_COMBINE_RGB));
+		m_cclGraph.connect(FindOutput(*sep,unirender::nodes::separate_rgb::OUT_R),FindInput(*cmb,unirender::nodes::combine_rgb::IN_G));
+		m_cclGraph.connect(FindOutput(*sep,unirender::nodes::separate_rgb::OUT_G),FindInput(*cmb,unirender::nodes::combine_rgb::IN_R));
+		m_cclGraph.connect(FindOutput(*sep,unirender::nodes::separate_rgb::OUT_B),FindInput(*cmb,unirender::nodes::combine_rgb::IN_B));
+		
+		wrapper->normalMapNode = static_cast<ccl::NormalMapNode*>(AddNode(unirender::NODE_NORMAL_MAP));
+		assert(wrapper->normalMapNode);
+		wrapper->normalMapNode->space = ccl::NodeNormalMapSpace::NODE_NORMAL_MAP_TANGENT;
+
+		auto *normIn = FindInput(*wrapper->normalMapNode,unirender::nodes::normal_map::IN_COLOR);
+		m_cclGraph.connect(FindOutput(*cmb,unirender::nodes::combine_rgb::OUT_IMAGE),normIn);
+		return wrapper;
+	}
+	return nullptr;
+}
+
 ccl::ShaderNode *unirender::CCLShader::AddNode(const std::string &typeName)
 {
 	auto *nodeType = ccl::NodeType::find(ccl::ustring{typeName});
 	auto *snode = nodeType ? static_cast<ccl::ShaderNode*>(nodeType->create(nodeType)) : nullptr;
 	if(snode == nullptr)
-	{
-		m_renderer.GetScene().HandleError("Unable to create ccl node of type '" +typeName +"': Invalid type?");
 		return nullptr;
-	}
 
 	auto name = GetCurrentInternalNodeName();
 	snode->name = name;
@@ -501,26 +559,62 @@ void unirender::CCLShader::InitializeNode(const NodeDesc &desc,std::unordered_ma
 		nodeToCclNode[&desc] = m_cclGraph.output();
 		return;
 	}
+	struct CclNodeWrapper : public unirender::CCLShader::BaseNodeWrapper
+	{
+		virtual ccl::ShaderInput *FindInput(const std::string &name,ccl::ShaderNode **outNode) override
+		{
+			*outNode = node;
+			return unirender::CCLShader::FindInput(*node,name);
+		}
+		virtual ccl::ShaderOutput *FindOutput(const std::string &name,ccl::ShaderNode **outNode) override
+		{
+			*outNode = node;
+			return unirender::CCLShader::FindOutput(*node,name);
+		}
+		virtual const ccl::SocketType *FindProperty(const std::string &name,ccl::ShaderNode **outNode) override
+		{
+			*outNode = node;
+			return node->type->find_input(ccl::ustring{name});
+		}
+		virtual ccl::ShaderNode *GetOutputNode() override {return node;}
+		ccl::ShaderNode *node = nullptr;
+	};
 	auto *snode = AddNode(typeName);
-	if(snode == nullptr)
-		return;
+	std::unique_ptr<unirender::CCLShader::BaseNodeWrapper> wrapper = nullptr;
+	if(snode != nullptr)
+	{
+		wrapper = std::make_unique<CclNodeWrapper>();
+		static_cast<CclNodeWrapper*>(wrapper.get())->node = snode;
+	}
+	else
+	{
+		auto customNode = ResolveCustomNode(typeName);
+		if(customNode == nullptr)
+		{
+			m_renderer.GetScene().HandleError("Unable to create ccl node of type '" +typeName +"': Invalid type?");
+			return;
+		}
+		wrapper = std::move(customNode);
+	}
 	for(auto &pair : desc.GetInputs())
 	{
-		auto *input = FindInput(*snode,pair.first);
+		ccl::ShaderNode *node;
+		auto *input = wrapper->FindInput(pair.first,&node);
 		if(input == nullptr)
 			continue; // TODO
-		ApplySocketValue(pair.second,*snode,input->socket_type);
+		ApplySocketValue(pair.second,*node,input->socket_type);
 	}
 
 	for(auto &pair : desc.GetProperties())
 	{
-		auto *input = snode->type->find_input(ccl::ustring{pair.first.c_str()});
-		if(input == nullptr)
-			continue;
-		ApplySocketValue(pair.second,*snode,*input);
+		ccl::ShaderNode *node;
+		auto *type = wrapper->FindProperty(pair.first,&node);
+		if(type == nullptr)
+			continue; // TODO
+		ApplySocketValue(pair.second,*node,*type);
 	}
 
-	nodeToCclNode[&desc] = snode;
+	nodeToCclNode[&desc] = wrapper->GetOutputNode();
 }
 
 template<typename TSrc,typename TDst>
@@ -701,7 +795,7 @@ const ccl::SocketType *unirender::CCLShader::FindProperty(ccl::ShaderNode &node,
 	});
 	return (it != node.type->inputs.end()) ? &*it : nullptr;
 }
-ccl::ShaderInput *unirender::CCLShader::FindInput(ccl::ShaderNode &node,const std::string &inputName) const
+ccl::ShaderInput *unirender::CCLShader::FindInput(ccl::ShaderNode &node,const std::string &inputName)
 {
 	// return node.input(ccl::ustring{inputName}); // Doesn't work in some cases for some reason
 	auto it = std::find_if(node.inputs.begin(),node.inputs.end(),[&inputName](const ccl::ShaderInput *shInput) {
@@ -709,7 +803,7 @@ ccl::ShaderInput *unirender::CCLShader::FindInput(ccl::ShaderNode &node,const st
 	});
 	return (it != node.inputs.end()) ? *it : nullptr;
 }
-ccl::ShaderOutput *unirender::CCLShader::FindOutput(ccl::ShaderNode &node,const std::string &outputName) const
+ccl::ShaderOutput *unirender::CCLShader::FindOutput(ccl::ShaderNode &node,const std::string &outputName)
 {
 	// return node.output(ccl::ustring{outputName}); // Doesn't work in some cases for some reason
 	auto it = std::find_if(node.outputs.begin(),node.outputs.end(),[&outputName](const ccl::ShaderOutput *shOutput) {

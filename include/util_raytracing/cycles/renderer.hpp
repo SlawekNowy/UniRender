@@ -26,6 +26,14 @@ namespace unirender::cycles
 		static std::shared_ptr<Renderer> Create(const unirender::Scene &scene);
 		static constexpr ccl::AttributeStandard ALPHA_ATTRIBUTE_TYPE = ccl::AttributeStandard::ATTR_STD_POINTINESS;
 
+		static Vector3 ToPragmaPosition(const ccl::float3 &pos);
+		static ccl::float3 ToCyclesVector(const Vector3 &v);
+		static ccl::float3 ToCyclesPosition(const Vector3 &pos);
+		static ccl::float3 ToCyclesNormal(const Vector3 &n);
+		static ccl::float2 ToCyclesUV(const Vector2 &uv);
+		static ccl::Transform ToCyclesTransform(const umath::ScaledTransform &t,bool applyRotOffset=false);
+		static float ToCyclesLength(float len);
+
 		virtual ~Renderer() override;
 		virtual void Wait() override;
 		virtual void Start() override {} // TODO: Remove
@@ -59,7 +67,6 @@ namespace unirender::cycles
 		void SetStereoscopicEye(StereoEye eye);
 	private:
 		Renderer(const Scene &scene);
-		Object *FindObject(const std::string &objectName) const;
 		virtual void SetCancelled(const std::string &msg="Cancelled by application.") override;
 		void FinalizeAndCloseCyclesScene();
 		void CloseCyclesScene();
@@ -75,7 +82,7 @@ namespace unirender::cycles
 		virtual void PrepareCyclesSceneForRendering() override;
 		virtual bool UpdateStereoEye(unirender::RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye &eyeStage) override;
 		virtual void CloseRenderScene() override;
-		virtual void FinalizeImage(uimg::ImageBuffer &imgBuf) override;
+		virtual void FinalizeImage(uimg::ImageBuffer &imgBuf,StereoEye eyeStage) override;
 		void ReloadProgressiveRender(bool clearExposure=true,bool waitForPreviousCompletion=false);
 		Vector2i GetTileSize() const;
 

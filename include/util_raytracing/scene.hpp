@@ -74,7 +74,7 @@ namespace unirender
 		: public std::enable_shared_from_this<Scene>
 	{
 	public:
-		static constexpr uint32_t SERIALIZATION_VERSION = 5;
+		static constexpr uint32_t SERIALIZATION_VERSION = 6;
 		struct SerializationData
 		{
 			std::string outputFileName;
@@ -93,6 +93,7 @@ namespace unirender
 			std::string sky = "";
 			EulerAngles skyAngles {};
 			float skyStrength = 1.f;
+			bool transparentSky = false;
 			float emissionStrength = 1.f;
 			float lightIntensityFactor = 1.f;
 			float motionBlurStrength = 0.f;
@@ -117,7 +118,33 @@ namespace unirender
 			BakeDiffuseLighting,
 			SceneAlbedo,
 			SceneNormals,
-			SceneDepth
+			SceneDepth,
+			
+			Alpha,
+			GeometryNormal,
+			ShadingNormal,
+			DirectDiffuse,
+			DirectDiffuseReflect,
+			DirectDiffuseTransmit,
+			DirectGlossy,
+			DirectGlossyReflect,
+			DirectGlossyTransmit,
+			Emission,
+			IndirectDiffuse,
+			IndirectDiffuseReflect,
+			IndirectDiffuseTransmit,
+			IndirectGlossy,
+			IndirectGlossyReflect,
+			IndirectGlossyTransmit,
+			IndirectSpecular,
+			IndirectSpecularReflect,
+			IndirectSpecularTransmit,
+			Uv,
+			Irradiance,
+			Noise,
+			Caustic,
+
+			Count
 		};
 		enum class StateFlags : uint16_t
 		{
@@ -141,8 +168,9 @@ namespace unirender
 		struct CreateInfo
 		{
 			void Serialize(DataStream &ds) const;
-			void Deserialize(DataStream &ds);
+			void Deserialize(DataStream &ds,uint32_t version);
 
+			std::string renderer = "cycles";
 			std::optional<uint32_t> samples = {};
 			bool hdrOutput = false;
 			DenoiseMode denoiseMode = DenoiseMode::Detailed;
@@ -159,13 +187,6 @@ namespace unirender
 		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,DataStream &dsIn,const std::string &rootDir);
 		static bool ReadHeaderInfo(DataStream &ds,RenderMode &outRenderMode,CreateInfo &outCreateInfo,SerializationData &outSerializationData,uint32_t &outVersion,SceneInfo *optOutSceneInfo=nullptr);
 		//
-		static Vector3 ToPragmaPosition(const ccl::float3 &pos);
-		static ccl::float3 ToCyclesVector(const Vector3 &v);
-		static ccl::float3 ToCyclesPosition(const Vector3 &pos);
-		static ccl::float3 ToCyclesNormal(const Vector3 &n);
-		static ccl::float2 ToCyclesUV(const Vector2 &uv);
-		static ccl::Transform ToCyclesTransform(const umath::ScaledTransform &t,bool applyRotOffset=false);
-		static float ToCyclesLength(float len);
 		static std::optional<std::string> GetAbsSkyPath(const std::string &skyTex);
 		static std::string ToRelativePath(const std::string &absPath);
 		static std::string ToAbsolutePath(const std::string &relPath);

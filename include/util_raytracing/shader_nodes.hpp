@@ -116,6 +116,7 @@ namespace unirender
 	private:
 		Socket ApplyOperator(const Socket &other,nodes::math::MathType opType,std::optional<nodes::vector_math::MathType> opTypeVec,float(*applyValue)(float,float)) const;
 		Socket ApplyComparisonOperator(const Socket &other,bool(*op)(float,float),Socket(*opNode)(GroupNodeDesc&,const Socket&,const Socket&)) const;
+		unirender::GroupNodeDesc *GetCommonGroupNode(const Socket &other) const;
 		// Socket can either be a concrete value (e.g. float), OR an input or output of a node
 		std::optional<DataValue> m_value {};
 		struct {
@@ -252,6 +253,10 @@ namespace unirender
 		};
 		namespace image_texture
 		{
+			// Note: These have to match ccl::u_colorspace_raw and ccl::u_colorspace_srgb
+			constexpr auto *COLOR_SPACE_RAW = "__builtin_raw";
+			constexpr auto *COLOR_SPACE_SRGB = "__builtin_srgb";
+
 			constexpr auto *IN_FILENAME = "filename";
 			constexpr auto *IN_COLORSPACE = "colorspace";
 			constexpr auto *IN_ALPHA_TYPE = "alpha_type";
@@ -303,6 +308,13 @@ namespace unirender
 
 				Count
 			};
+		};
+		namespace normal_texture
+		{
+			constexpr auto *IN_FILENAME = "filename";
+			constexpr auto *IN_STRENGTH = "strength";
+
+			constexpr auto *OUT_NORMAL = "normal";
 		};
 		namespace environment_texture
 		{
@@ -659,9 +671,27 @@ namespace unirender
 			constexpr auto *OUT_FACING = "facing";
 		};
 	};
-	constexpr uint32_t NODE_COUNT = 35;
+	constexpr uint32_t NODE_COUNT = 36;
 };
 
 DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::Socket &socket);
+
+namespace std {
+	template <>
+		struct hash<unirender::Socket>
+	{
+		std::size_t operator()(const unirender::Socket& k) const
+		{
+			using std::size_t;
+			using std::hash;
+			using std::string;
+
+			std::string socketName;
+			auto *node = k.GetNode(socketName);
+			assert(node);
+			return util::hash_combine(util::hash_combine(0,node),socketName);
+		}
+	};
+}
 
 #endif
