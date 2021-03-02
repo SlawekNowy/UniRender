@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #ifndef __UNIRENDER_SHADER_HPP__
@@ -19,6 +19,7 @@
 #include <sharedutils/datastream.h>
 #include <sharedutils/util_virtual_shared_from_this.hpp>
 
+namespace udm {struct LinkedPropertyWrapper;};
 namespace unirender
 {
 	class NodeDesc;
@@ -28,8 +29,8 @@ namespace unirender
 	{
 		Socket fromSocket;
 		Socket toSocket;
-		void Serialize(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const;
-		void Deserialize(GroupNodeDesc &groupNode,DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable);
+		void Serialize(udm::LinkedPropertyWrapper &prop,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const;
+		void Deserialize(GroupNodeDesc &groupNode,udm::LinkedPropertyWrapper &prop,const std::vector<const NodeDesc*> &nodeIndexTable);
 	};
 
 	enum class SocketIO : uint8_t
@@ -43,8 +44,8 @@ namespace unirender
 	{
 		SocketIO io = SocketIO::None;
 		DataValue dataValue {};
-		void Serialize(DataStream &dsOut) const;
-		static NodeSocketDesc Deserialize(DataStream &dsIn);
+		void Serialize(udm::LinkedPropertyWrapper &prop) const;
+		static NodeSocketDesc Deserialize(udm::LinkedPropertyWrapper &prop);
 	};
 	
 	using NodeIndex = uint32_t;
@@ -131,8 +132,8 @@ namespace unirender
 			return prop.dataValue.ToValue<T>();
 		}
 
-		virtual void SerializeNodes(DataStream &dsOut) const;
-		virtual void DeserializeNodes(DataStream &dsIn);
+		virtual void SerializeNodes(udm::LinkedPropertyWrapper &prop) const;
+		virtual void DeserializeNodes(udm::LinkedPropertyWrapper &prop);
 		std::optional<Socket> FindInputSocket(const std::string &name);
 		std::optional<Socket> FindOutputSocket(const std::string &name);
 		std::optional<Socket> FindProperty(const std::string &name);
@@ -310,14 +311,14 @@ namespace unirender
 		Socket ToGrayScale(const Socket &socket);
 		void Link(const Socket &fromSocket,const Socket &toSocket);
 		void Link(NodeDesc &fromNode,const std::string &fromSocket,NodeDesc &toNode,const std::string &toSocket);
-		void Serialize(DataStream &dsOut);
-		void Deserialize(DataStream &dsOut);
+		void Serialize(udm::LinkedPropertyWrapper &prop);
+		void Deserialize(udm::LinkedPropertyWrapper &prop);
 	protected:
-		virtual void SerializeNodes(DataStream &dsOut) const override;
-		void SerializeLinks(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable);
+		virtual void SerializeNodes(udm::LinkedPropertyWrapper &prop) const override;
+		void SerializeLinks(udm::LinkedPropertyWrapper &prop,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable);
 
-		virtual void DeserializeNodes(DataStream &dsIn) override;
-		void DeserializeLinks(DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable);
+		virtual void DeserializeNodes(udm::LinkedPropertyWrapper &prop) override;
+		void DeserializeLinks(udm::LinkedPropertyWrapper &prop,const std::vector<const NodeDesc*> &nodeIndexTable);
 		
 		std::vector<std::shared_ptr<unirender::NodeDesc>>::iterator ResolveGroupNodes(std::vector<std::shared_ptr<unirender::NodeDesc>>::iterator itParent);
 		unirender::NodeDesc &AddNormalMapNodeDesc(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,float strength=1.f);
@@ -353,8 +354,8 @@ namespace unirender
 		void SetActivePass(Pass pass);
 		std::shared_ptr<unirender::GroupNodeDesc> GetActivePassNode() const;
 
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn,NodeManager &nodeManager);
+		void Serialize(udm::LinkedPropertyWrapper &prop) const;
+		void Deserialize(udm::LinkedPropertyWrapper &prop,NodeManager &nodeManager);
 
 		const std::optional<HairConfig> &GetHairConfig() const {return m_hairConfig;}
 		void SetHairConfig(const HairConfig &hairConfig) {m_hairConfig = hairConfig;}

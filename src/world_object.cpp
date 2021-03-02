@@ -2,11 +2,12 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #include "util_raytracing/world_object.hpp"
 #include <sharedutils/datastream.h>
+#include <udm.hpp>
 
 #pragma optimize("",off)
 unirender::WorldObject::WorldObject()
@@ -24,12 +25,12 @@ const Vector3 &unirender::WorldObject::GetScale() const {return m_pose.GetScale(
 umath::ScaledTransform &unirender::WorldObject::GetPose() {return m_pose;}
 const umath::ScaledTransform &unirender::WorldObject::GetPose() const {return const_cast<WorldObject*>(this)->GetPose();}
 
-void unirender::WorldObject::Serialize(DataStream &dsOut) const
+void unirender::WorldObject::Serialize(udm::LinkedPropertyWrapper &prop) const
 {
-	dsOut->Write(m_pose);
+	prop["pose"] = m_pose;
 }
-void unirender::WorldObject::Deserialize(uint32_t version,DataStream &dsIn)
+void unirender::WorldObject::Deserialize(udm::LinkedPropertyWrapper &prop)
 {
-	m_pose = dsIn->Read<decltype(m_pose)>();
+	prop["pose"](m_pose);
 }
 #pragma optimize("",on)

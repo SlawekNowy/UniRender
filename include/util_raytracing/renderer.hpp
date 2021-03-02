@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #ifndef __UNIRENDER_RENDERER_HPP__
@@ -63,6 +63,7 @@ namespace unirender
 			None = std::numeric_limits<uint8_t>::max()
 		};
 		static std::shared_ptr<Renderer> Create(const unirender::Scene &scene,const std::string &rendererIdentifier);
+		static void Close();
 		static constexpr const char *OUTPUT_COLOR = "COLOR";
 		static constexpr const char *OUTPUT_ALBEDO = "ALBEDO";
 		static constexpr const char *OUTPUT_NORMAL = "NORMAL";
@@ -74,6 +75,12 @@ namespace unirender
 		virtual float GetProgress() const=0;
 		virtual void Reset()=0;
 		virtual void Restart()=0;
+		virtual bool Stop()=0;
+		virtual bool Pause()=0;
+		virtual bool Resume()=0;
+		virtual bool Suspend()=0;
+		virtual bool Export(const std::string &path)=0;
+		virtual std::optional<std::string> SaveRenderPreview(const std::string &path,std::string &outErr) const=0;
 		virtual util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> StartRender()=0;
 		void StopRendering();
 

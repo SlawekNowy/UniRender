@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #ifndef __PR_CYCLES_CAMERA_HPP__
@@ -47,8 +47,8 @@ namespace unirender
 		void SetEquirectangularVerticalRange(umath::Degree range);
 		void SetStereoscopic(bool stereo);
 
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(uint32_t version,DataStream &dsIn);
+		void Serialize(udm::LinkedPropertyWrapper &prop) const;
+		void Deserialize(udm::LinkedPropertyWrapper &prop);
 
 		void SetResolution(uint32_t width,uint32_t height);
 		void GetResolution(uint32_t &width,uint32_t &height) const;

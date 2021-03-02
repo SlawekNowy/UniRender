@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #include "util_raytracing/shader_nodes.hpp"
@@ -11,6 +11,7 @@
 #include "util_raytracing/ccl_shader.hpp"
 #include <render/nodes.h>
 #include <render/shader.h>
+#include <udm.hpp>
 
 #pragma optimize("",off)
 std::size_t unirender::SocketHasher::operator()(const Socket& k) const
@@ -407,53 +408,35 @@ unirender::NodeDesc *unirender::Socket::GetNode() const
 }
 std::optional<unirender::DataValue> unirender::Socket::GetValue() const {return m_value;}
 
-void unirender::Socket::Serialize(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const
+void unirender::Socket::Serialize(udm::LinkedPropertyWrapper &prop,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const
 {
 	if(IsValid() == false)
-	{
-		dsOut->Write<uint8_t>(0);
 		return;
-	}
 	if(IsConcreteValue())
 	{
-		dsOut->Write<uint8_t>(1);
-		m_value->Serialize(dsOut);
+		m_value->Serialize(prop);
 		return;
 	}
-	dsOut->Write<uint8_t>(2);
 	auto it = nodeIndexTable.find(GetNode());
 	assert(it != nodeIndexTable.end());
 	if(it == nodeIndexTable.end())
 		throw Exception{"Invalid parent node"};
-	dsOut->Write<NodeIndex>(it->second);
-	dsOut->WriteString(m_nodeSocketRef.socketName);
-	dsOut->Write<bool>(m_nodeSocketRef.output);
+	prop["nodeIndex"] = it->second;
+	prop["socketName"] = m_nodeSocketRef.socketName;
+	prop["output"] = m_nodeSocketRef.output;
 }
-void unirender::Socket::Deserialize(GroupNodeDesc &parentGroupNode,DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable)
+void unirender::Socket::Deserialize(GroupNodeDesc &parentGroupNode,udm::LinkedPropertyWrapper &prop,const std::vector<const NodeDesc*> &nodeIndexTable)
 {
-	auto type = dsIn->Read<uint8_t>();
-	switch(type)
+	auto value = prop["value"];
+	if(value)
 	{
-	case 0:
+		m_value = DataValue::Deserialize(prop);
 		return;
-	case 1:
-	{
-		m_value = DataValue::Deserialize(dsIn);
-		break;
 	}
-	case 2:
-	{
-		auto idx = dsIn->Read<NodeIndex>();
-		assert(idx < nodeIndexTable.size());
-		auto *node = nodeIndexTable.at(idx);
-		if(node == nullptr)
-			throw Exception{"Invalid parent node"};
-		m_nodeSocketRef.node = const_cast<NodeDesc*>(node)->shared_from_this();
-		m_nodeSocketRef.socketName = dsIn->ReadString();
-		m_nodeSocketRef.output = dsIn->Read<bool>();
-		break;
-	}
-	}
+	auto idx = std::numeric_limits<NodeIndex>::max();
+	prop["nodeIndex"](idx);
+	prop["socketName"](m_nodeSocketRef.socketName);
+	prop["output"](m_nodeSocketRef.output);
 }
 
 std::ostream& operator<<(std::ostream &os,const unirender::Socket &socket) {os<<socket.ToString(); return os;}

@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #ifndef __PR_CYCLES_MESH_HPP__
@@ -16,9 +16,40 @@
 #include <mathutil/uvec.h>
 #include <sharedutils/util.h>
 
+namespace udm {struct LinkedPropertyWrapper;};
 class DataStream;
 namespace unirender
 {
+	struct VertexWeight
+	{
+		std::array<int32_t,8> boneIndices {-1};
+		std::array<float,8> boneWeights {0.f};
+	};
+	using BoneTransforms = std::vector<umath::ScaledTransform>;
+	struct DLLRTUTIL MeshData
+		: public std::enable_shared_from_this<MeshData>
+	{
+		void Reserve(size_t n)
+		{
+
+		}
+		void Resize(size_t n)
+		{
+
+		}
+		std::vector<Vector3> positions;
+		std::vector<Vector3> normals;
+		std::vector<Vector2> uvs;
+		std::vector<Vector2> lightmapUvs;
+		std::vector<Vector4> tangents;
+		std::vector<int32_t> indices;
+		std::vector<float> alphas;
+		std::vector<float> wrinkles;
+		std::vector<VertexWeight> vertexWeights;
+
+		unirender::PShader shader = nullptr;
+	};
+
 	class Shader;
 	class Scene;
 	class Mesh;
@@ -41,13 +72,13 @@ namespace unirender
 		using Smooth = uint8_t; // Boolean value
 
 		static PMesh Create(const std::string &name,uint64_t numVerts,uint64_t numTris,Flags flags=Flags::None);
-		static PMesh Create(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader);
-		static PMesh Create(DataStream &dsIn,const ShaderCache &cache);
+		static PMesh Create(udm::LinkedPropertyWrapper &prop,const std::function<PShader(uint32_t)> &fGetShader);
+		static PMesh Create(udm::LinkedPropertyWrapper &prop,const ShaderCache &cache);
 		util::WeakHandle<Mesh> GetHandle();
 
-		void Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Shader&)> &fGetShaderIndex) const;
-		void Serialize(DataStream &dsOut,const std::unordered_map<const Shader*,size_t> shaderToIndexTable) const;
-		void Deserialize(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader);
+		void Serialize(udm::LinkedPropertyWrapper &prop,const std::function<std::optional<uint32_t>(const Shader&)> &fGetShaderIndex) const;
+		void Serialize(udm::LinkedPropertyWrapper &prop,const std::unordered_map<const Shader*,size_t> shaderToIndexTable) const;
+		void Deserialize(udm::LinkedPropertyWrapper &prop,const std::function<PShader(uint32_t)> &fGetShader);
 
 		void Merge(const Mesh &other);
 
@@ -67,44 +98,17 @@ namespace unirender
 		uint32_t AddSubMeshShader(Shader &shader);
 		void Validate() const;
 
-		const std::vector<Vector3> &GetVertices() const {return m_verts;}
-		const std::vector<int> &GetTriangles() const {return m_triangles;}
-		const std::vector<Vector3> &GetVertexNormals() const {return m_vertexNormals;}
-		const std::vector<Vector2> &GetUvs() const {return m_uvs;}
-		const std::vector<Vector2> &GetLightmapUvs() const {return m_lightmapUvs;}
-		const std::vector<Vector3> &GetUvTangents() const {return m_uvTangents;}
-		const std::vector<float> &GetUvTangentSigns() const {return m_uvTangentSigns;}
-		const std::optional<std::vector<float>> &GetAlphas() const {return m_alphas;}
-		const std::vector<Smooth> &GetSmooth() const {return m_smooth;}
-		const std::vector<int> &GetShaders() const {return m_shader;}
-		const std::vector<Vector2> &GetPerVertexUvs() const {return m_perVertexUvs;}
+		void SetMeshData(MeshData &meshData) {m_meshData = meshData.shared_from_this();}
+		const std::shared_ptr<MeshData> &GetMeshData() const {return m_meshData;}
 
 		// For internal use only
 		std::vector<uint32_t> &GetOriginalShaderIndexTable() {return m_originShaderIndexTable;}
 	private:
 		Mesh(uint64_t numVerts,uint64_t numTris,Flags flags=Flags::None);
-		std::vector<Vector2> m_perVertexUvs = {};
-		std::vector<Vector4> m_perVertexTangents = {};
-		std::vector<float> m_perVertexTangentSigns = {};
-		std::vector<float> m_perVertexAlphas = {};
-		std::vector<PShader> m_subMeshShaders = {};
-		std::vector<Vector2> m_lightmapUvs = {};
-		uint64_t m_numVerts = 0ull;
-		uint64_t m_numTris = 0ull;
-		Flags m_flags = Flags::None;
 
-		// Note: These are moved 1:1 into the ccl::Mesh structure during finalization
-		std::vector<Vector3> m_verts;
-		std::vector<int> m_triangles;
-		std::vector<Vector3> m_vertexNormals;
-		std::vector<Vector2> m_uvs;
-		std::vector<Vector3> m_uvTangents;
-		std::vector<float> m_uvTangentSigns;
-		std::optional<std::vector<float>> m_alphas {};
-		std::vector<Smooth> m_smooth;
-		std::vector<int> m_shader;
-		size_t m_numNGons = 0;
-		size_t m_numSubdFaces = 0;
+		std::shared_ptr<MeshData> m_meshData = nullptr;
+		std::shared_ptr<BoneTransforms> m_boneTransforms = nullptr;
+		Flags m_flags = Flags::None;
 
 		std::vector<uint32_t> m_originShaderIndexTable;
 	};

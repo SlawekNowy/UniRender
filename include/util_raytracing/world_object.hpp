@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #ifndef __PR_CYCLES_WORLD_OBJECT_HPP__
@@ -14,6 +14,7 @@
 #include <mathutil/transform.hpp>
 
 class DataStream;
+namespace udm {class LinkedPropertyWrapper;};
 namespace unirender
 {
 	class WorldObject;
@@ -33,8 +34,8 @@ namespace unirender
 		umath::ScaledTransform &GetPose();
 		const umath::ScaledTransform &GetPose() const;
 
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(uint32_t version,DataStream &dsIn);
+		void Serialize(udm::LinkedPropertyWrapper &prop) const;
+		void Deserialize(udm::LinkedPropertyWrapper &prop);
 	protected:
 		WorldObject();
 	private:

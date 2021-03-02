@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #ifndef __RT_DATA_VALUE_HPP__
@@ -16,6 +16,7 @@
 #include <mathutil/umat.h>
 #include <sharedutils/datastream.h>
 
+namespace udm {struct LinkedPropertyWrapper;};
 namespace unirender
 {
 	using STBool = bool;
@@ -276,7 +277,7 @@ namespace unirender
 			assert(false);
 			return {};
 		}
-		static DataValue Deserialize(DataStream &dsIn);
+		static DataValue Deserialize(udm::LinkedPropertyWrapper &prop);
 		DataValue(SocketType type,const std::shared_ptr<void> &value)
 			: type{type},value{value}
 		{}
@@ -285,7 +286,7 @@ namespace unirender
 		bool operator==(const DataValue &other) const {return type == other.type && value.get() == other.value.get();}
 		bool operator!=(const DataValue &other) const {return !operator==(other);}
 
-		void Serialize(DataStream &dsOut) const;
+		void Serialize(udm::LinkedPropertyWrapper &prop) const;
 
 		SocketType type = SocketType::Bool;
 		std::shared_ptr<void> value = nullptr;

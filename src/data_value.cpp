@@ -2,68 +2,69 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #include "util_raytracing/data_value.hpp"
+#include <udm.hpp>
 
 #pragma optimize("",off)
-void unirender::DataValue::Serialize(DataStream &dsOut) const
+void unirender::DataValue::Serialize(udm::LinkedPropertyWrapper &prop) const
 {
-	dsOut->Write(type);
-	dsOut->Write<bool>(value != nullptr);
+	prop["type"] = type;
 	if(value == nullptr)
+	{
+		prop.Add("value",udm::Type::Nil);
 		return;
+	}
 	switch(type)
 	{
 	case SocketType::Bool:
-		dsOut->Write<STBool>(*static_cast<STBool*>(value.get()));
+		prop["value"] = *static_cast<STBool*>(value.get());
 		break;
 	case SocketType::Float:
-		dsOut->Write<STFloat>(*static_cast<STFloat*>(value.get()));
+		prop["value"] = *static_cast<STFloat*>(value.get());
 		break;
 	case SocketType::Int:
-		dsOut->Write<STInt>(*static_cast<STInt*>(value.get()));
+		prop["value"] = *static_cast<STInt*>(value.get());
 		break;
 	case SocketType::UInt:
-		dsOut->Write<STUInt>(*static_cast<STUInt*>(value.get()));
+		prop["value"] = *static_cast<STUInt*>(value.get());
 		break;
 	case SocketType::Color:
-		dsOut->Write<STColor>(*static_cast<STColor*>(value.get()));
+		prop["value"] = *static_cast<STColor*>(value.get());
 		break;
 	case SocketType::Vector:
-		dsOut->Write<STVector>(*static_cast<STVector*>(value.get()));
+		prop["value"] = *static_cast<STVector*>(value.get());
 		break;
 	case SocketType::Point:
-		dsOut->Write<STPoint>(*static_cast<STPoint*>(value.get()));
+		prop["value"] = *static_cast<STPoint*>(value.get());
 		break;
 	case SocketType::Normal:
-		dsOut->Write<STNormal>(*static_cast<STNormal*>(value.get()));
+		prop["value"] = *static_cast<STNormal*>(value.get());
 		break;
 	case SocketType::Point2:
-		dsOut->Write<STPoint2>(*static_cast<STPoint2*>(value.get()));
+		prop["value"] = *static_cast<STPoint2*>(value.get());
 		break;
 	case SocketType::Enum:
-		dsOut->Write<STEnum>(*static_cast<STEnum*>(value.get()));
+		prop["value"] = *static_cast<STEnum*>(value.get());
 		break;
 	case SocketType::Transform:
-		dsOut->Write<STTransform>(*static_cast<STTransform*>(value.get()));
+		prop["value"] = glm::transpose(*static_cast<STTransform*>(value.get()));
 		break;
 	case SocketType::String:
-		dsOut->WriteString(*static_cast<STString*>(value.get()));
+		prop["value"] = *static_cast<STString*>(value.get());
 		break;
 	case SocketType::FloatArray:
 	{
 		auto &v = *static_cast<STFloatArray*>(value.get());
-		dsOut->Write<uint32_t>(v.size());
-		dsOut->Write(reinterpret_cast<uint8_t*>(v.data()),v.size() *sizeof(v.front()));
+		prop["value"] = udm::compress_lz4_blob(v);
 		break;
 	}
 	case SocketType::ColorArray:
 	{
 		auto &v = *static_cast<STColorArray*>(value.get());
-		dsOut->Write<uint32_t>(v.size());
-		dsOut->Write(reinterpret_cast<uint8_t*>(v.data()),v.size() *sizeof(v.front()));
+		prop["value"] = udm::compress_lz4_blob(v);
 		break;
 	}
 	case SocketType::Closure:
@@ -72,52 +73,49 @@ void unirender::DataValue::Serialize(DataStream &dsOut) const
 	}
 	static_assert(umath::to_integral(SocketType::Count) == 16);
 }
-unirender::DataValue unirender::DataValue::Deserialize(DataStream &dsIn)
+unirender::DataValue unirender::DataValue::Deserialize(udm::LinkedPropertyWrapper &prop)
 {
-	auto type = dsIn->Read<SocketType>();
-	auto hasValue = dsIn->Read<bool>();
-	if(hasValue == false)
+	auto type = SocketType::Invalid;
+	prop["type"](type);
+	auto value = prop["value"];
+	if(!value)
 		return DataValue{type,nullptr};
 	switch(type)
 	{
 	case SocketType::Bool:
-		return DataValue::Create<STBool,SocketType::Bool>(dsIn->Read<STBool>());
+		return DataValue::Create<STBool,SocketType::Bool>(value.ToValue<STBool>({}));
 	case SocketType::Float:
-		return DataValue::Create<STFloat,SocketType::Float>(dsIn->Read<STFloat>());
+		return DataValue::Create<STFloat,SocketType::Float>(value.ToValue<STFloat>({}));
 	case SocketType::Int:
-		return DataValue::Create<STInt,SocketType::Int>(dsIn->Read<STInt>());
+		return DataValue::Create<STInt,SocketType::Int>(value.ToValue<STInt>({}));
 	case SocketType::UInt:
-		return DataValue::Create<STUInt,SocketType::UInt>(dsIn->Read<STUInt>());
+		return DataValue::Create<STUInt,SocketType::UInt>(value.ToValue<STUInt>({}));
 	case SocketType::Color:
-		return DataValue::Create<STColor,SocketType::Color>(dsIn->Read<STColor>());
+		return DataValue::Create<STColor,SocketType::Color>(value.ToValue<STColor>({}));
 	case SocketType::Vector:
-		return DataValue::Create<STVector,SocketType::Vector>(dsIn->Read<STVector>());
+		return DataValue::Create<STVector,SocketType::Vector>(value.ToValue<STVector>({}));
 	case SocketType::Point:
-		return DataValue::Create<STPoint,SocketType::Point>(dsIn->Read<STPoint>());
+		return DataValue::Create<STPoint,SocketType::Point>(value.ToValue<STPoint>({}));
 	case SocketType::Normal:
-		return DataValue::Create<STNormal,SocketType::Normal>(dsIn->Read<STNormal>());
+		return DataValue::Create<STNormal,SocketType::Normal>(value.ToValue<STNormal>({}));
 	case SocketType::Point2:
-		return DataValue::Create<STPoint2,SocketType::Point2>(dsIn->Read<STPoint2>());
+		return DataValue::Create<STPoint2,SocketType::Point2>(value.ToValue<STPoint2>({}));
 	case SocketType::Enum:
-		return DataValue::Create<STEnum,SocketType::Enum>(dsIn->Read<STEnum>());
+		return DataValue::Create<STEnum,SocketType::Enum>(value.ToValue<STEnum>({}));
 	case SocketType::Transform:
-		return DataValue::Create<STTransform,SocketType::Transform>(dsIn->Read<STTransform>());
+		return DataValue::Create<STTransform,SocketType::Transform>(glm::transpose(value.ToValue<Mat3x4>({})));
 	case SocketType::String:
-		return DataValue::Create<STString,SocketType::String>(dsIn->ReadString());
+		return DataValue::Create<STString,SocketType::String>(value.ToValue<STString>({}));
 	case SocketType::FloatArray:
 	{
-		auto n = dsIn->Read<uint32_t>();
 		STFloatArray values {};
-		values.resize(n);
-		dsIn->Read(values.data(),values.size() *sizeof(values.front()));
+		value.GetBlobData(values);
 		return DataValue::Create<STFloatArray,SocketType::Transform>(std::move(values));
 	}
 	case SocketType::ColorArray:
 	{
-		auto n = dsIn->Read<uint32_t>();
 		STColorArray values {};
-		values.resize(n);
-		dsIn->Read(values.data(),values.size() *sizeof(values.front()));
+		value.GetBlobData(values);
 		return DataValue::Create<STColorArray,SocketType::Transform>(std::move(values));
 	}
 	case SocketType::Closure:

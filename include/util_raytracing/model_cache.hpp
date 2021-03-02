@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #ifndef __RT_MODEL_CACHE_HPP__
@@ -15,6 +15,7 @@
 #undef GetObject
 
 class DataStream;
+namespace udm {class Property;};
 namespace unirender
 {
 	class NodeManager;
@@ -30,7 +31,7 @@ namespace unirender
 	{
 	public:
 		static std::shared_ptr<ShaderCache> Create();
-		static std::shared_ptr<ShaderCache> Create(DataStream &ds,NodeManager &nodeManager);
+		static std::shared_ptr<ShaderCache> Create(udm::LinkedPropertyWrapper &prop,NodeManager &nodeManager);
 
 		const std::vector<std::shared_ptr<Shader>> &GetShaders() const;
 		std::vector<std::shared_ptr<Shader>> &GetShaders();
@@ -43,8 +44,8 @@ namespace unirender
 
 		std::unordered_map<const Shader*,size_t> GetShaderToIndexTable() const;
 
-		void Serialize(DataStream &dsOut);
-		void Deserialize(DataStream &dsIn,NodeManager &nodeManager);
+		void Serialize(udm::LinkedPropertyWrapper &prop);
+		void Deserialize(udm::LinkedPropertyWrapper &prop,NodeManager &nodeManager);
 	private:
 		std::vector<std::shared_ptr<Shader>> m_shaders;
 	};
@@ -61,7 +62,7 @@ namespace unirender
 			HasUnbakedData = HasBakedData<<1u
 		};
 		ModelCacheChunk(ShaderCache &shaderCache);
-		ModelCacheChunk(DataStream &dsIn,unirender::NodeManager &nodeManager);
+		ModelCacheChunk(udm::LinkedPropertyWrapper &prop,unirender::NodeManager &nodeManager);
 		void Bake();
 		void GenerateUnbakedData(bool force=false);
 		
@@ -79,11 +80,11 @@ namespace unirender
 		const std::vector<std::shared_ptr<Object>> &GetObjects() const;
 		std::vector<std::shared_ptr<Object>> &GetObjects();
 
-		void Serialize(DataStream &dsOut);
-		void Deserialize(DataStream &dsIn,unirender::NodeManager &nodeManager);
+		void Serialize(udm::LinkedPropertyWrapper &prop);
+		void Deserialize(udm::LinkedPropertyWrapper &prop,unirender::NodeManager &nodeManager);
 
-		const std::vector<DataStream> &GetBakedObjectData() const;
-		const std::vector<DataStream> &GetBakedMeshData() const;
+		const std::vector<std::shared_ptr<udm::Property>> &GetBakedObjectData() const;
+		const std::vector<std::shared_ptr<udm::Property>> &GetBakedMeshData() const;
 
 		ShaderCache &GetShaderCache() const {return *m_shaderCache;}
 
@@ -97,9 +98,8 @@ namespace unirender
 		std::vector<std::shared_ptr<Object>> m_objects;
 		std::vector<std::shared_ptr<Mesh>> m_meshes;
 
-		std::vector<DataStream> m_bakedObjects;
-		std::vector<DataStream> m_bakedMeshes;
-		uint32_t m_serializationVersion;
+		std::vector<std::shared_ptr<udm::Property>> m_bakedObjects;
+		std::vector<std::shared_ptr<udm::Property>> m_bakedMeshes;
 	};
 
 	class DLLRTUTIL ModelCache
@@ -107,12 +107,12 @@ namespace unirender
 	{
 	public:
 		static std::shared_ptr<ModelCache> Create();
-		static std::shared_ptr<ModelCache> Create(DataStream &ds,unirender::NodeManager &nodeManager);
+		static std::shared_ptr<ModelCache> Create(udm::LinkedPropertyWrapper &prop,unirender::NodeManager &nodeManager);
 
 		void Merge(ModelCache &other);
 
-		void Serialize(DataStream &dsOut);
-		void Deserialize(DataStream &dsIn,unirender::NodeManager &nodeManager);
+		void Serialize(udm::LinkedPropertyWrapper &prop);
+		void Deserialize(udm::LinkedPropertyWrapper &prop,unirender::NodeManager &nodeManager);
 
 		ModelCacheChunk &AddChunk(ShaderCache &shaderCache);
 		const std::vector<ModelCacheChunk> &GetChunks() const {return const_cast<ModelCache*>(this)->GetChunks();}

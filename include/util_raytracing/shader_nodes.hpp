@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #ifndef __PR_CYCLES_NODES_HPP__
@@ -26,6 +26,7 @@ namespace ccl
 	enum AttributeStandard : int32_t;
 	enum NodeMathType : int32_t;
 };
+namespace udm {struct LinkedPropertyWrapper;};
 namespace unirender
 {
 	enum class ColorSpace : uint8_t
@@ -89,8 +90,8 @@ namespace unirender
 		NodeDesc *GetNode() const;
 		std::optional<DataValue> GetValue() const;
 
-		void Serialize(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const;
-		void Deserialize(GroupNodeDesc &parentGroupNode,DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable);
+		void Serialize(udm::LinkedPropertyWrapper &prop,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const;
+		void Deserialize(GroupNodeDesc &parentGroupNode,udm::LinkedPropertyWrapper &prop,const std::vector<const NodeDesc*> &nodeIndexTable);
 		
 		Socket operator-() const;
 		Socket operator+(float f) const;

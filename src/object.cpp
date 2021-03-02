@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #include "util_raytracing/object.hpp"
@@ -11,15 +11,16 @@
 #include "util_raytracing/shader.hpp"
 #include "util_raytracing/model_cache.hpp"
 #include <sharedutils/datastream.h>
+#include <udm.hpp>
 
 #pragma optimize("",off)
 unirender::PObject unirender::Object::Create(Mesh *mesh) {return PObject{new Object{mesh}};}
 unirender::PObject unirender::Object::Create(Mesh &mesh) {return Create(&mesh);}
 
-unirender::PObject unirender::Object::Create(uint32_t version,DataStream &dsIn,const std::function<PMesh(uint32_t)> &fGetMesh)
+unirender::PObject unirender::Object::Create(udm::LinkedPropertyWrapper &prop,const std::function<PMesh(uint32_t)> &fGetMesh)
 {
 	auto o = Create(nullptr);
-	o->Deserialize(version,dsIn,fGetMesh);
+	o->Deserialize(prop,fGetMesh);
 	return o;
 }
 
@@ -27,27 +28,32 @@ unirender::Object::Object(Mesh *mesh)
 	: WorldObject{},BaseObject{},m_mesh{mesh ? mesh->shared_from_this() : nullptr}
 {}
 
-void unirender::Object::Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Mesh&)> &fGetMeshIndex) const
+void unirender::Object::Serialize(udm::LinkedPropertyWrapper &prop,const std::function<std::optional<uint32_t>(const Mesh&)> &fGetMeshIndex) const
 {
-	WorldObject::Serialize(dsOut);
+	WorldObject::Serialize(prop);
+	auto obj = prop["object"];
 	auto idx = fGetMeshIndex(*m_mesh);
 	assert(idx.has_value());
-	dsOut->Write<uint32_t>(*idx);
-	dsOut->WriteString(GetName());
+	obj["meshIndex"] = *idx;
+	obj["name"] = GetName();
 }
-void unirender::Object::Serialize(DataStream &dsOut,const std::unordered_map<const Mesh*,size_t> &meshToIndexTable) const
+void unirender::Object::Serialize(udm::LinkedPropertyWrapper &prop,const std::unordered_map<const Mesh*,size_t> &meshToIndexTable) const
 {
-	Serialize(dsOut,[&meshToIndexTable](const Mesh &mesh) -> std::optional<uint32_t> {
+	Serialize(prop,[&meshToIndexTable](const Mesh &mesh) -> std::optional<uint32_t> {
 		auto it = meshToIndexTable.find(&mesh);
 		return (it != meshToIndexTable.end()) ? it->second : std::optional<uint32_t>{};
 	});
 }
-void unirender::Object::Deserialize(uint32_t version,DataStream &dsIn,const std::function<PMesh(uint32_t)> &fGetMesh)
+void unirender::Object::Deserialize(udm::LinkedPropertyWrapper &prop,const std::function<PMesh(uint32_t)> &fGetMesh)
 {
-	WorldObject::Deserialize(version,dsIn);
-	auto meshIdx = dsIn->Read<uint32_t>();
-	m_name = dsIn->ReadString();
-	auto mesh = fGetMesh(meshIdx);
+	WorldObject::Deserialize(prop);
+	
+	auto obj = prop["object"];
+	uint32_t meshIndex = 0;
+	obj["meshIndex"](meshIndex);
+	obj["name"](m_name);
+
+	auto mesh = fGetMesh(meshIndex);
 	assert(mesh);
 	m_mesh = mesh;
 }

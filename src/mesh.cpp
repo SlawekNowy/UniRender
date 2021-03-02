@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #include "util_raytracing/mesh.hpp"
@@ -13,6 +13,7 @@
 #include <sharedutils/datastream.h>
 #include <render/mesh.h>
 #include <render/scene.h>
+#include <udm.hpp>
 
 #pragma optimize("",off)
 const std::string unirender::Mesh::TANGENT_POSTFIX = ".tangent";
@@ -48,21 +49,30 @@ unirender::PMesh unirender::Mesh::Create(const std::string &name,uint64_t numVer
 	return meshWrapper;
 }
 
-unirender::PMesh unirender::Mesh::Create(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader)
+unirender::PMesh unirender::Mesh::Create(udm::LinkedPropertyWrapper &prop,const std::function<PShader(uint32_t)> &fGetShader)
 {
-	auto name = dsIn->ReadString();
-	auto flags = dsIn->Read<decltype(m_flags)>();
-	auto numVerts = dsIn->Read<decltype(m_numVerts)>();
-	auto numTris = dsIn->Read<decltype(m_numTris)>();
-	auto mesh = Create(name,numVerts,numTris,flags);
-	mesh->Deserialize(dsIn,fGetShader);
+	std::string name;
+	prop["name"](name);
+	auto flags = Flags::None;
+	if(prop["flags.hasAlphas"])
+		umath::set_flag(flags,Flags::HasAlphas,prop["flags.hasAlphas"].ToValue<bool>(false));
+	if(prop["flags.hasWrinkles"])
+		umath::set_flag(flags,Flags::HasWrinkles,prop["flags.hasWrinkles"].ToValue<bool>(false));
+
+	uint64_t numVerts = 0;
+	uint64_t numIndices = 0;
+	prop["numVertices"](numVerts);
+	prop["numIndices"](numIndices);
+
+	auto mesh = Create(name,numVerts,numIndices,flags);
+	mesh->Deserialize(prop,fGetShader);
 	return mesh;
 }
 
-unirender::PMesh unirender::Mesh::Create(DataStream &dsIn,const ShaderCache &cache)
+unirender::PMesh unirender::Mesh::Create(udm::LinkedPropertyWrapper &prop,const ShaderCache &cache)
 {
 	auto &shaders = cache.GetShaders();
-	return Create(dsIn,[&shaders](uint32_t idx) -> PShader {
+	return Create(prop,[&shaders](uint32_t idx) -> PShader {
 		return (idx < shaders.size()) ? shaders.at(idx) : nullptr;
 	});
 }
@@ -96,14 +106,13 @@ enum class SerializationFlags : uint8_t
 	UseSubdivFaces = UseAlphas<<1u
 };
 REGISTER_BASIC_BITWISE_OPERATORS(SerializationFlags)
-void unirender::Mesh::Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Shader&)> &fGetShaderIndex) const
+void unirender::Mesh::Serialize(udm::LinkedPropertyWrapper &prop,const std::function<std::optional<uint32_t>(const Shader&)> &fGetShaderIndex) const
 {
 	auto numVerts = umath::min(m_numVerts,m_verts.size());
 	auto numTris = umath::min(m_numTris,m_triangles.size() /3);
-	dsOut->WriteString(GetName());
-	dsOut->Write(m_flags);
-	dsOut->Write<decltype(m_numVerts)>(numVerts);
-	dsOut->Write<decltype(m_numTris)>(numTris);
+	
+	auto mesh = prop["mesh"];
+	mesh["name"] = GetName();
 
 	auto flags = SerializationFlags::None;
 	if(m_alphas)
@@ -111,13 +120,13 @@ void unirender::Mesh::Serialize(DataStream &dsOut,const std::function<std::optio
 	if(m_numSubdFaces > 0)
 		flags |= SerializationFlags::UseSubdivFaces;
 
-	dsOut->Write<SerializationFlags>(flags);
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_verts.data()),numVerts *sizeof(m_verts.front()));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_perVertexUvs.data()),numVerts *sizeof(m_perVertexUvs.front()));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_perVertexTangents.data()),numVerts *sizeof(m_perVertexTangents.front()));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_perVertexTangentSigns.data()),numVerts *sizeof(m_perVertexTangentSigns.front()));
+	// TODO: Write model instead?
+	mesh["vertices"] = m_verts;
+	mesh["perVertexUvs"] = m_perVertexUvs;
+	mesh["perVertexTangents"] = m_perVertexTangents;
+	mesh["perVertexTangentSigns"] = m_perVertexTangentSigns;
 	if(umath::is_flag_set(flags,SerializationFlags::UseAlphas))
-		dsOut->Write(reinterpret_cast<const uint8_t*>(m_perVertexAlphas.data()),numVerts *sizeof(m_perVertexAlphas.front()));
+		mesh["perVertexAlphas"] = m_perVertexAlphas;
 
 	/*if(umath::is_flag_set(flags,SerializationFlags::UseSubdivFaces))
 	{
@@ -139,141 +148,83 @@ void unirender::Mesh::Serialize(DataStream &dsOut,const std::function<std::optio
 	*/
 	// Validate();
 
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_triangles.data()),numTris *3 *sizeof(m_triangles[0]));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_shader.data()),numTris *sizeof(m_shader[0]));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_smooth.data()),numTris *sizeof(m_smooth[0]));
+	mesh["triangles"] = m_triangles;
+	mesh["shaders"] = m_shader;
+	mesh["smooth"] = udm::compress_lz4_blob(m_smooth);
 
-	//if(umath::is_flag_set(flags,SerializationFlags::UseSubdivFaces))
-	//	dsOut->Write(reinterpret_cast<const uint8_t*>(m_mesh.get_triangle_patch().data()),numTris *sizeof(m_mesh.get_triangle_patch()[0]));
+	mesh["vertexNormals"] = m_vertexNormals;
+	mesh["uvs"] = m_uvs;
+	mesh["uvTangents"] = m_uvTangents;
+	mesh["uvTangentSigns"] = m_uvTangentSigns;
 
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_vertexNormals.data()),numVerts *sizeof(m_vertexNormals[0]));
+	if(umath::is_flag_set(flags,SerializationFlags::UseAlphas) && m_alphas.has_value())
+		mesh["alphas"] = *m_alphas;
 
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_uvs.data()),numTris *3 *sizeof(m_uvs[0]));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_uvTangents.data()),numTris *3 *sizeof(m_uvTangents[0]));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_uvTangentSigns.data()),numTris *3 *sizeof(m_uvTangentSigns[0]));
-
-	if(umath::is_flag_set(flags,SerializationFlags::UseAlphas))
-		dsOut->Write(reinterpret_cast<const uint8_t*>(m_alphas->data()),numVerts *sizeof((*m_alphas)[0]));
-
-	dsOut->Write<size_t>(m_subMeshShaders.size());
+	std::vector<uint32_t> subMeshShaders;
+	subMeshShaders.reserve(m_subMeshShaders.size());
 	for(auto &shader : m_subMeshShaders)
 	{
 		auto idx = fGetShaderIndex(*shader);
 		assert(idx.has_value());
-		dsOut->Write<uint32_t>(*idx);
+		subMeshShaders.push_back(*idx);
 	}
+	mesh["subMeshShaders"] = subMeshShaders;
 
-	dsOut->Write<size_t>(m_lightmapUvs.size());
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_lightmapUvs.data()),m_lightmapUvs.size() *sizeof(m_lightmapUvs.front()));
+	mesh["lightmapUvs"] = m_lightmapUvs;
 }
-void unirender::Mesh::Serialize(DataStream &dsOut,const std::unordered_map<const Shader*,size_t> shaderToIndexTable) const
+void unirender::Mesh::Serialize(udm::LinkedPropertyWrapper &prop,const std::unordered_map<const Shader*,size_t> shaderToIndexTable) const
 {
-	Serialize(dsOut,[&shaderToIndexTable](const Shader &shader) -> std::optional<uint32_t> {
+	Serialize(prop,[&shaderToIndexTable](const Shader &shader) -> std::optional<uint32_t> {
 		auto it = shaderToIndexTable.find(&shader);
 		return (it != shaderToIndexTable.end()) ? it->second : std::optional<uint32_t>{};
 	});
 }
-void unirender::Mesh::Deserialize(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader)
+void unirender::Mesh::Deserialize(udm::LinkedPropertyWrapper &prop,const std::function<PShader(uint32_t)> &fGetShader)
 {
-	auto flags = dsIn->Read<SerializationFlags>();
+	auto mesh = prop["mesh"];
+	auto flags = SerializationFlags::None;
+	if(prop["flags.useAlphas"])
+		umath::set_flag(flags,SerializationFlags::UseAlphas,prop["flags.useAlphas"].ToValue<bool>(false));
+	if(prop["flags.useSubdivFaces"])
+		umath::set_flag(flags,SerializationFlags::UseSubdivFaces,prop["flags.useSubdivFaces"].ToValue<bool>(false));
 
-	m_verts.resize(m_numVerts);
-	dsIn->Read(m_verts.data(),m_numVerts *sizeof(m_verts[0]));
-
-	m_perVertexUvs.resize(m_numVerts);
-	dsIn->Read(m_perVertexUvs.data(),m_numVerts *sizeof(m_perVertexUvs.front()));
-	m_perVertexTangents.resize(m_numVerts);
-	dsIn->Read(m_perVertexTangents.data(),m_numVerts *sizeof(m_perVertexTangents.front()));
-	m_perVertexTangentSigns.resize(m_numVerts);
-	dsIn->Read(m_perVertexTangentSigns.data(),m_numVerts *sizeof(m_perVertexTangentSigns.front()));
+	mesh["numVertices"] = m_verts.size();
+	mesh["numIndices"] = m_triangles.size();
+	mesh["vertices"](m_verts);
+	mesh["perVertexUvs"](m_perVertexUvs);
+	mesh["perVertexTangents"](m_perVertexTangents);
+	mesh["perVertexTangentSigns"](m_perVertexTangentSigns);
 	if(umath::is_flag_set(flags,SerializationFlags::UseAlphas))
-	{
-		m_perVertexAlphas.resize(m_numVerts);
-		dsIn->Read(m_perVertexAlphas.data(),m_numVerts *sizeof(m_perVertexAlphas.front()));
-	}
+		mesh["perVertexAlphas"](m_perVertexAlphas);
 
-	/*if(umath::is_flag_set(flags,SerializationFlags::UseSubdivFaces))
-	{
-		auto numSubdFaces = dsIn->Read<uint32_t>();
-		auto numNgons = dsIn->Read<uint32_t>();
-		auto numCorners = dsIn->Read<uint32_t>();
-		m_mesh.resize_subd_faces(m_numVerts,numNgons,numCorners);
-		auto &numSubdCorners = m_mesh.get_subd_num_corners();
-		numSubdCorners.resize(numCorners);
-		dsIn->Read(numSubdCorners.data(),numSubdCorners.size() *sizeof(numSubdCorners[0]));
-		std::vector<ccl::Mesh::SubdFace> subdFaces;
-		subdFaces.resize(m_numVerts);
-		dsIn->Read(subdFaces.data(),m_numVerts *sizeof(subdFaces[0]));
-		ccl::array<int> startCorners;
-		ccl::array<int> shaders;
-		ccl::array<bool> smooth;
-		ccl::array<int> ptexOffsets;
-		startCorners.reserve(subdFaces.size());
-		startCorners.reserve(shaders.size());
-		startCorners.reserve(smooth.size());
-		startCorners.reserve(ptexOffsets.size());
-		for(auto i=decltype(subdFaces.size()){0u};i<subdFaces.size();++i)
-		{
-			auto &subdFace = subdFaces.at(i);
-			startCorners.push_back_reserved(subdFace.start_corner);
-			startCorners.push_back_reserved(subdFace.num_corners);
-			startCorners.push_back_reserved(subdFace.shader);
-			startCorners.push_back_reserved(subdFace.smooth);
-			startCorners.push_back_reserved(subdFace.ptex_offset);
-		}
-		m_mesh.set_subd_start_corner(startCorners);
-		m_mesh.set_subd_shader(shaders);
-		m_mesh.set_subd_smooth(smooth);
-		m_mesh.set_subd_ptex_offset(ptexOffsets);
-	}*/
+	mesh["triangles"](m_triangles);
+	mesh["shaders"](m_shader);
+	mesh["smooth"].GetBlobData(m_smooth);
 
-	m_triangles.resize(m_numTris *3);
-	dsIn->Read(m_triangles.data(),m_numTris *3 *sizeof(m_triangles[0]));
-	m_shader.resize(m_numTris);
-	dsIn->Read(m_shader.data(),m_numTris *sizeof(m_shader[0]));
-	m_smooth.resize(m_numTris);
-	dsIn->Read(m_smooth.data(),m_numTris *sizeof(m_smooth[0]));
-
-	// Validate();
-
-	/*if(umath::is_flag_set(flags,SerializationFlags::UseSubdivFaces))
-	{
-		m_mesh.get_triangle_patch().resize(m_numTris);
-		dsIn->Read(m_mesh.get_triangle_patch().data(),m_numTris *sizeof(m_mesh.get_triangle_patch()[0]));
-	}*/
-
-	m_vertexNormals.resize(m_numVerts);
-	dsIn->Read(m_vertexNormals.data(),m_numVerts *sizeof(m_vertexNormals[0]));
-
-	m_uvs.resize(m_numTris *3);
-	dsIn->Read(m_uvs.data(),m_numTris *3 *sizeof(m_uvs[0]));
-
-	m_uvTangents.resize(m_numTris *3);
-	dsIn->Read(m_uvTangents.data(),m_numTris *3 *sizeof(m_uvTangents[0]));
-
-	m_uvTangentSigns.resize(m_numTris *3);
-	dsIn->Read(m_uvTangentSigns.data(),m_numTris *3 *sizeof(m_uvTangentSigns[0]));
+	mesh["vertexNormals"](m_vertexNormals);
+	mesh["uvs"](m_uvs);
+	mesh["uvTangents"](m_uvTangents);
+	mesh["uvTangentSigns"](m_uvTangentSigns);
 
 	if(umath::is_flag_set(flags,SerializationFlags::UseAlphas))
 	{
 		m_alphas = std::vector<float>{};
-		m_alphas->resize(m_numVerts);
-		dsIn->Read(m_alphas->data(),m_numVerts *sizeof((*m_alphas)[0]));
+		mesh["alphas"](*m_alphas);
 	}
 
-	auto numMeshShaders = dsIn->Read<size_t>();
-	m_subMeshShaders.resize(numMeshShaders);
-	for(auto i=decltype(m_subMeshShaders.size()){0u};i<m_subMeshShaders.size();++i)
+	std::vector<uint32_t> subMeshShaders;
+	mesh["subMeshShaders"](subMeshShaders);
+	auto n = subMeshShaders.size();
+	m_subMeshShaders.resize(n);
+	for(auto i=decltype(subMeshShaders.size()){0u};i<subMeshShaders.size();++i)
 	{
-		auto shaderIdx = dsIn->Read<uint32_t>();
+		auto shaderIdx = subMeshShaders[i];
 		auto shader = fGetShader(shaderIdx);
 		assert(shader);
 		m_subMeshShaders.at(i) = shader;
 	}
 
-	auto numLightmapUvs = dsIn->Read<size_t>();
-	m_lightmapUvs.resize(numLightmapUvs);
-	dsIn->Read(m_lightmapUvs.data(),m_lightmapUvs.size() *sizeof(m_lightmapUvs.front()));
+	mesh["lightmapUvs"](m_lightmapUvs);
 }
 
 template<typename T>

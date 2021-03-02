@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #include "util_raytracing/shader.hpp"
@@ -14,35 +14,36 @@
 #include <render/nodes.h>
 #include <render/colorspace.h>
 #include <sharedutils/util_pragma.hpp>
+#include <udm.hpp>
 #undef __UTIL_STRING_H__
 #include <sharedutils/util_string.h>
 
 //////////////////////
 
-void unirender::NodeDescLink::Serialize(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const
+void unirender::NodeDescLink::Serialize(udm::LinkedPropertyWrapper &prop,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const
 {
-	fromSocket.Serialize(dsOut,nodeIndexTable);
-	toSocket.Serialize(dsOut,nodeIndexTable);
+	fromSocket.Serialize(prop,nodeIndexTable);
+	toSocket.Serialize(prop,nodeIndexTable);
 }
-void unirender::NodeDescLink::Deserialize(GroupNodeDesc &groupNode,DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable)
+void unirender::NodeDescLink::Deserialize(GroupNodeDesc &groupNode,udm::LinkedPropertyWrapper &prop,const std::vector<const NodeDesc*> &nodeIndexTable)
 {
-	fromSocket.Deserialize(groupNode,dsIn,nodeIndexTable);
-	toSocket.Deserialize(groupNode,dsIn,nodeIndexTable);
+	fromSocket.Deserialize(groupNode,prop,nodeIndexTable);
+	toSocket.Deserialize(groupNode,prop,nodeIndexTable);
 }
 
 //////////////////////
 
-unirender::NodeSocketDesc unirender::NodeSocketDesc::Deserialize(DataStream &dsIn)
+unirender::NodeSocketDesc unirender::NodeSocketDesc::Deserialize(udm::LinkedPropertyWrapper &prop)
 {
 	NodeSocketDesc desc {};
-	desc.io = dsIn->Read<decltype(desc.io)>();
-	desc.dataValue = DataValue::Deserialize(dsIn);
+	prop["io"] = desc.io;
+	desc.dataValue = DataValue::Deserialize(prop);
 	return desc;
 }
-void unirender::NodeSocketDesc::Serialize(DataStream &dsOut) const
+void unirender::NodeSocketDesc::Serialize(udm::LinkedPropertyWrapper &prop) const
 {
-	dsOut->Write(io);
-	dataValue.Serialize(dsOut);
+	prop["io"](io);
+	dataValue.Serialize(prop);
 }
 
 //////////////////////
@@ -192,31 +193,29 @@ std::optional<unirender::Socket> unirender::NodeDesc::FindProperty(const std::st
 	auto *desc = FindPropertyDesc(name);
 	return desc ? Socket{*this,name,false} : std::optional<unirender::Socket>{};
 }
-void unirender::NodeDesc::SerializeNodes(DataStream &dsOut) const
+void unirender::NodeDesc::SerializeNodes(udm::LinkedPropertyWrapper &prop) const
 {
-	dsOut->WriteString(m_typeName);
-	dsOut->WriteString(m_name);
-	auto fWriteProperties = [&dsOut](const std::unordered_map<std::string,NodeSocketDesc> &props) {
-		dsOut->Write<uint32_t>(props.size());
+	prop["typeName"] = m_typeName;
+	prop["name"] = m_name;
+	auto fWriteProperties = [&prop](const std::unordered_map<std::string,NodeSocketDesc> &props,udm::LinkedPropertyWrapper prop) {
 		for(auto &pair : props)
 		{
-			dsOut->WriteString(pair.first);
+			auto child = prop[pair.first];
 			pair.second.Serialize(dsOut);
 		}
 	};
-	fWriteProperties(m_inputs);
-	fWriteProperties(m_properties);
-	fWriteProperties(m_outputs);
+	fWriteProperties(m_inputs,prop["inputs"]);
+	fWriteProperties(m_properties,prop["properties"]);
+	fWriteProperties(m_outputs,prop["outputs"]);
 
-	dsOut->Write<bool>(m_primaryOutputSocket.has_value());
 	if(m_primaryOutputSocket.has_value())
-		dsOut->WriteString(*m_primaryOutputSocket);
+		prop["primaryOutputSocket"] = *m_primaryOutputSocket;
 }
-void unirender::NodeDesc::DeserializeNodes(DataStream &dsIn)
+void unirender::NodeDesc::DeserializeNodes(udm::LinkedPropertyWrapper &prop)
 {
-	m_typeName = dsIn->ReadString();
-	m_name = dsIn->ReadString();
-	auto fReadProperties = [&dsIn](std::unordered_map<std::string,NodeSocketDesc> &props) {
+	prop["typeName"](m_typeName);
+	prop["name"](m_name);
+	auto fReadProperties = [&prop](std::unordered_map<std::string,NodeSocketDesc> &props) {
 		auto n = dsIn->Read<uint32_t>();
 		props.reserve(n);
 		for(auto i=decltype(n){0u};i<n;++i)
@@ -229,9 +228,12 @@ void unirender::NodeDesc::DeserializeNodes(DataStream &dsIn)
 	fReadProperties(m_properties);
 	fReadProperties(m_outputs);
 
-	auto hasPrimaryOutputSocket = dsIn->Read<bool>();
-	if(hasPrimaryOutputSocket)
-		m_primaryOutputSocket = dsIn->ReadString();
+	auto udmPrimaryOutputSocket = prop["primaryOutputSocket"];
+	if(udmPrimaryOutputSocket)
+	{
+		m_primaryOutputSocket = std::string{};
+		udmPrimaryOutputSocket(*m_primaryOutputSocket);
+	}
 }
 
 //////////////////////
@@ -664,7 +666,7 @@ unirender::NodeDesc &unirender::GroupNodeDesc::SeparateRGB(const Socket &rgb)
 	Link(rgb,node.GetInputSocket(nodes::separate_rgb::IN_COLOR));
 	return node;
 }
-void unirender::GroupNodeDesc::Serialize(DataStream &dsOut)
+void unirender::GroupNodeDesc::Serialize(udm::LinkedPropertyWrapper &prop)
 {
 	// Root node; Build index list
 	std::unordered_map<const NodeDesc*,uint64_t> rootNodeIndexTable;
@@ -683,7 +685,7 @@ void unirender::GroupNodeDesc::Serialize(DataStream &dsOut)
 	SerializeNodes(dsOut);
 	SerializeLinks(dsOut,rootNodeIndexTable);
 }
-void unirender::GroupNodeDesc::SerializeNodes(DataStream &dsOut) const
+void unirender::GroupNodeDesc::SerializeNodes(udm::LinkedPropertyWrapper &prop) const
 {
 	NodeDesc::SerializeNodes(dsOut);
 	dsOut->Write<uint32_t>(m_nodes.size());
@@ -693,7 +695,7 @@ void unirender::GroupNodeDesc::SerializeNodes(DataStream &dsOut) const
 		node->SerializeNodes(dsOut);
 	}
 }
-void unirender::GroupNodeDesc::SerializeLinks(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable)
+void unirender::GroupNodeDesc::SerializeLinks(udm::LinkedPropertyWrapper &prop,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable)
 {
 	auto fWriteNodeLinks = [&dsOut,&nodeIndexTable](const GroupNodeDesc &node) {
 		dsOut->Write<uint32_t>(node.m_links.size());
@@ -715,7 +717,7 @@ void unirender::GroupNodeDesc::SerializeLinks(DataStream &dsOut,const std::unord
 	};
 	fWriteLinks(*this);
 }
-void unirender::GroupNodeDesc::Deserialize(DataStream &dsIn)
+void unirender::GroupNodeDesc::Deserialize(udm::LinkedPropertyWrapper &prop)
 {
 	DeserializeNodes(dsIn);
 
@@ -736,7 +738,7 @@ void unirender::GroupNodeDesc::Deserialize(DataStream &dsIn)
 
 	DeserializeLinks(dsIn,rootNodeIndexTable);
 }
-void unirender::GroupNodeDesc::DeserializeNodes(DataStream &dsIn)
+void unirender::GroupNodeDesc::DeserializeNodes(udm::LinkedPropertyWrapper &prop)
 {
 	NodeDesc::DeserializeNodes(dsIn);
 	auto numNodes = dsIn->Read<uint32_t>();
@@ -749,7 +751,7 @@ void unirender::GroupNodeDesc::DeserializeNodes(DataStream &dsIn)
 		m_nodes.push_back(node);
 	}
 }
-void unirender::GroupNodeDesc::DeserializeLinks(DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable)
+void unirender::GroupNodeDesc::DeserializeLinks(udm::LinkedPropertyWrapper &prop,const std::vector<const NodeDesc*> &nodeIndexTable)
 {
 	auto fReadNodeLinks = [&dsIn,&nodeIndexTable](GroupNodeDesc &node) {
 		auto numLinks = dsIn->Read<uint32_t>();
@@ -879,48 +881,62 @@ std::shared_ptr<unirender::GroupNodeDesc> unirender::Shader::GetActivePassNode()
 	return nullptr;
 }
 
-void unirender::Shader::Serialize(DataStream &dsOut) const
+enum class ShaderPass : uint8_t
 {
-	std::array<std::shared_ptr<unirender::GroupNodeDesc>,4> passes = {combinedPass,albedoPass,normalPass,depthPass};
-	uint32_t flags = 0;
-	for(auto i=decltype(passes.size()){0u};i<passes.size();++i)
-	{
-		if(passes.at(i))
-			flags |= 1<<i;
-	}
+	Combined = 0,
+	Albedo,
+	Normal,
+	Depth,
+
+	Count
+};
+void unirender::Shader::Serialize(udm::LinkedPropertyWrapper &prop) const
+{
+	std::array<std::shared_ptr<unirender::GroupNodeDesc>,umath::to_integral(ShaderPass::Count)> passes = {combinedPass,albedoPass,normalPass,depthPass};
 	
-	dsOut->Write<bool>(m_hairConfig.has_value());
 	if(m_hairConfig.has_value())
 	{
 		auto &hairConfig = *m_hairConfig;
-		dsOut->Write(*m_hairConfig);
+		auto udmHair = prop["hair"];
+		udmHair["numSegments"] = hairConfig.numSegments;
+		udmHair["hairPerSquareMeter"] = hairConfig.hairPerSquareMeter;
+		udmHair["defaultThickness"] = hairConfig.defaultThickness;
+		udmHair["defaultLength"] = hairConfig.defaultLength;
+		udmHair["defaultHairStrength"] = hairConfig.defaultHairStrength;
+		udmHair["randomHairLengthFactor"] = hairConfig.randomHairLengthFactor;
 	}
 
-	dsOut->Write<uint32_t>(flags);
-	for(auto &pass : passes)
-	{
-		if(pass == nullptr)
-			continue;
-		pass->Serialize(dsOut);
-	}
-}
-void unirender::Shader::Deserialize(DataStream &dsIn,NodeManager &nodeManager)
-{
-	std::array<std::reference_wrapper<std::shared_ptr<unirender::GroupNodeDesc>>,4> passes = {combinedPass,albedoPass,normalPass,depthPass};
-
-	auto hasHairConfig = dsIn->Read<bool>();
-	if(hasHairConfig)
-		m_hairConfig = dsIn->Read<unirender::HairConfig>();
-	else
-		m_hairConfig = {};
-
-	auto flags = dsIn->Read<uint32_t>();
 	for(auto i=decltype(passes.size()){0u};i<passes.size();++i)
 	{
-		if((flags &(1<<i)) == 0)
+		auto &pass = passes[i];
+		if(pass == nullptr)
+			continue;
+		pass->Serialize(prop[magic_enum::enum_name(static_cast<ShaderPass>(i))]);
+	}
+}
+void unirender::Shader::Deserialize(udm::LinkedPropertyWrapper &prop,NodeManager &nodeManager)
+{
+	std::array<std::reference_wrapper<std::shared_ptr<unirender::GroupNodeDesc>>,umath::to_integral(ShaderPass::Count)> passes = {combinedPass,albedoPass,normalPass,depthPass};
+
+	auto udmHair = prop["hair"];
+	if(udmHair)
+	{
+		m_hairConfig = HairConfig{};
+		udmHair["numSegments"](m_hairConfig->numSegments);
+		udmHair["hairPerSquareMeter"](m_hairConfig->hairPerSquareMeter);
+		udmHair["defaultThickness"](m_hairConfig->defaultThickness);
+		udmHair["defaultLength"](m_hairConfig->defaultLength);
+		udmHair["defaultHairStrength"](m_hairConfig->defaultHairStrength);
+		udmHair["randomHairLengthFactor"](m_hairConfig->randomHairLengthFactor);
+	}
+
+	for(auto i=decltype(passes.size()){0u};i<passes.size();++i)
+	{
+		auto udmPass = prop[magic_enum::enum_name(static_cast<ShaderPass>(i))];
+		if(!udmPass)
 			continue;
 		passes.at(i).get() = GroupNodeDesc::Create(nodeManager);
-		passes.at(i).get()->Deserialize(dsIn);
+		passes.at(i).get()->Deserialize(udmPass);
 	}
 }
 unirender::Shader::Shader()

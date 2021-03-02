@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #include "util_raytracing/scene.hpp"
@@ -46,6 +46,61 @@
 #endif
 #include <util_image_buffer.hpp>
 #pragma optimize("",off)
+
+struct CyclesMesh
+{
+	// Note: These are moved 1:1 into the ccl::Mesh structure during finalization
+	std::vector<Vector3> m_verts;
+	std::vector<int> m_triangles;
+	std::vector<Vector3> m_vertexNormals;
+	std::vector<Vector2> m_uvs;
+	std::vector<Vector3> m_uvTangents;
+	std::vector<float> m_uvTangentSigns;
+	std::optional<std::vector<float>> m_alphas {};
+	std::vector<Smooth> m_smooth;
+	std::vector<int> m_shader;
+	size_t m_numNGons = 0;
+	size_t m_numSubdFaces = 0;
+
+	const std::vector<Vector3> &GetVertices() const {return m_verts;}
+	const std::vector<int> &GetTriangles() const {return m_triangles;}
+	const std::vector<Vector3> &GetVertexNormals() const {return m_vertexNormals;}
+	const std::vector<Vector2> &GetUvs() const {return m_uvs;}
+	const std::vector<Vector2> &GetLightmapUvs() const {return m_lightmapUvs;}
+	const std::vector<Vector3> &GetUvTangents() const {return m_uvTangents;}
+	const std::vector<float> &GetUvTangentSigns() const {return m_uvTangentSigns;}
+	const std::optional<std::vector<float>> &GetAlphas() const {return m_alphas;}
+	const std::vector<Smooth> &GetSmooth() const {return m_smooth;}
+	const std::vector<int> &GetShaders() const {return m_shader;}
+};
+
+void pragma::modules::cycles::Cache::AddMeshDataToMesh(unirender::Mesh &mesh,const unirender::MeshData &meshData,const std::optional<umath::ScaledTransform> &pose) const
+{
+	auto triIndexVertexOffset = mesh.GetVertexOffset();
+	auto shaderIdx = mesh.AddSubMeshShader(*meshData.shader);
+	for(auto &v : meshData.positions)
+	{
+		auto pos = v;
+		if(pose.has_value())
+			pos = *pose *pos;
+		mesh.AddVertex(pos,v.normal,v.tangent,v.uv);
+	}
+	
+	for(auto i=decltype(meshData.triangles.size()){0u};i<meshData.triangles.size();i+=3)
+		mesh.AddTriangle(triIndexVertexOffset +meshData.triangles.at(i),triIndexVertexOffset +meshData.triangles.at(i +1),triIndexVertexOffset +meshData.triangles.at(i +2),shaderIdx);
+
+	if(meshData.wrinkles.has_value())
+	{
+		for(auto wrinkle : *meshData.wrinkles)
+			mesh.AddWrinkleFactor(wrinkle);
+	}
+	if(meshData.alphas.has_value())
+	{
+		for(auto alpha : *meshData.alphas)
+			mesh.AddAlpha(alpha);
+	}
+}
+
 static std::optional<std::string> KERNEL_PATH {};
 void unirender::Scene::SetKernelPath(const std::string &kernelPath) {KERNEL_PATH = kernelPath;}
 static void init_cycles()
@@ -713,6 +768,11 @@ float unirender::cycles::Renderer::GetProgress() const
 {
 	return m_cclSession->progress.get_progress();
 }
+bool unirender::cycles::Renderer::Stop() {return false;}
+bool unirender::cycles::Renderer::Pause() {return false;}
+bool unirender::cycles::Renderer::Resume() {return false;}
+bool unirender::cycles::Renderer::Suspend() {return false;}
+bool unirender::cycles::Renderer::Export(const std::string &path) {return false;}
 void unirender::cycles::Renderer::Wait()
 {
 	if(m_cclSession)
@@ -1184,6 +1244,11 @@ void unirender::cycles::Renderer::Restart()
 
 	m_cclSession->start();
 	m_restartState = 2;
+}
+std::optional<std::string> unirender::cycles::Renderer::SaveRenderPreview(const std::string &path,std::string &outErr) const
+{
+	outErr = "Saving render preview not implemented for cycles.";
+	return {};
 }
 
 void unirender::cycles::Renderer::AddSkybox(const std::string &texture)
@@ -2034,8 +2099,9 @@ void unirender::cycles::Renderer::SetupRenderSettings(
 		displayPass = ccl::PassType::PASS_AO;
 		break;
 	case unirender::Scene::RenderMode::BakeDiffuseLighting:
-		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_DIRECT,passes,"diffuse_direct");
-		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_INDIRECT,passes,"diffuse_indirect");
+		//ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_DIRECT,passes,"diffuse_direct");
+		//ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_INDIRECT,passes,"diffuse_indirect");
+		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
 		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
 		displayPass = ccl::PassType::PASS_COMBINED; // TODO: Is this correct?
 		break;

@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #include "util_raytracing.hpp"
@@ -17,6 +17,7 @@
 #include "util_raytracing/denoise.hpp"
 #include "util_raytracing/model_cache.hpp"
 #include "util_raytracing/color_management.hpp"
+#include "util_raytracing/renderer.hpp"
 #include <render/buffers.h>
 #include <render/scene.h>
 #include <render/session.h>
@@ -44,11 +45,14 @@
 #include <sharedutils/util_file.h>
 #include <sharedutils/util.h>
 #include <sharedutils/util_path.hpp>
+#include <sharedutils/magic_enum.hpp>
 #include <util_image.hpp>
 #include <util_image_buffer.hpp>
 #include <util_texture_info.hpp>
 #include <util_ocio.hpp>
 #include <random>
+#include <sstream>
+#include <udm.hpp>
 
 #ifdef ENABLE_CYCLES_LOGGING
 #pragma comment(lib,"shlwapi.lib")
@@ -62,36 +66,151 @@
 #include <sharedutils/util_string.h>
 
 #pragma optimize("",off)
-void unirender::Scene::CreateInfo::Serialize(DataStream &ds) const
+void unirender::Scene::CreateInfo::Serialize(udm::LinkedPropertyWrapper &prop) const
 {
-	ds->WriteString(renderer);
-	ds->Write(reinterpret_cast<const uint8_t*>(this),offsetof(CreateInfo,colorTransform));
-	ds->Write<bool>(colorTransform.has_value());
+	prop["renderer"] = renderer;
+	if(samples.has_value())
+		prop["samples"] = *samples;
+	prop["hdrOutput"] = hdrOutput;
+	prop["denoiseMode"] = denoiseMode;
+	prop["progressive"] = progressive;
+	prop["progressiveRefine"] = progressiveRefine;
+	prop["deviceType"] = deviceType;
+	prop["exposure"] = exposure;
 	if(colorTransform.has_value())
 	{
-		ds->WriteString(colorTransform->config);
-		ds->Write<bool>(colorTransform->lookName.has_value());
-		if(colorTransform->lookName.has_value())
-			ds->WriteString(*colorTransform->lookName);
+		prop["colorTransform.config"] = colorTransform->config;
+		prop["colorTransform.lookName"] = colorTransform->lookName;
 	}
 }
-void unirender::Scene::CreateInfo::Deserialize(DataStream &ds,uint32_t version)
+void unirender::Scene::CreateInfo::Deserialize(udm::LinkedPropertyWrapper &prop)
 {
-	if(version >= 6u)
-		renderer = ds->ReadString();
-	ds->Read(this,offsetof(CreateInfo,colorTransform));
-	auto hasColorTransform = ds->Read<bool>();
-	if(hasColorTransform == false)
-		return;
-	colorTransform = ColorTransformInfo{};
-	colorTransform->config = ds->ReadString();
-	auto hasLookName = ds->Read<bool>();
-	if(hasLookName == false)
-		return;
-	colorTransform->lookName = ds->ReadString();
+	prop["renderer"](renderer);
+	auto udmSamples = prop["samples"];
+	if(udmSamples)
+	{
+		samples = uint32_t{0};
+		udmSamples(*samples);
+	}
+	prop["hdrOutput"](hdrOutput);
+	prop["denoiseMode"](denoiseMode);
+	prop["progressive"](progressive);
+	prop["progressiveRefine"](progressiveRefine);
+	prop["deviceType"](deviceType);
+	prop["exposure"](exposure);
+	auto udmColorTransform = prop["colorTransform"];
+	if(udmColorTransform)
+	{
+		colorTransform = ColorTransformInfo{};
+		prop["colorTransform.config"](colorTransform->config);
+		prop["colorTransform.lookName"](colorTransform->lookName);
+	}
 }
 
 ///////////////////
+
+void unirender::Scene::PrintLogInfo()
+{
+	auto &logHandler = unirender::get_log_handler();
+	if(logHandler == nullptr)
+		return;
+	std::stringstream ss;
+
+	auto &sceneInfo = GetSceneInfo();
+	ss<<"Scene Info\n";
+	ss<<"Sky: "<<sceneInfo.sky<<"\n";
+	ss<<"Sky angles: "<<sceneInfo.skyAngles<<"\n";
+	ss<<"Sky strength: "<<sceneInfo.skyStrength<<"\n";
+	ss<<"Transparent sky: "<<sceneInfo.transparentSky<<"\n";
+	ss<<"Emission strength: "<<sceneInfo.emissionStrength<<"\n";
+	ss<<"Light intensity factor: "<<sceneInfo.lightIntensityFactor<<"\n";
+	ss<<"Motion blur strength: "<<sceneInfo.motionBlurStrength<<"\n";
+	ss<<"Max transparency bounces: "<<sceneInfo.maxTransparencyBounces<<"\n";
+	ss<<"Max bounces: "<<sceneInfo.maxBounces<<"\n";
+	ss<<"Max diffuse bounces: "<<sceneInfo.maxDiffuseBounces<<"\n";
+	ss<<"Max glossy bounces: "<<sceneInfo.maxGlossyBounces<<"\n";
+	ss<<"Max transmission bounces: "<<sceneInfo.maxTransmissionBounces<<"\n";
+	ss<<"Exposure: "<<sceneInfo.exposure<<"\n";
+	logHandler(ss.str());
+
+	ss = {};
+	auto &createInfo = GetCreateInfo();
+	ss<<"Create Info\n";
+	ss<<"Renderer: "<<createInfo.renderer<<"\n";
+	ss<<"Samples: ";
+	if(createInfo.samples.has_value())
+		ss<<*createInfo.samples;
+	else
+		ss<<"-";
+	ss<<"\n";
+	ss<<"HDR output: "<<createInfo.hdrOutput<<"\n";
+	ss<<"Denoise mode: "<<magic_enum::enum_name(createInfo.denoiseMode)<<"\n";
+	ss<<"Progressive: "<<createInfo.progressive<<"\n";
+	ss<<"Progressive refine: "<<createInfo.progressiveRefine<<"\n";
+	ss<<"Device type: "<<magic_enum::enum_name(createInfo.deviceType)<<"\n";
+	ss<<"Exposure: "<<createInfo.exposure<<"\n";
+	ss<<"Color transform: ";
+	if(createInfo.colorTransform.has_value())
+	{
+		ss<<createInfo.colorTransform->config;
+		if(createInfo.colorTransform->lookName.has_value())
+			ss<<"; Look: "<<*createInfo.colorTransform->lookName;
+	}
+	else
+		ss<<"-";
+	ss<<"\n";
+	ss<<"Render mode: "<<magic_enum::enum_name(m_renderMode)<<"\n";
+	logHandler(ss.str());
+
+	ss = {};
+	auto &cam = GetCamera();
+	uint32_t w,h;
+	cam.GetResolution(w,h);
+	ss<<"Camera:\n";
+	ss<<"Name: "<<cam.GetName()<<"\n";
+	ss<<"Resolution: "<<w<<"x"<<h<<"\n";
+	ss<<"FarZ: "<<cam.GetFarZ()<<"\n";
+	ss<<"NearZ: "<<cam.GetNearZ()<<"\n";
+	ss<<"Fov: "<<cam.GetFov()<<"\n";
+	ss<<"Type: "<<magic_enum::enum_name(cam.GetType())<<"\n";
+	ss<<"Panorama Type: "<<magic_enum::enum_name(cam.GetPanoramaType())<<"\n";
+	ss<<"Depth of field enabled: "<<cam.IsDofEnabled()<<"\n";
+	ss<<"Focal distance: "<<cam.GetFocalDistance()<<"\n";
+	ss<<"Aperture size: "<<cam.GetApertureSize()<<"\n";
+	ss<<"Bokeh ratio: "<<cam.GetApertureRatio()<<"\n";
+	ss<<"Blae count: "<<cam.GetBladeCount()<<"\n";
+	ss<<"Blades rotation: "<<cam.GetBladesRotation()<<"\n";
+	ss<<"Stereoscopic: "<<cam.IsStereoscopic()<<"\n";
+	ss<<"Interocular distance: "<<cam.GetInterocularDistance()<<"\n";
+	ss<<"Aspect ratio: "<<cam.GetAspectRatio()<<"\n";
+	ss<<"Longitude: "<<cam.GetLongitudeMin()<<","<<cam.GetLongitudeMax()<<"\n";
+	ss<<"Latitude: "<<cam.GetLatitudeMin()<<","<<cam.GetLatitudeMax()<<"\n";
+	logHandler(ss.str());
+
+	ss = {};
+	ss<<"Lights:\n";
+	auto first = true;
+	for(auto &l : GetLights())
+	{
+		if(first)
+			first = false;
+		else
+			ss<<"\n";
+		ss<<"Name: "<<l->GetName()<<"\n";
+		ss<<"Type: "<<magic_enum::enum_name(l->GetType())<<"\n";
+		ss<<"Outer cone angle: "<<l->GetOuterConeAngle()<<"\n";
+		ss<<"Inner cone angle: "<<l->GetInnerConeAngle()<<"\n";
+		ss<<"Color: "<<l->GetColor()<<"\n";
+		ss<<"Intensity: "<<l->GetIntensity()<<"\n";
+		ss<<"Size: "<<l->GetSize()<<"\n";
+		ss<<"U Axis: "<<l->GetAxisU()<<"\n";
+		ss<<"V Axis: "<<l->GetAxisV()<<"\n";
+		ss<<"U Size: "<<l->GetSizeU()<<"\n";
+		ss<<"V Size: "<<l->GetSizeV()<<"\n";
+		ss<<"Round: "<<l->IsRound()<<"\n";
+	}
+	logHandler(ss.str());
+}
 
 bool unirender::Scene::IsRenderSceneMode(RenderMode renderMode)
 {
@@ -357,25 +476,45 @@ static bool g_verbose = false;
 void unirender::Scene::SetVerbose(bool verbose) {g_verbose = verbose;}
 bool unirender::Scene::IsVerbose() {return g_verbose;}
 
-static constexpr std::array<char,3> SERIALIZATION_HEADER = {'R','T','D'};
-static constexpr std::array<char,4> MODEL_CACHE_HEADER = {'R','T','M','C'};
-void unirender::Scene::Save(DataStream &dsOut,const std::string &rootDir,const SerializationData &serializationData) const
+static const char *SERIALIZATION_IDENTIFIER = "PRTD";
+static constexpr uint32_t PRTD_VERSION = 1;
+static const char *MODEL_CACHE_HEADER = "PRTMC";
+void unirender::Scene::Save(udm::AssetData &outData,std::string &outErr,const std::string &rootDir,const SerializationData &serializationData) const
 {
 	auto modelCachePath = rootDir +"cache/";
 	FileManager::CreateSystemDirectory(modelCachePath.c_str());
 
-	dsOut->SetOffset(0);
-	dsOut->Write(reinterpret_cast<const uint8_t*>(SERIALIZATION_HEADER.data()),SERIALIZATION_HEADER.size() *sizeof(SERIALIZATION_HEADER.front()));
-	dsOut->Write(SERIALIZATION_VERSION);
-	m_createInfo.Serialize(dsOut);
-	dsOut->Write(m_renderMode);
-	dsOut->WriteString(serializationData.outputFileName);
+	outData.SetAssetType(SERIALIZATION_IDENTIFIER);
+	outData.SetAssetVersion(PRTD_VERSION);
+	auto udm = *outData;
+	udm["renderMode"] = m_renderMode;
+	m_createInfo.Serialize(udm["createInfo"]);
+	udm["outputFileName"] = serializationData.outputFileName;
 
 	auto absSky = GetAbsSkyPath(m_sceneInfo.sky);
-	dsOut->WriteString(absSky.has_value() ? ToRelativePath(*absSky) : "");
-	dsOut->Write(reinterpret_cast<const uint8_t*>(&m_sceneInfo.transparentSky),sizeof(SceneInfo) -offsetof(SceneInfo,transparentSky));
+	if(absSky.has_value())
+		udm["sky.texture"] = ToRelativePath(*absSky);
+	udm["sky.angles"] = m_sceneInfo.skyAngles;
+	udm["sky.strength"] = m_sceneInfo.skyStrength;
+	udm["sky.transparent"] = m_sceneInfo.transparentSky;
+	udm["emissionStrength"] = m_sceneInfo.emissionStrength;
+	udm["lightIntensityFactor"] = m_sceneInfo.lightIntensityFactor;
+	udm["motionBlurStrength"] = m_sceneInfo.motionBlurStrength;
+	udm["maxTransparencyBounces"] = m_sceneInfo.maxTransparencyBounces;
+	udm["maxBounces"] = m_sceneInfo.maxBounces;
+	udm["maxDiffuseBounces"] = m_sceneInfo.maxDiffuseBounces;
+	udm["maxGlossyBounces"] = m_sceneInfo.maxGlossyBounces;
+	udm["maxTransmissionBounces"] = m_sceneInfo.maxTransmissionBounces;
+	udm["exposure"] = m_sceneInfo.exposure;
 
-	dsOut->Write(m_stateFlags);
+	//dsOut->Write(m_stateFlags);
+#if 0
+		enum class StateFlags : uint16_t
+		{
+			None = 0u,
+			OutputResultWithHDRColors = 1u
+		};
+#endif
 	
 	dsOut->Write<uint32_t>(m_mdlCaches.size());
 	for(auto &mdlCache : m_mdlCaches)
@@ -428,9 +567,10 @@ void unirender::Scene::Save(DataStream &dsOut,const std::string &rootDir,const S
 	//	m_renderData.modelCache->Merge(*mdlCache);
 	//m_renderData.modelCache->Bake();
 
-	dsOut->Write<uint32_t>(m_lights.size());
+	auto udmLights = udm.AddArray("lights",m_lights.size());
+	uint32_t lightIdx=0;
 	for(auto &light : m_lights)
-		light->Serialize(dsOut);
+		light->Serialize(udmLights[lightIdx++]);
 
 	m_camera->Serialize(dsOut);
 }

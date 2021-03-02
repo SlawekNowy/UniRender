@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #ifndef __PR_CYCLES_OBJECT_HPP__
@@ -15,6 +15,7 @@
 #include <optional>
 #include <functional>
 
+namespace udm {struct LinkedPropertyWrapper;};
 class DataStream;
 namespace unirender
 {
@@ -34,16 +35,16 @@ namespace unirender
 			None = 0u
 		};
 		static PObject Create(Mesh &mesh);
-		static PObject Create(uint32_t version,DataStream &dsIn,const std::function<PMesh(uint32_t)> &fGetMesh);
+		static PObject Create(udm::LinkedPropertyWrapper &prop,const std::function<PMesh(uint32_t)> &fGetMesh);
 		util::WeakHandle<Object> GetHandle();
 		virtual void DoFinalize(Scene &scene) override;
 
 		const Mesh &GetMesh() const;
 		Mesh &GetMesh();
 
-		void Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Mesh&)> &fGetMeshIndex) const;
-		void Serialize(DataStream &dsOut,const std::unordered_map<const Mesh*,size_t> &meshToIndexTable) const;
-		void Deserialize(uint32_t version,DataStream &dsIn,const std::function<PMesh(uint32_t)> &fGetMesh);
+		void Serialize(udm::LinkedPropertyWrapper &prop,const std::function<std::optional<uint32_t>(const Mesh&)> &fGetMeshIndex) const;
+		void Serialize(udm::LinkedPropertyWrapper &prop,const std::unordered_map<const Mesh*,size_t> &meshToIndexTable) const;
+		void Deserialize(udm::LinkedPropertyWrapper &prop,const std::function<PMesh(uint32_t)> &fGetMesh);
 
 		const umath::Transform &GetMotionPose() const;
 		void SetMotionPose(const umath::Transform &pose);

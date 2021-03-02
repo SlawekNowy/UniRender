@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #include "util_raytracing/renderer.hpp"
@@ -40,12 +40,17 @@ std::shared_ptr<uimg::ImageBuffer> unirender::RenderWorker::GetResult() {return 
 
 static std::string g_moduleLookupLocation {};
 void unirender::set_module_lookup_location(const std::string &location) {g_moduleLookupLocation = location;}
+static std::unordered_map<std::string,std::shared_ptr<util::Library>> g_rendererLibs {};
+void unirender::Renderer::Close()
+{
+	g_rendererLibs.clear();
+	unirender::set_log_handler();
+}
 std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(const unirender::Scene &scene,const std::string &rendererIdentifier)
 {
 	unirender::PRenderer renderer = nullptr;
 	if(rendererIdentifier == "cycles")
 		return unirender::cycles::Renderer::Create(scene);
-	static std::unordered_map<std::string,std::shared_ptr<util::Library>> g_rendererLibs {};
 	auto it = g_rendererLibs.find(rendererIdentifier);
 	if(it == g_rendererLibs.end())
 	{
@@ -110,6 +115,7 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 		denoiseInfo.hdr = true;
 		denoiseInfo.width = resultImageBuffer->GetWidth();
 		denoiseInfo.height = resultImageBuffer->GetHeight();
+		denoiseInfo.lightmap = (m_scene->GetRenderMode() == unirender::Scene::RenderMode::BakeDiffuseLighting);
 
 		static auto dbgAlbedo = false;
 		static auto dbgNormals = false;
@@ -212,6 +218,8 @@ void unirender::Renderer::PrepareCyclesSceneForRendering()
 	for(auto &mdlCache : m_scene->GetModelCaches())
 		m_renderData.modelCache->Merge(*mdlCache);
 	m_renderData.modelCache->Bake();
+
+	m_scene->PrintLogInfo();
 }
 bool unirender::Renderer::ShouldUseTransparentSky() const {return m_scene->GetSceneInfo().transparentSky;}
 unirender::PMesh unirender::Renderer::FindRenderMeshByHash(const util::MurmurHash3 &hash) const

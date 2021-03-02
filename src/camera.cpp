@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #include "util_raytracing/camera.hpp"
@@ -11,6 +11,8 @@
 #include <sharedutils/datastream.h>
 #include <render/camera.h>
 #include <render/scene.h>
+#include <sharedutils/magic_enum.hpp>
+#include <udm.hpp>
 
 using namespace unirender;
 
@@ -29,15 +31,52 @@ util::WeakHandle<Camera> Camera::GetHandle()
 	return util::WeakHandle<Camera>{shared_from_this()};
 }
 
-void Camera::Serialize(DataStream &dsOut) const
+void Camera::Serialize(udm::LinkedPropertyWrapper &prop) const
 {
-	WorldObject::Serialize(dsOut);
-	Scene::SerializeDataBlock(*this,dsOut,offsetof(Camera,m_type));
+	WorldObject::Serialize(prop);
+	prop["type"] = m_type;
+	prop["width"] = m_width;
+	prop["height"] = m_height;
+	prop["nearZ"] = m_nearZ;
+	prop["farZ"] = m_farZ;
+	prop["fov"] = m_fov;
+	prop["focalDistance"] = m_focalDistance;
+	prop["apertureSize"] = m_apertureSize;
+	prop["apertureRatio"] = m_apertureRatio;
+	prop["numBlades"] = m_numBlades;
+	prop["bladesRotation"] = m_bladesRotation;
+	prop["panoramaType"] = m_panoramaType;
+	prop["interocularDistance"] = m_interocularDistance;
+	prop["longitudeMin"] = m_longitudeMin;
+	prop["longitudeMax"] = m_longitudeMax;
+	prop["latitudeMin"] = m_latitudeMin;
+	prop["latitudeMax"] = m_latitudeMax;
+	prop["flags.dofEnabled"] = m_dofEnabled;
+	prop["flags.stereoscopic"] = m_stereoscopic;
 }
-void Camera::Deserialize(uint32_t version,DataStream &dsIn)
+void Camera::Deserialize(udm::LinkedPropertyWrapper &prop)
 {
-	WorldObject::Deserialize(version,dsIn);
-	Scene::DeserializeDataBlock(*this,dsIn,offsetof(Camera,m_type));
+	WorldObject::Deserialize(prop);
+	auto cam = prop["camera"];
+	cam["type"](m_type);
+	cam["width"](m_width);
+	cam["height"](m_height);
+	cam["nearZ"](m_nearZ);
+	cam["farZ"](m_farZ);
+	cam["fov"](m_fov);
+	cam["focalDistance"](m_focalDistance);
+	cam["apertureSize"](m_apertureSize);
+	cam["apertureRatio"](m_apertureRatio);
+	cam["numBlades"](m_numBlades);
+	cam["bladesRotation"](m_bladesRotation);
+	cam["panoramaType"](m_panoramaType);
+	cam["interocularDistance"](m_interocularDistance);
+	cam["longitudeMin"](m_longitudeMin);
+	cam["longitudeMax"](m_longitudeMax);
+	cam["latitudeMin"](m_latitudeMin);
+	cam["latitudeMax"](m_latitudeMax);
+	cam["flags.dofEnabled"](m_dofEnabled);
+	cam["flags.stereoscopic"](m_stereoscopic);
 }
 
 void Camera::SetInterocularDistance(umath::Millimeter dist) {m_interocularDistance = dist;}

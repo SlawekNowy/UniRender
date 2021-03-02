@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #ifndef __PR_CYCLES_LIGHT_HPP__
@@ -40,7 +40,7 @@ namespace unirender
 			Triangle
 		};
 		static PLight Create();
-		static PLight Create(uint32_t version,DataStream &dsIn);
+		static PLight Create(udm::LinkedPropertyWrapper &prop);
 		util::WeakHandle<Light> GetHandle();
 
 		void SetType(Type type);
@@ -55,8 +55,8 @@ namespace unirender
 		void SetSizeU(float sizeU);
 		void SetSizeV(float sizeV);
 
-		void Serialize(DataStream &dsOut) const;
-		void Deserialize(uint32_t version,DataStream &dsIn);
+		void Serialize(udm::LinkedPropertyWrapper &prop) const;
+		void Deserialize(udm::LinkedPropertyWrapper &prop);
 
 		Type GetType() const {return m_type;}
 		float GetSize() const {return m_size;}

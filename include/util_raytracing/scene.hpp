@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #ifndef __UTIL_RAYTRACING_SCENE_HPP__
@@ -44,6 +44,7 @@ namespace OpenImageIO_v2_1
 namespace umath {class Transform; class ScaledTransform;};
 namespace uimg {class ImageBuffer;};
 namespace util::ocio {class ColorProcessor;};
+namespace udm {struct AssetData; struct LinkedPropertyWrapper;};
 class DataStream;
 namespace unirender
 {
@@ -167,8 +168,8 @@ namespace unirender
 
 		struct CreateInfo
 		{
-			void Serialize(DataStream &ds) const;
-			void Deserialize(DataStream &ds,uint32_t version);
+			void Serialize(udm::LinkedPropertyWrapper &prop) const;
+			void Deserialize(udm::LinkedPropertyWrapper &prop);
 
 			std::string renderer = "cycles";
 			std::optional<uint32_t> samples = {};
@@ -227,7 +228,7 @@ namespace unirender
 		static bool IsVerbose();
 
 		static bool ReadSerializationHeader(DataStream &dsIn,RenderMode &outRenderMode,CreateInfo &outCreateInfo,SerializationData &outSerializationData,uint32_t &outVersion,SceneInfo *optOutSceneInfo=nullptr);
-		void Save(DataStream &dsOut,const std::string &rootDir,const SerializationData &serializationData) const;
+		void Save(udm::AssetData &outData,std::string &outErr,const std::string &rootDir,const SerializationData &serializationData) const;
 		bool Load(DataStream &dsIn,const std::string &rootDir);
 
 		void HandleError(const std::string &errMsg) const;
@@ -258,6 +259,8 @@ namespace unirender
 		DenoiseMode GetDenoiseMode() const {return m_createInfo.denoiseMode;}
 		bool ShouldDenoise() const {return GetDenoiseMode() != DenoiseMode::None;}
 		float GetGamma() const;
+
+		void PrintLogInfo();
 	private:
 		friend Shader;
 		friend Object;
