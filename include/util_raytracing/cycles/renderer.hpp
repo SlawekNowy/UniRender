@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #ifndef __UNIRENDER_CYCLES_SCENE_HPP__
@@ -38,8 +38,14 @@ namespace unirender::cycles
 		virtual void Wait() override;
 		virtual void Start() override {} // TODO: Remove
 		virtual float GetProgress() const override;
+		virtual bool Stop() override;
+		virtual bool Pause() override;
+		virtual bool Resume() override;
+		virtual bool Suspend() override;
+		virtual bool Export(const std::string &path) override;
 		virtual void Reset() override;
 		virtual void Restart() override;
+		virtual std::optional<std::string> SaveRenderPreview(const std::string &path,std::string &outErr) const override;
 		virtual util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> StartRender() override;
 
 		ccl::Object *FindCclObject(const Object &obj);

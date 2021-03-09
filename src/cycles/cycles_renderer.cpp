@@ -2,7 +2,7 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 *
-* Copyright (c) 2020 Florian Weischer
+* Copyright (c) 2021 Silverlan
 */
 
 #include "util_raytracing/scene.hpp"
@@ -46,6 +46,7 @@
 #endif
 #include <util_image_buffer.hpp>
 #pragma optimize("",off)
+
 static std::optional<std::string> KERNEL_PATH {};
 void unirender::Scene::SetKernelPath(const std::string &kernelPath) {KERNEL_PATH = kernelPath;}
 static void init_cycles()
@@ -713,6 +714,11 @@ float unirender::cycles::Renderer::GetProgress() const
 {
 	return m_cclSession->progress.get_progress();
 }
+bool unirender::cycles::Renderer::Stop() {return false;}
+bool unirender::cycles::Renderer::Pause() {return false;}
+bool unirender::cycles::Renderer::Resume() {return false;}
+bool unirender::cycles::Renderer::Suspend() {return false;}
+bool unirender::cycles::Renderer::Export(const std::string &path) {return false;}
 void unirender::cycles::Renderer::Wait()
 {
 	if(m_cclSession)
@@ -1184,6 +1190,11 @@ void unirender::cycles::Renderer::Restart()
 
 	m_cclSession->start();
 	m_restartState = 2;
+}
+std::optional<std::string> unirender::cycles::Renderer::SaveRenderPreview(const std::string &path,std::string &outErr) const
+{
+	outErr = "Saving render preview not implemented for cycles.";
+	return {};
 }
 
 void unirender::cycles::Renderer::AddSkybox(const std::string &texture)
@@ -2034,8 +2045,9 @@ void unirender::cycles::Renderer::SetupRenderSettings(
 		displayPass = ccl::PassType::PASS_AO;
 		break;
 	case unirender::Scene::RenderMode::BakeDiffuseLighting:
-		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_DIRECT,passes,"diffuse_direct");
-		ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_INDIRECT,passes,"diffuse_indirect");
+		//ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_DIRECT,passes,"diffuse_direct");
+		//ccl::Pass::add(ccl::PassType::PASS_DIFFUSE_INDIRECT,passes,"diffuse_indirect");
+		ccl::Pass::add(ccl::PassType::PASS_COMBINED,passes,"combined");
 		ccl::Pass::add(ccl::PassType::PASS_DEPTH,passes,"depth");
 		displayPass = ccl::PassType::PASS_COMBINED; // TODO: Is this correct?
 		break;

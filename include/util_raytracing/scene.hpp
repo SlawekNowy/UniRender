@@ -258,6 +258,8 @@ namespace unirender
 		DenoiseMode GetDenoiseMode() const {return m_createInfo.denoiseMode;}
 		bool ShouldDenoise() const {return GetDenoiseMode() != DenoiseMode::None;}
 		float GetGamma() const;
+
+		void PrintLogInfo();
 	private:
 		friend Shader;
 		friend Object;

@@ -370,7 +370,7 @@ void unirender::baking::prepare_bake_data(const cycles::Renderer &renderer,unire
 		auto *tri = &cclMesh->triangles[i *3];
 		for(uint8_t j=0;j<3;++j)
 		{
-			const float *uv = reinterpret_cast<const float*>(&uvs[i *3 +j]);
+			const float *uv = reinterpret_cast<const float*>(&uvs[tri[j]]);
 
 			/* Note, workaround for pixel aligned UVs which are common and can screw up our
 			* intersection tests where a pixel gets in between 2 faces or the middle of a quad,
