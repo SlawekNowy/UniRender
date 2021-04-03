@@ -910,7 +910,7 @@ void unirender::Shader::Deserialize(DataStream &dsIn,NodeManager &nodeManager)
 
 	auto hasHairConfig = dsIn->Read<bool>();
 	if(hasHairConfig)
-		m_hairConfig = dsIn->Read<unirender::HairConfig>();
+		m_hairConfig = dsIn->Read<util::HairConfig>();
 	else
 		m_hairConfig = {};
 

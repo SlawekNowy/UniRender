@@ -12,11 +12,11 @@
 #include "data_value.hpp"
 #include "exception.hpp"
 #include "scene_object.hpp"
-#include "util_raytracing/hair.hpp"
 #include <memory>
 #include <functional>
 #include "shader_nodes.hpp"
 #include <sharedutils/datastream.h>
+#include <sharedutils/util_hair.hpp>
 #include <sharedutils/util_virtual_shared_from_this.hpp>
 
 namespace unirender
@@ -356,8 +356,8 @@ namespace unirender
 		void Serialize(DataStream &dsOut) const;
 		void Deserialize(DataStream &dsIn,NodeManager &nodeManager);
 
-		const std::optional<HairConfig> &GetHairConfig() const {return m_hairConfig;}
-		void SetHairConfig(const HairConfig &hairConfig) {m_hairConfig = hairConfig;}
+		const std::optional<util::HairConfig> &GetHairConfig() const {return m_hairConfig;}
+		void SetHairConfig(const util::HairConfig &hairConfig) {m_hairConfig = hairConfig;}
 		void ClearHairConfig() {m_hairConfig = {};}
 
 		std::shared_ptr<unirender::GroupNodeDesc> combinedPass = nullptr;
@@ -371,7 +371,7 @@ namespace unirender
 	private:
 		Shader();
 		Pass m_activePass = Pass::Combined;
-		std::optional<HairConfig> m_hairConfig {};
+		std::optional<util::HairConfig> m_hairConfig {};
 	};
 
 	using GenericShader = Shader;
