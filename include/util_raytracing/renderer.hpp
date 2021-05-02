@@ -54,6 +54,11 @@ namespace unirender
 		: public std::enable_shared_from_this<Renderer>
 	{
 	public:
+		enum class Flags : uint32_t
+		{
+			None = 0u,
+			EnableLiveEditing = 1u
+		};
 		enum class StereoEye : uint8_t
 		{
 			Left = 0,
@@ -62,7 +67,7 @@ namespace unirender
 
 			None = std::numeric_limits<uint8_t>::max()
 		};
-		static std::shared_ptr<Renderer> Create(const unirender::Scene &scene,const std::string &rendererIdentifier);
+		static std::shared_ptr<Renderer> Create(const unirender::Scene &scene,const std::string &rendererIdentifier,Flags flags=Flags::None);
 		static void Close();
 		static constexpr const char *OUTPUT_COLOR = "COLOR";
 		static constexpr const char *OUTPUT_ALBEDO = "ALBEDO";
@@ -79,6 +84,8 @@ namespace unirender
 		virtual bool Pause()=0;
 		virtual bool Resume()=0;
 		virtual bool Suspend()=0;
+		virtual bool BeginSceneEdit() const {return false;}
+		virtual bool EndSceneEdit() const {return false;}
 		virtual bool Export(const std::string &path)=0;
 		virtual std::optional<std::string> SaveRenderPreview(const std::string &path,std::string &outErr) const=0;
 		virtual util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> StartRender()=0;
@@ -86,6 +93,7 @@ namespace unirender
 
 		std::shared_ptr<Mesh> FindRenderMeshByHash(const util::MurmurHash3 &hash) const;
 
+		bool ShouldUseProgressiveFloatFormat() const;
 		bool ShouldUseTransparentSky() const;
 		Scene &GetScene() {return *m_scene;}
 		const Scene &GetScene() const {return const_cast<Renderer*>(this)->GetScene();}
@@ -149,5 +157,6 @@ namespace unirender
 		uint32_t m_nextOutputIndex = 0;
 	};
 };
+REGISTER_BASIC_BITWISE_OPERATORS(unirender::Renderer::Flags)
 
 #endif

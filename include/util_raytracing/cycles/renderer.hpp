@@ -23,7 +23,7 @@ namespace unirender::cycles
 		: public unirender::Renderer
 	{
 	public:
-		static std::shared_ptr<Renderer> Create(const unirender::Scene &scene);
+		static std::shared_ptr<Renderer> Create(const unirender::Scene &scene,Flags flags);
 		static constexpr ccl::AttributeStandard ALPHA_ATTRIBUTE_TYPE = ccl::AttributeStandard::ATTR_STD_POINTINESS;
 
 		static Vector3 ToPragmaPosition(const ccl::float3 &pos);

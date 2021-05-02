@@ -52,6 +52,7 @@ void unirender::TileManager::Wait()
 
 void unirender::TileManager::SetExposure(float exposure) {m_exposure = exposure;}
 void unirender::TileManager::SetGamma(float gamma) {m_gamma = gamma;}
+void unirender::TileManager::SetUseFloatData(bool b) {m_useFloatData = b;}
 
 void unirender::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,float exposure,float gamma,util::ocio::ColorProcessor *optColorProcessor)
 {
@@ -246,6 +247,14 @@ std::vector<unirender::TileManager::TileData> unirender::TileManager::GetRendere
 	return tiles;
 }
 
+void unirender::TileManager::AddRenderedTile(TileData &&tile)
+{
+	m_renderedTileMutex.lock();
+		m_numTilesWithRenderedSamples = GetTileCount();; // TODO: This is wrong and will only work if tile count is 1!
+		m_renderedTiles.push_back(std::move(tile));
+	m_renderedTileMutex.unlock();
+}
+
 void unirender::TileManager::SetFlipImage(bool flipHorizontally,bool flipVertically)
 {
 	m_flipHorizontally = flipHorizontally;
@@ -288,6 +297,9 @@ void unirender::TileManager::ApplyPostProcessingForProgressiveTile(TileData &dat
 	}
 
 	if(m_state == State::Cancelled)
+		return;
+
+	if(m_useFloatData)
 		return;
 
 	std::vector<uint8_t> newData;

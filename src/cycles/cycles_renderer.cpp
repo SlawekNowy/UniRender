@@ -153,8 +153,10 @@ float unirender::cycles::Renderer::ToCyclesLength(float len)
 	return len *scale;
 }
 
-std::shared_ptr<unirender::cycles::Renderer> unirender::cycles::Renderer::Create(const unirender::Scene &scene)
+std::shared_ptr<unirender::cycles::Renderer> unirender::cycles::Renderer::Create(const unirender::Scene &scene,Flags flags)
 {
+	if(umath::is_flag_set(flags,Flags::EnableLiveEditing))
+		return nullptr; // Not supported for Cycles
 	auto renderer = std::shared_ptr<Renderer>{new Renderer{scene}};
 	renderer->m_renderMode = scene.GetRenderMode();
 

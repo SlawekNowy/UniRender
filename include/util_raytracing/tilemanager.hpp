@@ -66,6 +66,7 @@ namespace unirender
 		void StopAndWait();
 		std::shared_ptr<uimg::ImageBuffer> UpdateFinalImage();
 		std::vector<TileData> GetRenderedTileBatch();
+		void AddRenderedTile(TileData &&tile);
 		Vector2i GetTileSize() const {return m_tileSize;}
 		uint32_t GetTileCount() const {return m_numTiles;}
 		int32_t GetCurrentTileSampleCount(uint32_t tileIndex) const;
@@ -74,13 +75,14 @@ namespace unirender
 		void SetFlipImage(bool flipHorizontally,bool flipVertically);
 		void SetExposure(float exposure);
 		void SetGamma(float gamma);
-
+		void SetUseFloatData(bool b);
+		
+		void ApplyPostProcessingForProgressiveTile(TileData &data);
 		void UpdateRenderTile(const ccl::RenderTile &tile,bool param);
 		void WriteRenderTile(const ccl::RenderTile &tile);
 	private:
 		void ApplyRectData(const TileData &data);
 		void InitializeTileData(TileData &data);
-		void ApplyPostProcessingForProgressiveTile(TileData &data);
 		void SetState(State state);
 		void NotifyPendingWork();
 
@@ -94,6 +96,7 @@ namespace unirender
 
 		std::shared_ptr<util::ocio::ColorProcessor> m_colorTransformProcessor = nullptr;
 
+		bool m_useFloatData = false;
 		bool m_cpuDevice = false;
 		std::atomic<bool> m_hasPendingWork = false;
 		std::mutex m_inputTileMutex;

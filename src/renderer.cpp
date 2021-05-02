@@ -46,11 +46,11 @@ void unirender::Renderer::Close()
 	g_rendererLibs.clear();
 	unirender::set_log_handler();
 }
-std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(const unirender::Scene &scene,const std::string &rendererIdentifier)
+std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(const unirender::Scene &scene,const std::string &rendererIdentifier,Flags flags)
 {
 	unirender::PRenderer renderer = nullptr;
 	if(rendererIdentifier == "cycles")
-		return unirender::cycles::Renderer::Create(scene);
+		return unirender::cycles::Renderer::Create(scene,flags);
 	auto it = g_rendererLibs.find(rendererIdentifier);
 	if(it == g_rendererLibs.end())
 	{
@@ -69,10 +69,10 @@ std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(const unirender
 		it = g_rendererLibs.insert(std::make_pair(rendererIdentifier,lib)).first;
 	}
 	auto &lib = it->second;
-	auto *func = lib->FindSymbolAddress<std::shared_ptr<unirender::Renderer>(*)(const unirender::Scene&)>("create_renderer");
+	auto *func = lib->FindSymbolAddress<std::shared_ptr<unirender::Renderer>(*)(const unirender::Scene&,Flags)>("create_renderer");
 	if(func == nullptr)
 		return nullptr;
-	return func(scene);
+	return func(scene,flags);
 }
 
 ///////////////////
@@ -212,6 +212,7 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 }
 void unirender::Renderer::PrepareCyclesSceneForRendering()
 {
+	m_tileManager.SetUseFloatData(ShouldUseProgressiveFloatFormat());
 	m_renderData.shaderCache = ShaderCache::Create();
 	m_renderData.modelCache = ModelCache::Create();
 
@@ -221,6 +222,7 @@ void unirender::Renderer::PrepareCyclesSceneForRendering()
 
 	m_scene->PrintLogInfo();
 }
+bool unirender::Renderer::ShouldUseProgressiveFloatFormat() const {return true;}
 bool unirender::Renderer::ShouldUseTransparentSky() const {return m_scene->GetSceneInfo().transparentSky;}
 unirender::PMesh unirender::Renderer::FindRenderMeshByHash(const util::MurmurHash3 &hash) const
 {
