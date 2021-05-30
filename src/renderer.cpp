@@ -48,6 +48,9 @@ void unirender::Renderer::Close()
 }
 std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(const unirender::Scene &scene,const std::string &rendererIdentifier,Flags flags)
 {
+	auto res = scene.GetResolution();
+	if(res.x <= 0 || res.y <= 0)
+		return nullptr;
 	unirender::PRenderer renderer = nullptr;
 	if(rendererIdentifier == "cycles")
 		return unirender::cycles::Renderer::Create(scene,flags);
