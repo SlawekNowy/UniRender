@@ -9,7 +9,6 @@
 #include "util_raytracing/denoise.hpp"
 #include <util_image_buffer.hpp>
 #include <OpenImageDenoise/oidn.hpp>
-#include <util/util_half.h>
 #include <iostream>
 
 #pragma optimize("",off)

@@ -31,12 +31,16 @@ namespace unirender
 	public:
 		enum class Flags : uint8_t
 		{
-			None = 0u
+			None = 0u,
+			EnableSubdivision = 1u
 		};
 		static PObject Create(Mesh &mesh);
 		static PObject Create(uint32_t version,DataStream &dsIn,const std::function<PMesh(uint32_t)> &fGetMesh);
 		util::WeakHandle<Object> GetHandle();
 		virtual void DoFinalize(Scene &scene) override;
+
+		void SetSubdivisionEnabled(bool enabled) {umath::set_flag(m_flags,Flags::EnableSubdivision,enabled);}
+		bool IsSubdivisionEnabled() const {return umath::is_flag_set(m_flags,Flags::EnableSubdivision);}
 
 		const Mesh &GetMesh() const;
 		Mesh &GetMesh();

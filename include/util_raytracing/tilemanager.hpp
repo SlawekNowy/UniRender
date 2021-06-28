@@ -20,7 +20,6 @@
 #include "util_raytracing.hpp"
 
 namespace uimg {class ImageBuffer;};
-namespace ccl {class RenderTile;};
 namespace util::ocio {class ColorProcessor;};
 namespace unirender
 {
@@ -78,8 +77,6 @@ namespace unirender
 		void SetUseFloatData(bool b);
 		
 		void ApplyPostProcessingForProgressiveTile(TileData &data);
-		void UpdateRenderTile(const ccl::RenderTile &tile,bool param);
-		void WriteRenderTile(const ccl::RenderTile &tile);
 	private:
 		void ApplyRectData(const TileData &data);
 		void InitializeTileData(TileData &data);

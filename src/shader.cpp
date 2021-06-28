@@ -9,13 +9,10 @@
 #include "util_raytracing/scene.hpp"
 #include "util_raytracing/mesh.hpp"
 #include <sharedutils/datastream.h>
-#include <OpenImageIO/ustring.h>
-#include <render/shader.h>
-#include <render/nodes.h>
-#include <render/colorspace.h>
 #include <sharedutils/util_pragma.hpp>
 #undef __UTIL_STRING_H__
 #include <sharedutils/util_string.h>
+#include <queue>
 
 //////////////////////
 
@@ -556,21 +553,21 @@ unirender::NodeDesc &unirender::GroupNodeDesc::AddImageTextureNode(const std::op
 	case TextureType::ColorImage:
 	{
 		auto &node = AddNode(NODE_IMAGE_TEXTURE);
-		node.SetProperty(nodes::image_texture::IN_COLORSPACE,ccl::u_colorspace_srgb.c_str());
+		node.SetProperty(nodes::image_texture::IN_COLORSPACE,COLORSPACE_SRGB.c_str());
 		desc = &node;
 		break;
 	}
 	case TextureType::NonColorImage:
 	{
 		auto &node = AddNode(NODE_IMAGE_TEXTURE);
-		node.SetProperty(nodes::image_texture::IN_COLORSPACE,ccl::u_colorspace_raw.c_str());
+		node.SetProperty(nodes::image_texture::IN_COLORSPACE,COLORSPACE_RAW.c_str());
 		desc = &node;
 		break;
 	}
 	case TextureType::EquirectangularImage:
 	{
 		auto &node = AddNode(NODE_ENVIRONMENT_TEXTURE);
-		node.SetProperty(nodes::environment_texture::IN_COLORSPACE,ccl::u_colorspace_raw.c_str());
+		node.SetProperty(nodes::environment_texture::IN_COLORSPACE,COLORSPACE_RAW.c_str());
 		node.SetProperty(nodes::environment_texture::IN_PROJECTION,unirender::EnvironmentProjection::Equirectangular);
 		desc = &node;
 		break;
@@ -891,10 +888,11 @@ void unirender::Shader::Serialize(DataStream &dsOut) const
 	
 	dsOut->Write<bool>(m_hairConfig.has_value());
 	if(m_hairConfig.has_value())
-	{
-		auto &hairConfig = *m_hairConfig;
 		dsOut->Write(*m_hairConfig);
-	}
+
+	dsOut->Write<bool>(m_subdivisionSettings.has_value());
+	if(m_subdivisionSettings.has_value())
+		dsOut->Write(*m_subdivisionSettings);
 
 	dsOut->Write<uint32_t>(flags);
 	for(auto &pass : passes)
@@ -913,6 +911,12 @@ void unirender::Shader::Deserialize(DataStream &dsIn,NodeManager &nodeManager)
 		m_hairConfig = dsIn->Read<util::HairConfig>();
 	else
 		m_hairConfig = {};
+
+	auto hasSubdivSettings = dsIn->Read<bool>();
+	if(hasSubdivSettings)
+		m_subdivisionSettings = dsIn->Read<SubdivisionSettings>();
+	else
+		m_subdivisionSettings = {};
 
 	auto flags = dsIn->Read<uint32_t>();
 	for(auto i=decltype(passes.size()){0u};i<passes.size();++i)
@@ -1078,7 +1082,7 @@ void unirender::NodeManager::RegisterNodeTypes()
 	RegisterNodeType(NODE_IMAGE_TEXTURE,[](GroupNodeDesc *parent) {
 		auto desc = NodeDesc::Create(parent);
 		desc->RegisterSocket<unirender::SocketType::String>(nodes::image_texture::IN_FILENAME,STString{});
-		desc->RegisterSocket<unirender::SocketType::String>(nodes::image_texture::IN_COLORSPACE,STString{ccl::u_colorspace_auto});
+		desc->RegisterSocket<unirender::SocketType::String>(nodes::image_texture::IN_COLORSPACE,STString{COLORSPACE_AUTO});
 		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::image_texture::IN_ALPHA_TYPE,nodes::image_texture::AlphaType::Auto);
 		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::image_texture::IN_INTERPOLATION,nodes::image_texture::InterpolationType::Linear);
 		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::image_texture::IN_EXTENSION,nodes::image_texture::ExtensionType::Repeat);
@@ -1104,7 +1108,7 @@ void unirender::NodeManager::RegisterNodeTypes()
 	RegisterNodeType(NODE_ENVIRONMENT_TEXTURE,[](GroupNodeDesc *parent) {
 		auto desc = NodeDesc::Create(parent);
 		desc->RegisterSocket<unirender::SocketType::String>(nodes::environment_texture::IN_FILENAME,STString{});
-		desc->RegisterSocket<unirender::SocketType::String>(nodes::environment_texture::IN_COLORSPACE,STString{ccl::u_colorspace_auto});
+		desc->RegisterSocket<unirender::SocketType::String>(nodes::environment_texture::IN_COLORSPACE,STString{COLORSPACE_AUTO});
 		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::environment_texture::IN_ALPHA_TYPE,nodes::image_texture::AlphaType::Auto);
 		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::environment_texture::IN_INTERPOLATION,nodes::image_texture::InterpolationType::Linear);
 		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::environment_texture::IN_PROJECTION,unirender::EnvironmentProjection::Equirectangular);
@@ -1277,8 +1281,13 @@ void unirender::NodeManager::RegisterNodeTypes()
 	});
 	RegisterNodeType(NODE_PRINCIPLED_BSDF,[](GroupNodeDesc *parent) {
 		auto desc = NodeDesc::Create(parent);
-		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::principled_bsdf::IN_DISTRIBUTION,ccl::ClosureType::CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID);
-		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::principled_bsdf::IN_SUBSURFACE_METHOD,ccl::ClosureType::CLOSURE_BSSRDF_PRINCIPLED_ID);
+
+		// See kernel/svm/svm_types.h in Cycles source code
+		constexpr uint32_t CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID = 30;
+		constexpr uint32_t CLOSURE_BSSRDF_PRINCIPLED_ID = 42;
+
+		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::principled_bsdf::IN_DISTRIBUTION,CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID);
+		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::principled_bsdf::IN_SUBSURFACE_METHOD,CLOSURE_BSSRDF_PRINCIPLED_ID);
 
 		desc->RegisterSocket<unirender::SocketType::Color>(nodes::principled_bsdf::IN_BASE_COLOR,STColor{0.8f,0.8f,0.8f},unirender::SocketIO::In);
 		desc->RegisterSocket<unirender::SocketType::Color>(nodes::principled_bsdf::IN_SUBSURFACE_COLOR,STColor{0.8f,0.8f,0.8f},unirender::SocketIO::In);
@@ -1310,7 +1319,11 @@ void unirender::NodeManager::RegisterNodeTypes()
 	});
 	RegisterNodeType(NODE_TOON_BSDF,[](GroupNodeDesc *parent) {
 		auto desc = NodeDesc::Create(parent);
-		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::toon_bsdf::IN_COMPONENT,ccl::ClosureType::CLOSURE_BSDF_DIFFUSE_TOON_ID);
+
+		// See kernel/svm/svm_types.h in Cycles source code
+		constexpr uint32_t CLOSURE_BSDF_DIFFUSE_TOON_ID = 7;
+
+		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::toon_bsdf::IN_COMPONENT,CLOSURE_BSDF_DIFFUSE_TOON_ID);
 
 		desc->RegisterSocket<unirender::SocketType::Color>(nodes::toon_bsdf::IN_COLOR,STColor{0.8f,0.8f,0.8f},unirender::SocketIO::In);
 		desc->RegisterSocket<unirender::SocketType::Normal>(nodes::toon_bsdf::IN_NORMAL,STNormal{},unirender::SocketIO::In);
@@ -1324,7 +1337,11 @@ void unirender::NodeManager::RegisterNodeTypes()
 	});
 	RegisterNodeType(NODE_GLASS_BSDF,[](GroupNodeDesc *parent) {
 		auto desc = NodeDesc::Create(parent);
-		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::glass_bsdf::IN_DISTRIBUTION,ccl::ClosureType::CLOSURE_BSDF_MICROFACET_GGX_GLASS_ID);
+
+		// See kernel/svm/svm_types.h in Cycles source code
+		constexpr uint32_t CLOSURE_BSDF_MICROFACET_GGX_GLASS_ID = 32;
+
+		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::glass_bsdf::IN_DISTRIBUTION,CLOSURE_BSDF_MICROFACET_GGX_GLASS_ID);
 
 		desc->RegisterSocket<unirender::SocketType::Color>(nodes::glass_bsdf::IN_COLOR,STColor{0.8f,0.8f,0.8f},unirender::SocketIO::In);
 		desc->RegisterSocket<unirender::SocketType::Normal>(nodes::glass_bsdf::IN_NORMAL,STNormal{},unirender::SocketIO::In);
@@ -1334,6 +1351,53 @@ void unirender::NodeManager::RegisterNodeTypes()
 
 		desc->RegisterSocket<unirender::SocketType::Closure>(nodes::glass_bsdf::OUT_BSDF,unirender::SocketIO::Out);
 		desc->RegisterPrimaryOutputSocket(nodes::glass_bsdf::OUT_BSDF);
+		return desc;
+	});
+	RegisterNodeType(NODE_VOLUME_CLEAR,[](GroupNodeDesc *parent) {
+		auto desc = NodeDesc::Create(parent);
+		
+		desc->RegisterSocket<unirender::SocketType::Int>(nodes::volume_clear::IN_PRIORITY,0,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_clear::IN_IOR,STVector{0.3f,0.3f,0.3f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_clear::IN_ABSORPTION,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_clear::IN_EMISSION,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
+
+		desc->RegisterSocket<unirender::SocketType::Closure>(nodes::volume_clear::OUT_VOLUME,unirender::SocketIO::Out);
+		desc->RegisterPrimaryOutputSocket(nodes::volume_clear::OUT_VOLUME);
+		return desc;
+	});
+	RegisterNodeType(NODE_VOLUME_HOMOGENEOUS,[](GroupNodeDesc *parent) {
+		auto desc = NodeDesc::Create(parent);
+		
+		desc->RegisterSocket<unirender::SocketType::Int>(nodes::volume_homogeneous::IN_PRIORITY,0,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_homogeneous::IN_IOR,STVector{0.3f,0.3f,0.3f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_homogeneous::IN_ABSORPTION,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_homogeneous::IN_EMISSION,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
+
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_homogeneous::IN_SCATTERING,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_homogeneous::IN_ASYMMETRY,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_homogeneous::IN_MULTI_SCATTERING,false,unirender::SocketIO::In);
+
+		desc->RegisterSocket<unirender::SocketType::Closure>(nodes::volume_homogeneous::OUT_VOLUME,unirender::SocketIO::Out);
+		desc->RegisterPrimaryOutputSocket(nodes::volume_homogeneous::OUT_VOLUME);
+		return desc;
+	});
+	RegisterNodeType(NODE_VOLUME_HETEROGENEOUS,[](GroupNodeDesc *parent) {
+		auto desc = NodeDesc::Create(parent);
+		
+		desc->RegisterSocket<unirender::SocketType::Int>(nodes::volume_heterogeneous::IN_PRIORITY,0,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_heterogeneous::IN_IOR,STVector{0.3f,0.3f,0.3f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_heterogeneous::IN_ABSORPTION,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_heterogeneous::IN_EMISSION,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
+
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_heterogeneous::IN_SCATTERING,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_heterogeneous::IN_ASYMMETRY,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_heterogeneous::IN_MULTI_SCATTERING,false,unirender::SocketIO::In);
+
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::volume_heterogeneous::IN_STEP_SIZE,0.f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Int>(nodes::volume_heterogeneous::IN_STEP_MAX_COUNT,0,unirender::SocketIO::In);
+
+		desc->RegisterSocket<unirender::SocketType::Closure>(nodes::volume_heterogeneous::OUT_VOLUME,unirender::SocketIO::Out);
+		desc->RegisterPrimaryOutputSocket(nodes::volume_heterogeneous::OUT_VOLUME);
 		return desc;
 	});
 	RegisterNodeType(NODE_OUTPUT,[](GroupNodeDesc *parent) {
@@ -1421,7 +1485,7 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterPrimaryOutputSocket(nodes::layer_weight::OUT_FRESNEL);
 		return desc;
 	});
-	static_assert(NODE_COUNT == 36,"Increase this number if new node types are added!");
+	static_assert(NODE_COUNT == 39,"Increase this number if new node types are added!");
 }
 
 std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc) {os<<desc.ToString(); return os;}

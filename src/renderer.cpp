@@ -14,7 +14,6 @@
 #include "util_raytracing/camera.hpp"
 #include "util_raytracing/shader.hpp"
 #include "util_raytracing/denoise.hpp"
-#include "util_raytracing/cycles/renderer.hpp"
 #include <util_image_buffer.hpp>
 #include <util_ocio.hpp>
 #include <sharedutils/util_path.hpp>
@@ -52,8 +51,6 @@ std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(const unirender
 	if(res.x <= 0 || res.y <= 0)
 		return nullptr;
 	unirender::PRenderer renderer = nullptr;
-	if(rendererIdentifier == "cycles")
-		return unirender::cycles::Renderer::Create(scene,flags);
 	auto it = g_rendererLibs.find(rendererIdentifier);
 	if(it == g_rendererLibs.end())
 	{

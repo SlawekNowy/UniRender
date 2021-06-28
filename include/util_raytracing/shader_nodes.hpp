@@ -16,16 +16,6 @@
 #include <optional>
 #include <functional>
 
-namespace ccl
-{
-	class PrincipledBsdfNode; class NormalMapNode; class ToonBsdfNode; class GlassBsdfNode; class MixClosureNode; class AddClosureNode; class TransparentBsdfNode; class TranslucentBsdfNode; class MixNode;
-	class SeparateXYZNode; class CombineXYZNode; class SeparateRGBNode; class CombineRGBNode; class BackgroundNode; class TextureCoordinateNode; class MappingNode;
-	class EnvironmentTextureNode; class ImageTextureNode; class ColorNode; class EmissionNode; class MathNode; class AttributeNode; class LightPathNode; class DiffuseBsdfNode;
-	class CameraNode; class HSVNode; class ScatterVolumeNode;
-	class ShaderNode;
-	enum AttributeStandard : int32_t;
-	enum NodeMathType : int32_t;
-};
 namespace unirender
 {
 	enum class ColorSpace : uint8_t
@@ -530,6 +520,44 @@ namespace unirender
 
 			constexpr auto *OUT_BSDF = "BSDF";
 		};
+		namespace volume_clear
+		{
+			constexpr auto *IN_PRIORITY = "priority";
+			constexpr auto *IN_IOR = "IOR";
+			constexpr auto *IN_ABSORPTION = "absorption";
+			constexpr auto *IN_EMISSION = "emission";
+
+			constexpr auto *OUT_VOLUME = "volume";
+		};
+		namespace volume_homogeneous
+		{
+			constexpr auto *IN_PRIORITY = "priority";
+			constexpr auto *IN_IOR = "IOR";
+			constexpr auto *IN_ABSORPTION = "absorption";
+			constexpr auto *IN_EMISSION = "emission";
+
+			constexpr auto *IN_SCATTERING = "scattering";
+			constexpr auto *IN_ASYMMETRY = "asymmetry";
+			constexpr auto *IN_MULTI_SCATTERING = "multiscattering";
+
+			constexpr auto *OUT_VOLUME = "homogeneous";
+		};
+		namespace volume_heterogeneous
+		{
+			constexpr auto *IN_PRIORITY = "priority";
+			constexpr auto *IN_IOR = "IOR";
+			constexpr auto *IN_ABSORPTION = "absorption";
+			constexpr auto *IN_EMISSION = "emission";
+
+			constexpr auto *IN_SCATTERING = "scattering";
+			constexpr auto *IN_ASYMMETRY = "asymmetry";
+			constexpr auto *IN_MULTI_SCATTERING = "multiscattering";
+
+			constexpr auto *IN_STEP_SIZE = "step_size";
+			constexpr auto *IN_STEP_MAX_COUNT = "step_max_count";
+
+			constexpr auto *OUT_VOLUME = "heterogeneous";
+		};
 		namespace output
 		{
 			constexpr auto *IN_SURFACE = "surface";
@@ -671,7 +699,7 @@ namespace unirender
 			constexpr auto *OUT_FACING = "facing";
 		};
 	};
-	constexpr uint32_t NODE_COUNT = 36;
+	constexpr uint32_t NODE_COUNT = 39;
 };
 
 DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::Socket &socket);

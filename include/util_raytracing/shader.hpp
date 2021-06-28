@@ -18,9 +18,15 @@
 #include <sharedutils/datastream.h>
 #include <sharedutils/util_hair.hpp>
 #include <sharedutils/util_virtual_shared_from_this.hpp>
+#include <udm.hpp>
+#include <mathutil/transform.hpp>
 
 namespace unirender
 {
+	static std::string COLORSPACE_AUTO = "";
+	static std::string COLORSPACE_RAW = "__builtin_raw";
+	static std::string COLORSPACE_SRGB = "__builtin_srgb";
+
 	class NodeDesc;
 	class GroupNodeDesc;
 	struct NodeSocketDesc;
@@ -329,6 +335,12 @@ namespace unirender
 		NodeManager &m_nodeManager;
 	};
 
+	struct DLLRTUTIL SubdivisionSettings
+	{
+		uint32_t maxLevel = 2;
+		float maxEdgeScreenSize = 0.f;
+	};
+
 	class DLLRTUTIL Shader final
 		: public std::enable_shared_from_this<Shader>,
 		public BaseObject
@@ -360,6 +372,12 @@ namespace unirender
 		void SetHairConfig(const util::HairConfig &hairConfig) {m_hairConfig = hairConfig;}
 		void ClearHairConfig() {m_hairConfig = {};}
 
+		const std::optional<SubdivisionSettings> &GetSubdivisionSettings() const {return m_subdivisionSettings;}
+		void SetSubdivisionSettings(const SubdivisionSettings &subDivSettings) {m_subdivisionSettings = subDivSettings;}
+		void ClearSubdivisionSettings() {m_subdivisionSettings = {};}
+
+		udm::LinkedPropertyWrapper &GetVolumeProperties();
+
 		std::shared_ptr<unirender::GroupNodeDesc> combinedPass = nullptr;
 		std::shared_ptr<unirender::GroupNodeDesc> albedoPass = nullptr;
 		std::shared_ptr<unirender::GroupNodeDesc> normalPass = nullptr;
@@ -372,6 +390,8 @@ namespace unirender
 		Shader();
 		Pass m_activePass = Pass::Combined;
 		std::optional<util::HairConfig> m_hairConfig {};
+		std::optional<SubdivisionSettings> m_subdivisionSettings {};
+		udm::LinkedPropertyWrapper m_volumeProperties {};
 	};
 
 	using GenericShader = Shader;
@@ -392,7 +412,7 @@ namespace unirender
 		template<typename TNode>
 			NodeTypeId RegisterNodeType(const std::string &typeName)
 		{
-			return RegisterNodeType(typeName,[]() -> std::shared_ptr<Node> {return std::shared_ptr<TNode>{new TNode{}};});
+			return RegisterNodeType(typeName,[]() -> std::shared_ptr<NodeDesc> {return std::shared_ptr<TNode>{new TNode{}};});
 		}
 
 		void RegisterNodeTypes();
@@ -440,7 +460,11 @@ namespace unirender
 	constexpr auto *NODE_VECTOR_TRANSFORM = "vector_transform";
 	constexpr auto *NODE_RGB_RAMP = "rgb_ramp";
 	constexpr auto *NODE_LAYER_WEIGHT = "layer_weight";
-	static_assert(NODE_COUNT == 36,"Increase this number if new node types are added!");
+
+	constexpr auto *NODE_VOLUME_CLEAR = "volume_clear";
+	constexpr auto *NODE_VOLUME_HOMOGENEOUS = "volume_homogeneous";
+	constexpr auto *NODE_VOLUME_HETEROGENEOUS = "volume_heterogeneous";
+	static_assert(NODE_COUNT == 39,"Increase this number if new node types are added!");
 };
 
 DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc);

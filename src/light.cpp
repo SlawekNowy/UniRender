@@ -8,10 +8,6 @@
 #include "util_raytracing/light.hpp"
 #include "util_raytracing/scene.hpp"
 #include "util_raytracing/shader.hpp"
-#include "util_raytracing/ccl_shader.hpp"
-#include <render/light.h>
-#include <render/scene.h>
-#include <render/nodes.h>
 #include <mathutil/umath_lighting.hpp>
 #include <sharedutils/util_pragma.hpp>
 #include <sharedutils/datastream.h>

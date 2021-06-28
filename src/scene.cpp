@@ -10,35 +10,12 @@
 #include "util_raytracing/mesh.hpp"
 #include "util_raytracing/camera.hpp"
 #include "util_raytracing/shader.hpp"
-#include "util_raytracing/ccl_shader.hpp"
 #include "util_raytracing/object.hpp"
 #include "util_raytracing/light.hpp"
-#include "util_raytracing/baking.hpp"
 #include "util_raytracing/denoise.hpp"
 #include "util_raytracing/model_cache.hpp"
 #include "util_raytracing/color_management.hpp"
 #include "util_raytracing/renderer.hpp"
-#include <render/buffers.h>
-#include <render/scene.h>
-#include <render/session.h>
-#include <render/shader.h>
-#include <render/camera.h>
-#include <render/light.h>
-#include <render/mesh.h>
-#include <render/graph.h>
-#include <render/nodes.h>
-#include <render/object.h>
-#include <render/background.h>
-#include <render/integrator.h>
-#include <render/svm.h>
-#include <render/bake.h>
-#include <render/particles.h>
-#include <util/util_path.h>
-#ifdef ENABLE_CYCLES_LOGGING
-#define GLOG_NO_ABBREVIATED_SEVERITIES
-#include <util/util_logging.h>
-#include <glog/logging.h>
-#endif
 #include <optional>
 #include <fsys/filesystem.h>
 #include <sharedutils/datastream.h>
@@ -629,22 +606,6 @@ void unirender::Scene::SetAOBakeTarget(Object &o) {o.SetName("bake_target");}
 Vector2i unirender::Scene::GetResolution() const
 {
 	return {m_camera->GetWidth(),m_camera->GetHeight()};
-}
-
-ccl::ShaderOutput *unirender::Scene::FindShaderNodeOutput(ccl::ShaderNode &node,const std::string &output)
-{
-	auto it = std::find_if(node.outputs.begin(),node.outputs.end(),[&output](const ccl::ShaderOutput *shOutput) {
-		return ccl::string_iequals(shOutput->socket_type.name.string(),output);
-		});
-	return (it != node.outputs.end()) ? *it : nullptr;
-}
-
-ccl::ShaderNode *unirender::Scene::FindShaderNode(ccl::ShaderGraph &graph,const std::string &nodeName)
-{
-	auto it = std::find_if(graph.nodes.begin(),graph.nodes.end(),[&nodeName](const ccl::ShaderNode *node) {
-		return node->name == nodeName;
-		});
-	return (it != graph.nodes.end()) ? *it : nullptr;
 }
 
 std::string unirender::Scene::ToRelativePath(const std::string &absPath)

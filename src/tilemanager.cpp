@@ -11,7 +11,6 @@
 #include <util_ocio.hpp>
 #include <util_image_buffer.hpp>
 #include <sharedutils/util.h>
-#include <render/buffers.h>
 
 #pragma optimize("",off)
 bool unirender::TileManager::TileData::IsFloatData() const {return !IsHDRData();}
@@ -335,38 +334,5 @@ void unirender::TileManager::ApplyPostProcessingForProgressiveTile(TileData &dat
 #endif
 	data.data = std::move(newData);
 	data.flags |= TileData::Flags::HDRData;
-}
-
-void unirender::TileManager::UpdateRenderTile(const ccl::RenderTile &tile,bool param)
-{
-	assert((tile.x %m_tileSize.x) == 0 && (tile.y %m_tileSize.y) == 0);
-	if((tile.x %m_tileSize.x) != 0 || (tile.y %m_tileSize.y) != 0)
-		throw std::invalid_argument{"Unexpected tile size"};
-	auto tileIndex = tile.x /m_tileSize.x +(tile.y /m_tileSize.y) *m_numTilesPerAxis.x;
-	TileData data {};
-	data.x = tile.x;
-	data.y = tile.y;
-	data.index = tileIndex; // tile.tile_index; // tile_index doesn't match expected tile index in some cases?
-	data.sample = tile.sample;
-	data.data.resize(tile.w *tile.h *sizeof(Vector4));
-	data.w = tile.w;
-	data.h = tile.h;
-	if(m_cpuDevice == false)
-		tile.buffers->copy_from_device(); // TODO: Is this the right way to do this?
-	tile.buffers->get_pass_rect("combined",m_exposure,tile.sample,4,reinterpret_cast<float*>(data.data.data()));
-	// We want to minimize the overhead on this thread as much as possible (to avoid stalling Cycles), so we'll continue with post-processing on yet another thread
-	m_inputTileMutex.lock();
-		auto &inputTile = m_inputTiles[tileIndex];
-		if(tile.sample > inputTile.sample || inputTile.sample == std::numeric_limits<decltype(inputTile.sample)>::max())
-		{
-			inputTile = std::move(data);
-			m_inputTileQueue.push(tileIndex);
-			NotifyPendingWork();
-		}
-	m_inputTileMutex.unlock();
-}
-void unirender::TileManager::WriteRenderTile(const ccl::RenderTile &tile)
-{
-	// TODO: What's this callback for exactly?
 }
 #pragma optimize("",on)

@@ -8,9 +8,6 @@
 #include "util_raytracing/shader_nodes.hpp"
 #include "util_raytracing/scene.hpp"
 #include "util_raytracing/shader.hpp"
-#include "util_raytracing/ccl_shader.hpp"
-#include <render/nodes.h>
-#include <render/shader.h>
 
 #pragma optimize("",off)
 std::size_t unirender::SocketHasher::operator()(const Socket& k) const

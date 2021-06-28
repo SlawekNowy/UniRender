@@ -9,8 +9,6 @@
 #include "util_raytracing/scene.hpp"
 #include <mathutil/camera.hpp>
 #include <sharedutils/datastream.h>
-#include <render/camera.h>
-#include <render/scene.h>
 
 using namespace unirender;
 

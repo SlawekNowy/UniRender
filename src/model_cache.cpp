@@ -8,7 +8,7 @@
 #include "util_raytracing/scene.hpp"
 #include "util_raytracing/mesh.hpp"
 #include "util_raytracing/object.hpp"
-#include "util_raytracing/ccl_shader.hpp"
+#include "util_raytracing/shader.hpp"
 #include "util_raytracing/model_cache.hpp"
 
 #undef GetObject

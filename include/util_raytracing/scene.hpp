@@ -179,6 +179,7 @@ namespace unirender
 			DeviceType deviceType = DeviceType::GPU;
 			float exposure = 1.f;
 			std::optional<ColorTransformInfo> colorTransform {};
+			bool preCalculateLight = false;
 		};
 		static bool IsRenderSceneMode(RenderMode renderMode);
 		static void SetKernelPath(const std::string &kernelPath);

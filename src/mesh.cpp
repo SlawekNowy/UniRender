@@ -8,11 +8,8 @@
 #include "util_raytracing/mesh.hpp"
 #include "util_raytracing/scene.hpp"
 #include "util_raytracing/shader.hpp"
-#include "util_raytracing/ccl_shader.hpp"
 #include "util_raytracing/model_cache.hpp"
 #include <sharedutils/datastream.h>
-#include <render/mesh.h>
-#include <render/scene.h>
 
 #pragma optimize("",off)
 const std::string unirender::Mesh::TANGENT_POSTFIX = ".tangent";
