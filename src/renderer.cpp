@@ -69,10 +69,11 @@ std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(const unirender
 		it = g_rendererLibs.insert(std::make_pair(rendererIdentifier,lib)).first;
 	}
 	auto &lib = it->second;
-	auto *func = lib->FindSymbolAddress<std::shared_ptr<unirender::Renderer>(*)(const unirender::Scene&,Flags)>("create_renderer");
+	auto *func = lib->FindSymbolAddress<bool(*)(const unirender::Scene&,Flags,std::shared_ptr<unirender::Renderer>&)>("create_renderer");
 	if(func == nullptr)
 		return nullptr;
-	return func(scene,flags);
+	auto success = func(scene,flags,renderer);
+	return renderer;
 }
 
 ///////////////////

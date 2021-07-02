@@ -64,6 +64,7 @@ link_external_library(util_image)
 link_external_library(sharedutils)
 link_external_library(mathutil)
 link_external_library(vfilesystem)
+link_external_library(util_udm)
 
 add_include_dir(cycles)
 add_include_dir(cycles_atomic)
@@ -77,6 +78,7 @@ add_external_library(tiff)
 add_external_library(lpng)
 add_external_library(zlib)
 add_external_library(jpeg)
+add_external_library(lz4)
 
 # Required for color management
 link_external_library(util_ocio)
@@ -166,13 +168,13 @@ if(WIN32)
 	set(DEPENDENCY_CYCLES_CUEW_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/extern_cuew.lib CACHE PATH "Path to library." FORCE)
 	set(DEPENDENCY_CYCLES_NUMAAPI_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/extern_numaapi.lib CACHE PATH "Path to library." FORCE)
 
-	set(DEPENDENCY_OPENEXR_HALF_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Half-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_OPENEXR_IEX_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Iex-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_OPENEXR_IEX_MATH_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IexMath-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_OPENEXR_ILM_IMF_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmImf-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_OPENEXR_ILM_IMF_UTIL ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmImfUtil-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_OPENEXR_ILM_THREAD ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmThread-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_OPENEXR_IMATH ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Imath-2_3_static.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_HALF_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Half-2_3_static.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_IEX_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Iex-2_3_static.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_IEX_MATH_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IexMath-2_3_static.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_ILM_IMF_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmImf-2_3_static.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_ILM_IMF_UTIL ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmImfUtil-2_3_static.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_ILM_THREAD ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmThread-2_3_static.lib CACHE PATH "Path to library." FORCE)
+	# set(DEPENDENCY_OPENEXR_IMATH ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Imath-2_3_static.lib CACHE PATH "Path to library." FORCE)
 	target_link_libraries(${PROJ_NAME}
 		${DEPENDENCY_CYCLES_UTIL_LIBRARY}
 		${DEPENDENCY_CYCLES_DEVICE_LIBRARY}
