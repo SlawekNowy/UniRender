@@ -1335,6 +1335,23 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterPrimaryOutputSocket(nodes::toon_bsdf::OUT_BSDF);
 		return desc;
 	});
+	RegisterNodeType(NODE_GLOSSY_BSDF,[](GroupNodeDesc *parent) {
+		auto desc = NodeDesc::Create(parent);
+		
+		// See kernel/svm/svm_types.h in Cycles source code
+		constexpr uint32_t CLOSURE_BSDF_MICROFACET_GGX_ID = 9;
+
+		desc->RegisterSocket<unirender::SocketType::Color>(nodes::glossy_bsdf::IN_COLOR,STColor{0.8f,0.8f,0.8f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::glossy_bsdf::IN_ALPHA,1.0f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Normal>(nodes::glossy_bsdf::IN_NORMAL,STNormal{},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::glossy_bsdf::IN_SURFACE_MIX_WEIGHT,0.0f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::glass_bsdf::IN_DISTRIBUTION,CLOSURE_BSDF_MICROFACET_GGX_ID);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::glass_bsdf::IN_ROUGHNESS,0.5f,unirender::SocketIO::In);
+
+		desc->RegisterSocket<unirender::SocketType::Closure>(nodes::glass_bsdf::OUT_BSDF,unirender::SocketIO::Out);
+		desc->RegisterPrimaryOutputSocket(nodes::glass_bsdf::OUT_BSDF);
+		return desc;
+	});
 	RegisterNodeType(NODE_GLASS_BSDF,[](GroupNodeDesc *parent) {
 		auto desc = NodeDesc::Create(parent);
 
@@ -1360,6 +1377,8 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_clear::IN_IOR,STVector{0.3f,0.3f,0.3f},unirender::SocketIO::In);
 		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_clear::IN_ABSORPTION,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
 		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_clear::IN_EMISSION,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
+		
+		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_clear::IN_DEFAULT_WORLD_VOLUME,false,unirender::SocketIO::In);
 
 		desc->RegisterSocket<unirender::SocketType::Closure>(nodes::volume_clear::OUT_VOLUME,unirender::SocketIO::Out);
 		desc->RegisterPrimaryOutputSocket(nodes::volume_clear::OUT_VOLUME);
@@ -1376,6 +1395,9 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_homogeneous::IN_SCATTERING,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
 		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_homogeneous::IN_ASYMMETRY,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
 		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_homogeneous::IN_MULTI_SCATTERING,false,unirender::SocketIO::In);
+		
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::volume_homogeneous::IN_ABSORPTION_DEPTH,0.01f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_homogeneous::IN_DEFAULT_WORLD_VOLUME,false,unirender::SocketIO::In);
 
 		desc->RegisterSocket<unirender::SocketType::Closure>(nodes::volume_homogeneous::OUT_VOLUME,unirender::SocketIO::Out);
 		desc->RegisterPrimaryOutputSocket(nodes::volume_homogeneous::OUT_VOLUME);
@@ -1395,6 +1417,8 @@ void unirender::NodeManager::RegisterNodeTypes()
 
 		desc->RegisterSocket<unirender::SocketType::Float>(nodes::volume_heterogeneous::IN_STEP_SIZE,0.f,unirender::SocketIO::In);
 		desc->RegisterSocket<unirender::SocketType::Int>(nodes::volume_heterogeneous::IN_STEP_MAX_COUNT,0,unirender::SocketIO::In);
+		
+		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_heterogeneous::IN_DEFAULT_WORLD_VOLUME,false,unirender::SocketIO::In);
 
 		desc->RegisterSocket<unirender::SocketType::Closure>(nodes::volume_heterogeneous::OUT_VOLUME,unirender::SocketIO::Out);
 		desc->RegisterPrimaryOutputSocket(nodes::volume_heterogeneous::OUT_VOLUME);
@@ -1485,7 +1509,7 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterPrimaryOutputSocket(nodes::layer_weight::OUT_FRESNEL);
 		return desc;
 	});
-	static_assert(NODE_COUNT == 39,"Increase this number if new node types are added!");
+	static_assert(NODE_COUNT == 40,"Increase this number if new node types are added!");
 }
 
 std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc) {os<<desc.ToString(); return os;}

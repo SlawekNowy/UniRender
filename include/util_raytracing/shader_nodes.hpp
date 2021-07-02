@@ -509,6 +509,17 @@ namespace unirender
 
 			constexpr auto *OUT_BSDF = "BSDF";
 		};
+		namespace glossy_bsdf
+		{
+			constexpr auto *IN_COLOR = "color";
+			constexpr auto *IN_ALPHA = "alpha";
+			constexpr auto *IN_NORMAL = "normal";
+			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
+			constexpr auto *IN_DISTRIBUTION = "distribution";
+			constexpr auto *IN_ROUGHNESS = "roughness";
+
+			constexpr auto *OUT_BSDF = "BSDF";
+		};
 		namespace glass_bsdf
 		{
 			constexpr auto *IN_DISTRIBUTION = "distribution";
@@ -526,6 +537,8 @@ namespace unirender
 			constexpr auto *IN_IOR = "IOR";
 			constexpr auto *IN_ABSORPTION = "absorption";
 			constexpr auto *IN_EMISSION = "emission";
+			
+			constexpr auto *IN_DEFAULT_WORLD_VOLUME = "default_world_volume";
 
 			constexpr auto *OUT_VOLUME = "volume";
 		};
@@ -539,6 +552,9 @@ namespace unirender
 			constexpr auto *IN_SCATTERING = "scattering";
 			constexpr auto *IN_ASYMMETRY = "asymmetry";
 			constexpr auto *IN_MULTI_SCATTERING = "multiscattering";
+
+			constexpr auto *IN_ABSORPTION_DEPTH = "absorption_depth";
+			constexpr auto *IN_DEFAULT_WORLD_VOLUME = "default_world_volume";
 
 			constexpr auto *OUT_VOLUME = "homogeneous";
 		};
@@ -555,6 +571,8 @@ namespace unirender
 
 			constexpr auto *IN_STEP_SIZE = "step_size";
 			constexpr auto *IN_STEP_MAX_COUNT = "step_max_count";
+			
+			constexpr auto *IN_DEFAULT_WORLD_VOLUME = "default_world_volume";
 
 			constexpr auto *OUT_VOLUME = "heterogeneous";
 		};
@@ -699,7 +717,7 @@ namespace unirender
 			constexpr auto *OUT_FACING = "facing";
 		};
 	};
-	constexpr uint32_t NODE_COUNT = 39;
+	constexpr uint32_t NODE_COUNT = 40;
 };
 
 DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::Socket &socket);
