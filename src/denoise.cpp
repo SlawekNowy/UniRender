@@ -77,7 +77,7 @@ bool unirender::Denoiser::Denoise(
 	uimg::ImageBuffer *optImgBufferDst
 )
 {
-	if(imgBuffer.GetFormat() == uimg::ImageBuffer::Format::RGB_FLOAT && (optImgBufferAlbedo == nullptr || optImgBufferAlbedo->GetFormat() == imgBuffer.GetFormat()) && (optImgBufferNormal == nullptr || optImgBufferNormal->GetFormat() == imgBuffer.GetFormat()))
+	if(imgBuffer.GetFormat() == uimg::Format::RGB_FLOAT && (optImgBufferAlbedo == nullptr || optImgBufferAlbedo->GetFormat() == imgBuffer.GetFormat()) && (optImgBufferNormal == nullptr || optImgBufferNormal->GetFormat() == imgBuffer.GetFormat()))
 	{
 		 // Image is already in the right format, we can just denoise and be done with it
 		return Denoise(
@@ -88,9 +88,9 @@ bool unirender::Denoiser::Denoise(
 	}
 
 	// Image is in the wrong format, we'll need a temporary copy
-	auto pImgDenoise = imgBuffer.Copy(uimg::ImageBuffer::Format::RGB_FLOAT);
-	auto pImgAlbedo = optImgBufferAlbedo ? optImgBufferAlbedo->Copy(uimg::ImageBuffer::Format::RGB_FLOAT) : nullptr;
-	auto pImgNormals = optImgBufferNormal ? optImgBufferNormal->Copy(uimg::ImageBuffer::Format::RGB_FLOAT) : nullptr;
+	auto pImgDenoise = imgBuffer.Copy(uimg::Format::RGB_FLOAT);
+	auto pImgAlbedo = optImgBufferAlbedo ? optImgBufferAlbedo->Copy(uimg::Format::RGB_FLOAT) : nullptr;
+	auto pImgNormals = optImgBufferNormal ? optImgBufferNormal->Copy(uimg::Format::RGB_FLOAT) : nullptr;
 	if(Denoise(
 		denoiseInfo,static_cast<float*>(pImgDenoise->GetData()),
 		pImgAlbedo ? static_cast<float*>(pImgAlbedo->GetData()) : nullptr,pImgNormals ? static_cast<float*>(pImgNormals->GetData()) : nullptr,
@@ -101,13 +101,13 @@ bool unirender::Denoiser::Denoise(
 	// Copy denoised data back to result buffer
 	auto itSrc = pImgDenoise->begin();
 	auto itDst = imgBuffer.begin();
-	auto numChannels = umath::to_integral(uimg::ImageBuffer::Channel::Count) -1; // -1, because we don't want to overwrite the old alpha channel values
+	auto numChannels = umath::to_integral(uimg::Channel::Count) -1; // -1, because we don't want to overwrite the old alpha channel values
 	for(;itSrc != pImgDenoise->end();++itSrc,++itDst)
 	{
 		auto &pxSrc = *itSrc;
 		auto &pxDst = *itDst;
 		for(auto i=decltype(numChannels){0u};i<numChannels;++i)
-			pxDst.CopyValue(static_cast<uimg::ImageBuffer::Channel>(i),pxSrc);
+			pxDst.CopyValue(static_cast<uimg::Channel>(i),pxSrc);
 	}
 	return true;
 }

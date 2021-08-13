@@ -128,11 +128,11 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 		{
 			auto albedoImageBuffer = GetResultImageBuffer(OUTPUT_ALBEDO,eyeStage);
 			auto normalImageBuffer = GetResultImageBuffer(OUTPUT_NORMAL,eyeStage);
-			resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
+			resultImageBuffer->Convert(uimg::Format::RGB_FLOAT);
 			if(albedoImageBuffer)
-				albedoImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
+				albedoImageBuffer->Convert(uimg::Format::RGB_FLOAT);
 			if(normalImageBuffer)
-				normalImageBuffer->Convert(uimg::ImageBuffer::Format::RGB_FLOAT);
+				normalImageBuffer->Convert(uimg::Format::RGB_FLOAT);
 
 			/*{
 				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf.png","wb");
@@ -173,7 +173,7 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 			if(m_colorTransformProcessor->Apply(*resultImageBuffer,err,0.f,m_scene->GetGamma()) == false)
 				m_scene->HandleError("Unable to apply color transform: " +err);
 		}
-		resultImageBuffer->Convert(uimg::ImageBuffer::Format::RGBA_HDR);
+		resultImageBuffer->Convert(uimg::Format::RGBA_HDR);
 		resultImageBuffer->ClearAlpha();
 		FinalizeImage(*resultImageBuffer,eyeStage);
 		if(UpdateStereoEye(worker,stage,eyeStage))

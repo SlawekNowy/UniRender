@@ -66,7 +66,7 @@ void unirender::TileManager::Initialize(uint32_t w,uint32_t h,uint32_t wTile,uin
 	m_numTiles = numTiles;
 	m_inputTiles.resize(numTiles);
 	m_completedTiles.resize(numTiles);
-	m_progressiveImage = uimg::ImageBuffer::Create(w,h,uimg::ImageBuffer::Format::RGBA_FLOAT);
+	m_progressiveImage = uimg::ImageBuffer::Create(w,h,uimg::Format::RGBA_FLOAT);
 	m_tileSize = {wTile,hTile};
 	m_exposure = exposure;
 	m_gamma = gamma;
@@ -108,7 +108,7 @@ void unirender::TileManager::Reload(bool waitForCompletion)
 
 		auto w = m_progressiveImage->GetWidth();
 		auto h = m_progressiveImage->GetHeight();
-		m_progressiveImage = uimg::ImageBuffer::Create(w,h,uimg::ImageBuffer::Format::RGBA16);
+		m_progressiveImage = uimg::ImageBuffer::Create(w,h,uimg::Format::RGBA16);
 		m_progressiveImage->Clear(Color::Red);
 	}*/
 
@@ -277,7 +277,7 @@ void unirender::TileManager::InitializeTileData(TileData &data)
 	if(m_flipVertically)
 		data.y = m_progressiveImage->GetHeight() -data.y -data.h;
 
-	auto img = uimg::ImageBuffer::Create(data.data.data(),data.w,data.h,uimg::ImageBuffer::Format::RGBA_FLOAT);
+	auto img = uimg::ImageBuffer::Create(data.data.data(),data.w,data.h,uimg::Format::RGBA_FLOAT);
 	img->Flip(m_flipHorizontally,m_flipVertically);
 	img->ClearAlpha(uimg::ImageBuffer::FULLY_OPAQUE);
 }
@@ -286,7 +286,7 @@ void unirender::TileManager::ApplyPostProcessingForProgressiveTile(TileData &dat
 {
 	if(data.IsFloatData() == false)
 		return;
-	auto img = uimg::ImageBuffer::Create(data.data.data(),data.w,data.h,uimg::ImageBuffer::Format::RGBA_FLOAT);
+	auto img = uimg::ImageBuffer::Create(data.data.data(),data.w,data.h,uimg::Format::RGBA_FLOAT);
 	if(m_colorTransformProcessor)
 	{
 		std::string err;
