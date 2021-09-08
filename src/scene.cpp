@@ -232,7 +232,7 @@ unirender::Camera &unirender::Scene::GetCamera() {return *m_camera;}
 bool unirender::Scene::IsValidTexture(const std::string &filePath) const
 {
 	std::string ext;
-	if(ufile::get_extension(filePath,&ext) == false || ustring::compare(ext,"dds",false) == false)
+	if(ufile::get_extension(filePath,&ext) == false || ustring::compare<std::string>(ext,"dds",false) == false)
 		return false;
 	return FileManager::Exists(filePath,fsys::SearchFlags::Local);
 }
