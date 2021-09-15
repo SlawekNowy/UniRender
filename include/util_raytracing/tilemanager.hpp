@@ -68,6 +68,10 @@ namespace unirender
 		void AddRenderedTile(TileData &&tile);
 		Vector2i GetTileSize() const {return m_tileSize;}
 		uint32_t GetTileCount() const {return m_numTiles;}
+		Vector2i GetTilesPerAxisCount() const {return m_numTilesPerAxis;}
+		float GetExposure() const {return m_exposure;}
+		float GetGamma() const {return m_gamma;}
+		bool IsCpuDevice() const {return m_cpuDevice;}
 		int32_t GetCurrentTileSampleCount(uint32_t tileIndex) const;
 		uint32_t GetTilesWithRenderedSamplesCount() const {return m_numTilesWithRenderedSamples;}
 		bool AllTilesHaveRenderedSamples() const {return GetTilesWithRenderedSamplesCount() == GetTileCount();}
@@ -77,11 +81,16 @@ namespace unirender
 		void SetUseFloatData(bool b);
 		
 		void ApplyPostProcessingForProgressiveTile(TileData &data);
+
+		// For internal use only
+		std::vector<TileData> &GetInputTiles() {return m_inputTiles;}
+		std::mutex &GetInputTileMutex() {return m_inputTileMutex;}
+		std::queue<size_t> &GetInputTileQueue() {return m_inputTileQueue;}
+		void NotifyPendingWork();
 	private:
 		void ApplyRectData(const TileData &data);
 		void InitializeTileData(TileData &data);
 		void SetState(State state);
-		void NotifyPendingWork();
 
 		Vector2i m_tileSize;
 		uint32_t m_numTiles = 0;
