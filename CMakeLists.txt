@@ -65,6 +65,7 @@ link_external_library(sharedutils)
 link_external_library(mathutil)
 link_external_library(vfilesystem)
 link_external_library(util_udm)
+link_external_library(opensubdiv)
 
 add_include_dir(cycles)
 add_include_dir(cycles_atomic)

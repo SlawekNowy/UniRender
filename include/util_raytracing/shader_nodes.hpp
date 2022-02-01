@@ -39,7 +39,6 @@ namespace unirender
 	{
 		None = 0,
 		BsdfMicroFacetMultiGgxGlass,
-		BssrdfPrincipled,
 		BsdfDiffuseToon,
 		BsdfMicroFacetGgxGlass,
 
@@ -116,7 +115,7 @@ namespace unirender
 		} m_nodeSocketRef;
 	};
 
-	struct SocketHasher
+	struct DLLRTUTIL SocketHasher
 	{
 		std::size_t operator()(const Socket& k) const;
 	};

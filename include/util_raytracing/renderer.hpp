@@ -13,6 +13,7 @@
 #include <sharedutils/util_parallel_job.hpp>
 #include <sharedutils/util.h>
 #include <sharedutils/util_event_reply.hpp>
+#include <udm_types.hpp>
 #include <cinttypes>
 
 namespace unirender
@@ -68,6 +69,7 @@ namespace unirender
 			None = std::numeric_limits<uint8_t>::max()
 		};
 		static std::shared_ptr<Renderer> Create(const unirender::Scene &scene,const std::string &rendererIdentifier,Flags flags=Flags::None);
+		static bool UnloadRendererLibrary(const std::string &rendererIdentifier);
 		static void Close();
 		static constexpr const char *OUTPUT_COLOR = "COLOR";
 		static constexpr const char *OUTPUT_ALBEDO = "ALBEDO";
@@ -92,6 +94,7 @@ namespace unirender
 		void StopRendering();
 
 		std::shared_ptr<Mesh> FindRenderMeshByHash(const util::MurmurHash3 &hash) const;
+		udm::PropertyWrapper GetApiData() const;
 
 		bool ShouldUseProgressiveFloatFormat() const;
 		bool ShouldUseTransparentSky() const;
@@ -140,6 +143,7 @@ namespace unirender
 
 		std::shared_ptr<Scene> m_scene = nullptr;
 		TileManager m_tileManager {};
+		udm::PProperty m_apiData = nullptr;
 
 		struct {
 			std::shared_ptr<ShaderCache> shaderCache;

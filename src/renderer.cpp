@@ -75,11 +75,20 @@ std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(const unirender
 	auto success = func(scene,flags,renderer);
 	return renderer;
 }
+bool unirender::Renderer::UnloadRendererLibrary(const std::string &rendererIdentifier)
+{
+	auto it = g_rendererLibs.find(rendererIdentifier);
+	if(it == g_rendererLibs.end())
+		return false;
+	g_rendererLibs.erase(it);
+	return true;
+}
 
 ///////////////////
 
 unirender::Renderer::Renderer(const Scene &scene)
-	: m_scene{const_cast<Scene&>(scene).shared_from_this()}
+	: m_scene{const_cast<Scene&>(scene).shared_from_this()},
+	m_apiData{udm::Property::Create(udm::Type::Element)}
 {}
 std::pair<uint32_t,std::string> unirender::Renderer::AddOutput(const std::string &type)
 {
@@ -225,6 +234,7 @@ void unirender::Renderer::PrepareCyclesSceneForRendering()
 }
 bool unirender::Renderer::ShouldUseProgressiveFloatFormat() const {return true;}
 bool unirender::Renderer::ShouldUseTransparentSky() const {return m_scene->GetSceneInfo().transparentSky;}
+udm::PropertyWrapper unirender::Renderer::GetApiData() const {return *m_apiData;}
 unirender::PMesh unirender::Renderer::FindRenderMeshByHash(const util::MurmurHash3 &hash) const
 {
 	// TODO: Do this via a lookup table
