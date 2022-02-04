@@ -155,8 +155,10 @@ namespace unirender
 		enum class DenoiseMode : uint8_t
 		{
 			None = 0,
-			Fast,
-			Detailed
+			AutoFast,
+			AutoDetailed,
+			Optix,
+			OpenImage
 		};
 
 		struct ColorTransformInfo
@@ -173,7 +175,7 @@ namespace unirender
 			std::string renderer = "cycles";
 			std::optional<uint32_t> samples = {};
 			bool hdrOutput = false;
-			DenoiseMode denoiseMode = DenoiseMode::Detailed;
+			DenoiseMode denoiseMode = DenoiseMode::AutoDetailed;
 			bool progressive = false;
 			bool progressiveRefine = false;
 			DeviceType deviceType = DeviceType::GPU;

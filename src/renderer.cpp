@@ -97,6 +97,15 @@ std::pair<uint32_t,std::string> unirender::Renderer::AddOutput(const std::string
 		it = m_outputs.insert(std::make_pair(type,m_nextOutputIndex++)).first;
 	return {it->second,type};
 }
+uimg::ImageBuffer *unirender::Renderer::FindResultImageBuffer(const std::string &type,StereoEye eye)
+{
+	if(eye == StereoEye::None)
+		eye = StereoEye::Left;
+	auto it = m_resultImageBuffers.find(type);
+	if(it == m_resultImageBuffers.end())
+		return nullptr;
+	return it->second.at(umath::to_integral(eye)).get();
+}
 std::shared_ptr<uimg::ImageBuffer> &unirender::Renderer::GetResultImageBuffer(const std::string &type,StereoEye eye)
 {
 	if(eye == StereoEye::None)

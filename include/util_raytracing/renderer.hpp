@@ -156,6 +156,7 @@ namespace unirender
 		std::shared_ptr<util::ocio::ColorProcessor> m_colorTransformProcessor = nullptr;
 
 		std::shared_ptr<uimg::ImageBuffer> &GetResultImageBuffer(const std::string &type,StereoEye eye=StereoEye::Left);
+		uimg::ImageBuffer *FindResultImageBuffer(const std::string &type,StereoEye eye=StereoEye::Left);
 		std::unordered_map<std::string,std::array<std::shared_ptr<uimg::ImageBuffer>,umath::to_integral(StereoEye::Count)>> m_resultImageBuffers = {};
 		std::unordered_map<std::string,uint32_t> m_outputs {};
 		uint32_t m_nextOutputIndex = 0;
