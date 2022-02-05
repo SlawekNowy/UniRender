@@ -10,7 +10,7 @@
 #include <sharedutils/util.h>
 #include <sharedutils/util_path.hpp>
 
-std::shared_ptr<util::ocio::ColorProcessor> unirender::create_color_transform_processor(const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr)
+std::shared_ptr<util::ocio::ColorProcessor> unirender::create_color_transform_processor(const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr,float exposure,float gamma)
 {
 	auto ocioConfigLocation = util::Path::CreatePath(util::get_program_path());
 	ocioConfigLocation += "modules/open_color_io/configs/";
@@ -20,5 +20,6 @@ std::shared_ptr<util::ocio::ColorProcessor> unirender::create_color_transform_pr
 	ocioCreateInfo.configLocation = ocioConfigLocation.GetString();
 	ocioCreateInfo.config = createInfo.config;
 	ocioCreateInfo.lookName = createInfo.lookName;
-	return util::ocio::ColorProcessor::Create(ocioCreateInfo,outErr);
+	ocioCreateInfo.bitDepth = static_cast<util::ocio::ColorProcessor::CreateInfo::BitDepth>(createInfo.bitDepth);
+	return util::ocio::ColorProcessor::Create(ocioCreateInfo,outErr,exposure,gamma);
 }

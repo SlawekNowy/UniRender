@@ -284,55 +284,12 @@ void unirender::TileManager::InitializeTileData(TileData &data)
 
 void unirender::TileManager::ApplyPostProcessingForProgressiveTile(TileData &data)
 {
-	if(data.IsFloatData() == false)
+	if(!m_colorTransformProcessor)
 		return;
-	auto img = uimg::ImageBuffer::Create(data.data.data(),data.w,data.h,uimg::Format::RGBA_FLOAT);
-	if(m_colorTransformProcessor)
-	{
-		std::string err;
-		auto result = m_colorTransformProcessor->Apply(*img,err,0.f,m_gamma);
-		if(result == false)
-			std::cout<<"Unable to apply color transform: "<<err<<std::endl;
-	}
-
-	if(m_state == State::Cancelled)
-		return;
-
-	if(m_useFloatData)
-		return;
-
-	std::vector<uint8_t> newData;
-	auto numPixels = data.w *data.h;
-	auto numValues = numPixels *4;
-	newData.resize(numValues *sizeof(uint16_t));
-
-	if(m_state == State::Cancelled)
-		return;
-
-	for(auto i=decltype(numValues){0u};i<numValues;++i)
-	{
-		auto *data = reinterpret_cast<uint16_t*>(newData.data()) +i;
-		*data = umath::float32_to_float16_glm(*(static_cast<float*>(img->GetData()) +i));
-	}
-
-#if 0 // Commented, since Cycles already appears to crop the tiles
-	// Crop the tile
-	auto w = img->GetWidth();
-	auto h = img->GetHeight();
-	int32_t xDt = static_cast<int32_t>(data.x +w) -static_cast<int32_t>(m_progressiveImage->GetWidth());
-	int32_t yDt = static_cast<int32_t>(data.y +h) -static_cast<int32_t>(m_progressiveImage->GetHeight());
-	if(xDt > 0 || yDt > 0)
-	{
-		// Tile exceeds image bounds; Crop it
-		w -= xDt;
-		h -= yDt;
-		img->Crop(0,0,w,h,newData.data());
-		newData.resize(w *h *img->GetPixelStride());
-		data.w = w;
-		data.h = h;
-	}
-#endif
-	data.data = std::move(newData);
-	data.flags |= TileData::Flags::HDRData;
+	auto img = uimg::ImageBuffer::Create(data.data.data(),data.w,data.h,data.IsFloatData() ? uimg::Format::RGBA_FLOAT : uimg::Format::RGBA_HDR);
+	std::string err;
+	auto result = m_colorTransformProcessor->Apply(*img,err);
+	if(result == false)
+		std::cout<<"Unable to apply color transform: "<<err<<std::endl;
 }
 #pragma optimize("",on)

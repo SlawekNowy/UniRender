@@ -185,13 +185,13 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 	case ImageRenderStage::FinalizeImage:
 	{
 		auto &resultImageBuffer = GetResultImageBuffer(OUTPUT_COLOR,eyeStage);
+		resultImageBuffer->Convert(uimg::Format::RGBA_HDR);
 		if(m_colorTransformProcessor) // TODO: Should we really apply color transform if we're not denoising?
 		{
 			std::string err;
-			if(m_colorTransformProcessor->Apply(*resultImageBuffer,err,0.f,m_scene->GetGamma()) == false)
+			if(m_colorTransformProcessor->Apply(*resultImageBuffer,err) == false)
 				m_scene->HandleError("Unable to apply color transform: " +err);
 		}
-		resultImageBuffer->Convert(uimg::Format::RGBA_HDR);
 		resultImageBuffer->ClearAlpha();
 		FinalizeImage(*resultImageBuffer,eyeStage);
 		if(UpdateStereoEye(worker,stage,eyeStage))

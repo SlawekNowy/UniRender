@@ -19,10 +19,17 @@ namespace unirender
 {
 	struct DLLRTUTIL ColorTransformProcessorCreateInfo
 	{
+		enum class BitDepth : uint8_t
+		{
+			Float32 = 0,
+			Float16,
+			UInt8
+		};
 		std::string config = "filmic-blender";
 		std::optional<std::string> lookName {};
+		BitDepth bitDepth = BitDepth::Float32;
 	};
-	DLLRTUTIL std::shared_ptr<util::ocio::ColorProcessor> create_color_transform_processor(const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr);
+	DLLRTUTIL std::shared_ptr<util::ocio::ColorProcessor> create_color_transform_processor(const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr,float exposure=0.f,float gamma=2.2f);
 };
 
 #endif

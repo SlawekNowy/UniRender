@@ -96,7 +96,7 @@ namespace unirender
 		std::shared_ptr<Mesh> FindRenderMeshByHash(const util::MurmurHash3 &hash) const;
 		udm::PropertyWrapper GetApiData() const;
 
-		bool ShouldUseProgressiveFloatFormat() const;
+		virtual bool ShouldUseProgressiveFloatFormat() const;
 		bool ShouldUseTransparentSky() const;
 		Scene &GetScene() {return *m_scene;}
 		const Scene &GetScene() const {return const_cast<Renderer*>(this)->GetScene();}
