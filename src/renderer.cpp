@@ -131,9 +131,8 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 	case ImageRenderStage::Denoise:
 	{
 		// Denoise
-		DenoiseInfo denoiseInfo {};
+		denoise::Info denoiseInfo {};
 		auto &resultImageBuffer = GetResultImageBuffer(OUTPUT_COLOR,eyeStage);
-		denoiseInfo.hdr = true;
 		denoiseInfo.width = resultImageBuffer->GetWidth();
 		denoiseInfo.height = resultImageBuffer->GetHeight();
 		denoiseInfo.lightmap = (m_scene->GetRenderMode() == unirender::Scene::RenderMode::BakeDiffuseLighting);
@@ -148,11 +147,6 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 		{
 			auto albedoImageBuffer = GetResultImageBuffer(OUTPUT_ALBEDO,eyeStage);
 			auto normalImageBuffer = GetResultImageBuffer(OUTPUT_NORMAL,eyeStage);
-			resultImageBuffer->Convert(uimg::Format::RGB_FLOAT);
-			if(albedoImageBuffer)
-				albedoImageBuffer->Convert(uimg::Format::RGB_FLOAT);
-			if(normalImageBuffer)
-				normalImageBuffer->Convert(uimg::Format::RGB_FLOAT);
 
 			/*{
 				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf.png","wb");
@@ -170,7 +164,7 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 					uimg::save_image(f0,*normalImageBuffer,uimg::ImageFormat::PNG);
 			}*/
 
-			denoise(denoiseInfo,*resultImageBuffer,albedoImageBuffer.get(),normalImageBuffer.get(),[this,&worker](float progress) -> bool {
+			denoise::denoise(denoiseInfo,*resultImageBuffer,albedoImageBuffer.get(),normalImageBuffer.get(),[this,&worker](float progress) -> bool {
 				return !worker.IsCancelled();
 			});
 		}

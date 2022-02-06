@@ -12,7 +12,25 @@
 #include <iostream>
 
 #pragma optimize("",off)
-unirender::Denoiser::Denoiser()
+static std::optional<oidn::Format> get_oidn_format(uimg::Format format)
+{
+	switch(format)
+	{
+	case uimg::Format::R32:
+	case uimg::Format::RG32:
+	case uimg::Format::RGB32:
+	case uimg::Format::RGBA32:
+		return oidn::Format::Float3;
+	case uimg::Format::R16:
+	case uimg::Format::RG16:
+	case uimg::Format::RGB16:
+	case uimg::Format::RGBA16:
+		return oidn::Format::Half3;
+	}
+	return {};
+}
+
+unirender::denoise::Denoiser::Denoiser()
 {
 	auto device = oidn::newDevice();
 	const char *errMsg;
@@ -26,31 +44,42 @@ unirender::Denoiser::Denoiser()
 	m_device = std::make_unique<oidn::DeviceRef>(device);
 }
 
-bool unirender::Denoiser::Denoise(
-	const DenoiseInfo &denoise,float *inOutData,
-	float *optAlbedoData,float *optInNormalData,
-	const std::function<bool(float)> &fProgressCallback,
-	float *optImgOutData
+bool unirender::denoise::Denoiser::Denoise(
+	const Info &denoise,const ImageInputs &inputImages,const ImageData &outputImage,
+	const std::function<bool(float)> &fProgressCallback
 )
 {
 	if(m_device == nullptr)
 		return false;
 	oidn::FilterRef filter = m_device->newFilter(denoise.lightmap ? "RTLightmap" : "RT");
 
-	filter.setImage("color",inOutData,oidn::Format::Float3,denoise.width,denoise.height);
+	auto beautyFormat = get_oidn_format(inputImages.beautyImage.format);
+	if(!beautyFormat)
+		return false;
+	filter.setImage("color",inputImages.beautyImage.data,*beautyFormat,denoise.width,denoise.height,0u,uimg::ImageBuffer::GetPixelSize(inputImages.beautyImage.format));
 	if(denoise.lightmap == false)
 	{
-		if(optAlbedoData)
-			filter.setImage("albedo",optAlbedoData,oidn::Format::Float3,denoise.width,denoise.height);
-		if(optInNormalData)
-			filter.setImage("normal",optInNormalData,oidn::Format::Float3,denoise.width,denoise.height);
+		if(inputImages.albedoImage.data)
+		{
+			auto albedoFormat = get_oidn_format(inputImages.albedoImage.format);
+			if(!albedoFormat)
+				return false;
+			filter.setImage("albedo",inputImages.albedoImage.data,*albedoFormat,denoise.width,denoise.height,0u,uimg::ImageBuffer::GetPixelSize(inputImages.albedoImage.format));
+		}
+		if(inputImages.normalImage.data)
+		{
+			auto normalFormat = get_oidn_format(inputImages.normalImage.format);
+			if(!normalFormat)
+				return false;
+			filter.setImage("normal",inputImages.normalImage.data,*normalFormat,denoise.width,denoise.height,0u,uimg::ImageBuffer::GetPixelSize(inputImages.normalImage.format));
+		}
 
 		filter.set("hdr",denoise.hdr);
 	}
-	if(optImgOutData)
-		filter.setImage("output",optImgOutData,oidn::Format::Float3,denoise.width,denoise.height);
-	else
-		filter.setImage("output",inOutData,oidn::Format::Float3,denoise.width,denoise.height);
+	auto outputFormat = get_oidn_format(outputImage.format);
+	if(!outputFormat)
+		return false;
+	filter.setImage("output",outputImage.data,*outputFormat,denoise.width,denoise.height,0u,uimg::ImageBuffer::GetPixelSize(outputImage.format));
 
 	std::unique_ptr<std::function<bool(float)>> ptrProgressCallback = nullptr;
 	if(fProgressCallback)
@@ -67,68 +96,53 @@ bool unirender::Denoiser::Denoise(
 	filter.commit();
 
 	filter.execute();
-	return true;
-}
-bool unirender::Denoiser::Denoise(
-	const DenoiseInfo &denoiseInfo,uimg::ImageBuffer &imgBuffer,
-	uimg::ImageBuffer *optImgBufferAlbedo,
-	uimg::ImageBuffer *optImgBufferNormal,
-	const std::function<bool(float)> &fProgressCallback,
-	uimg::ImageBuffer *optImgBufferDst
-)
-{
-	if(imgBuffer.GetFormat() == uimg::Format::RGB_FLOAT && (optImgBufferAlbedo == nullptr || optImgBufferAlbedo->GetFormat() == imgBuffer.GetFormat()) && (optImgBufferNormal == nullptr || optImgBufferNormal->GetFormat() == imgBuffer.GetFormat()))
-	{
-		 // Image is already in the right format, we can just denoise and be done with it
-		return Denoise(
-			denoiseInfo,static_cast<float*>(imgBuffer.GetData()),
-			optImgBufferAlbedo ? static_cast<float*>(optImgBufferAlbedo->GetData()) : nullptr,optImgBufferNormal ? static_cast<float*>(optImgBufferNormal->GetData()) : nullptr,
-			fProgressCallback,optImgBufferDst ? static_cast<float*>(optImgBufferDst->GetData()) : nullptr
-		);
-	}
 
-	// Image is in the wrong format, we'll need a temporary copy
-	auto pImgDenoise = imgBuffer.Copy(uimg::Format::RGB_FLOAT);
-	auto pImgAlbedo = optImgBufferAlbedo ? optImgBufferAlbedo->Copy(uimg::Format::RGB_FLOAT) : nullptr;
-	auto pImgNormals = optImgBufferNormal ? optImgBufferNormal->Copy(uimg::Format::RGB_FLOAT) : nullptr;
-	if(Denoise(
-		denoiseInfo,static_cast<float*>(pImgDenoise->GetData()),
-		pImgAlbedo ? static_cast<float*>(pImgAlbedo->GetData()) : nullptr,pImgNormals ? static_cast<float*>(pImgNormals->GetData()) : nullptr,
-		fProgressCallback,optImgBufferDst ? static_cast<float*>(optImgBufferDst->GetData()) : nullptr
-	) == false)
+	const char* errorMessage;
+	if(m_device->getError(errorMessage) != oidn::Error::None)
+	{
+		std::cout<<"Denoising failed: "<<errorMessage<<std::endl;
 		return false;
-
-	// Copy denoised data back to result buffer
-	auto itSrc = pImgDenoise->begin();
-	auto itDst = imgBuffer.begin();
-	auto numChannels = umath::to_integral(uimg::Channel::Count) -1; // -1, because we don't want to overwrite the old alpha channel values
-	for(;itSrc != pImgDenoise->end();++itSrc,++itDst)
-	{
-		auto &pxSrc = *itSrc;
-		auto &pxDst = *itDst;
-		for(auto i=decltype(numChannels){0u};i<numChannels;++i)
-			pxDst.CopyValue(static_cast<uimg::Channel>(i),pxSrc);
 	}
+
 	return true;
 }
 
-bool unirender::denoise(
-	const DenoiseInfo &denoise,
-	float *inOutData,float *optAlbedoData,float *optInNormalData,
+bool unirender::denoise::denoise(
+	const Info &denoise,
+	const ImageInputs &inputImages,const ImageData &outputImage,
 	const std::function<bool(float)> &fProgressCallback
 )
 {
 	Denoiser denoiser {};
-	return denoiser.Denoise(denoise,inOutData,optAlbedoData,optInNormalData,fProgressCallback);
+	return denoiser.Denoise(denoise,inputImages,outputImage,fProgressCallback);
 }
 
-bool unirender::denoise(
-	const DenoiseInfo &denoiseInfo,uimg::ImageBuffer &imgBuffer,
+bool unirender::denoise::denoise(
+	const Info &denoiseInfo,uimg::ImageBuffer &imgBuffer,
 	uimg::ImageBuffer *optImgBufferAlbedo,uimg::ImageBuffer *optImgBufferNormal,
 	const std::function<bool(float)> &fProgressCallback
 )
 {
 	Denoiser denoiser {};
-	return denoiser.Denoise(denoiseInfo,imgBuffer,optImgBufferAlbedo,optImgBufferNormal,fProgressCallback);
+	ImageInputs inputs {};
+	inputs.beautyImage.data = static_cast<uint8_t*>(imgBuffer.GetData());
+	inputs.beautyImage.format = imgBuffer.GetFormat();
+
+	if(optImgBufferAlbedo)
+	{
+		inputs.albedoImage.data = static_cast<uint8_t*>(optImgBufferAlbedo->GetData());
+		inputs.albedoImage.format = optImgBufferAlbedo->GetFormat();
+	}
+	if(optImgBufferNormal)
+	{
+		inputs.normalImage.data = static_cast<uint8_t*>(optImgBufferNormal->GetData());
+		inputs.normalImage.format = optImgBufferNormal->GetFormat();
+	}
+
+	ImageData output {};
+	output.data = static_cast<uint8_t*>(imgBuffer.GetData());
+	output.format = imgBuffer.GetFormat();
+
+	return denoiser.Denoise(denoiseInfo,inputs,output,fProgressCallback);
 }
 #pragma optimize("",on)

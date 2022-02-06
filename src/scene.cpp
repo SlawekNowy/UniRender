@@ -357,11 +357,17 @@ void unirender::Scene::DenoiseHDRImageArea(uimg::ImageBuffer &imgBuffer,uint32_t
 	}
 
 	// Denoise the extracted area
-	DenoiseInfo denoiseInfo {};
-	denoiseInfo.hdr = true;
+	denoise::Info denoiseInfo {};
 	denoiseInfo.width = w;
 	denoiseInfo.height = h;
-	denoise(denoiseInfo,imgAreaData.data());
+
+	denoise::ImageData denoiseImgData {};
+	denoiseImgData.data = reinterpret_cast<uint8_t*>(imgAreaData.data());
+	denoiseImgData.format = uimg::Format::RGB32;
+
+	denoise::ImageInputs inputs {};
+	inputs.beautyImage = denoiseImgData;
+	denoise::denoise(denoiseInfo,inputs,denoiseImgData);
 
 	// Copy the denoised area back into the original image
 	for(auto y=decltype(h){0u};y<h;++y)
