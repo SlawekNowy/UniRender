@@ -116,6 +116,8 @@ std::shared_ptr<uimg::ImageBuffer> &unirender::Renderer::GetResultImageBuffer(co
 	return it->second.at(umath::to_integral(eye));
 }
 
+void unirender::Renderer::UpdateActorMap() {m_actorMap = m_scene->BuildActorMap();}
+
 unirender::Renderer::RenderStageResult unirender::Renderer::StartNextRenderStage(RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye eyeStage)
 {
 	auto result = RenderStageResult::Continue;
@@ -244,6 +246,13 @@ void unirender::Renderer::PrepareCyclesSceneForRendering()
 bool unirender::Renderer::ShouldUseProgressiveFloatFormat() const {return true;}
 bool unirender::Renderer::ShouldUseTransparentSky() const {return m_scene->GetSceneInfo().transparentSky;}
 udm::PropertyWrapper unirender::Renderer::GetApiData() const {return *m_apiData;}
+unirender::WorldObject *unirender::Renderer::FindActor(const util::Uuid &uuid)
+{
+	auto it = m_actorMap.find(util::get_uuid_hash(uuid));
+	if(it == m_actorMap.end())
+		return nullptr;
+	return it->second;
+}
 unirender::PMesh unirender::Renderer::FindRenderMeshByHash(const util::MurmurHash3 &hash) const
 {
 	// TODO: Do this via a lookup table

@@ -51,6 +51,7 @@ namespace unirender
 	class Mesh;
 	class Shader;
 	class Object;
+	class WorldObject;
 	class DLLRTUTIL Renderer
 		: public std::enable_shared_from_this<Renderer>
 	{
@@ -86,12 +87,16 @@ namespace unirender
 		virtual bool Pause()=0;
 		virtual bool Resume()=0;
 		virtual bool Suspend()=0;
-		virtual bool BeginSceneEdit() const {return false;}
-		virtual bool EndSceneEdit() const {return false;}
+		virtual bool BeginSceneEdit() {return false;}
+		virtual bool EndSceneEdit() {return false;}
+		virtual bool SyncEditedActor(const util::Uuid &uuid)=0;
 		virtual bool Export(const std::string &path)=0;
 		virtual std::optional<std::string> SaveRenderPreview(const std::string &path,std::string &outErr) const=0;
 		virtual util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> StartRender()=0;
 		void StopRendering();
+
+		const std::unordered_map<size_t,unirender::WorldObject*> &GetActorMap() const {return m_actorMap;}
+		unirender::WorldObject *FindActor(const util::Uuid &uuid);
 
 		std::shared_ptr<Mesh> FindRenderMeshByHash(const util::MurmurHash3 &hash) const;
 		udm::PropertyWrapper GetApiData() const;
@@ -139,6 +144,7 @@ namespace unirender
 		virtual void SetCancelled(const std::string &msg="Cancelled by application.")=0;
 		virtual void CloseRenderScene()=0;
 		virtual void FinalizeImage(uimg::ImageBuffer &imgBuf,StereoEye eyeStage) {};
+		void UpdateActorMap();
 		std::pair<uint32_t,std::string> AddOutput(const std::string &type);
 
 		std::shared_ptr<Scene> m_scene = nullptr;
@@ -154,6 +160,7 @@ namespace unirender
 		std::condition_variable m_progressiveCondition {};
 		std::mutex m_progressiveMutex {};
 		std::shared_ptr<util::ocio::ColorProcessor> m_colorTransformProcessor = nullptr;
+		std::unordered_map<size_t,unirender::WorldObject*> m_actorMap;
 
 		std::shared_ptr<uimg::ImageBuffer> &GetResultImageBuffer(const std::string &type,StereoEye eye=StereoEye::Left);
 		uimg::ImageBuffer *FindResultImageBuffer(const std::string &type,StereoEye eye=StereoEye::Left);

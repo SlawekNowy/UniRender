@@ -400,6 +400,33 @@ void unirender::Scene::Close()
 
 float unirender::Scene::GetGamma() const {return m_createInfo.hdrOutput ? 1.f : DEFAULT_GAMMA;}
 
+std::unordered_map<size_t,unirender::WorldObject*> unirender::Scene::BuildActorMap() const
+{
+	std::unordered_map<size_t,unirender::WorldObject*> map;
+	auto addActor = [&map](unirender::WorldObject &obj) {
+		map[util::get_uuid_hash(obj.GetUuid())] = &obj;
+	};
+	uint32_t numActors = m_lights.size() +1u /* camera */;
+	for(auto &mdlCache : m_mdlCaches)
+	{
+		for(auto &chunk : mdlCache->GetChunks())
+			numActors += chunk.GetObjects().size();
+	}
+	map.reserve(numActors);
+	for(auto &light : m_lights)
+		addActor(*light);
+	addActor(*m_camera);
+	for(auto &mdlCache : m_mdlCaches)
+	{
+		for(auto &chunk : mdlCache->GetChunks())
+		{
+			for(auto &obj : chunk.GetObjects())
+				addActor(*obj);
+		}
+	}
+	return map;
+}
+
 const std::vector<unirender::PLight> &unirender::Scene::GetLights() const {return const_cast<Scene*>(this)->GetLights();}
 std::vector<unirender::PLight> &unirender::Scene::GetLights() {return m_lights;}
 

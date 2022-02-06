@@ -51,6 +51,7 @@ namespace unirender
 	class SceneObject;
 	class Scene;
 	class Shader;
+	class WorldObject;
 	class ShaderModuleRoughness;
 	using PShader = std::shared_ptr<Shader>;
 	class Object;
@@ -261,6 +262,8 @@ namespace unirender
 		DenoiseMode GetDenoiseMode() const {return m_createInfo.denoiseMode;}
 		bool ShouldDenoise() const {return GetDenoiseMode() != DenoiseMode::None;}
 		float GetGamma() const;
+
+		std::unordered_map<size_t,WorldObject*> BuildActorMap() const;
 
 		void PrintLogInfo();
 	private:
