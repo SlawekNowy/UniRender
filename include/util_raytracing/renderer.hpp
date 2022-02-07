@@ -41,7 +41,7 @@ namespace unirender
 		using util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::AddThread;
 		using util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::UpdateProgress;
 	private:
-		virtual void DoCancel(const std::string &resultMsg) override;
+		virtual void DoCancel(const std::string &resultMsg,std::optional<int32_t> resultCode) override;
 		PRenderer m_renderer = nullptr;
 		template<typename TJob,typename... TARGS>
 			friend util::ParallelJob<typename TJob::RESULT_TYPE> util::create_parallel_job(TARGS&& ...args);

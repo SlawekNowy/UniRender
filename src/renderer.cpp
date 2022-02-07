@@ -23,9 +23,9 @@
 unirender::RenderWorker::RenderWorker(Renderer &renderer)
 	: util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>{},m_renderer{renderer.shared_from_this()}
 {}
-void unirender::RenderWorker::DoCancel(const std::string &resultMsg)
+void unirender::RenderWorker::DoCancel(const std::string &resultMsg,std::optional<int32_t> resultCode)
 {
-	util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::DoCancel(resultMsg);
+	util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::DoCancel(resultMsg,resultCode);
 	m_renderer->OnParallelWorkerCancelled();
 }
 void unirender::RenderWorker::Wait()
@@ -181,7 +181,6 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 	case ImageRenderStage::FinalizeImage:
 	{
 		auto &resultImageBuffer = GetResultImageBuffer(OUTPUT_COLOR,eyeStage);
-		resultImageBuffer->Convert(uimg::Format::RGBA_HDR);
 		if(m_colorTransformProcessor) // TODO: Should we really apply color transform if we're not denoising?
 		{
 			std::string err;
