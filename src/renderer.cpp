@@ -86,9 +86,9 @@ bool unirender::Renderer::UnloadRendererLibrary(const std::string &rendererIdent
 
 ///////////////////
 
-unirender::Renderer::Renderer(const Scene &scene)
+unirender::Renderer::Renderer(const Scene &scene,Flags flags)
 	: m_scene{const_cast<Scene&>(scene).shared_from_this()},
-	m_apiData{udm::Property::Create(udm::Type::Element)}
+	m_apiData{udm::Property::Create(udm::Type::Element)},m_flags{flags}
 {}
 std::pair<uint32_t,std::string> unirender::Renderer::AddOutput(const std::string &type)
 {

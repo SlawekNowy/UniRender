@@ -100,6 +100,7 @@ namespace unirender
 
 		std::shared_ptr<Mesh> FindRenderMeshByHash(const util::MurmurHash3 &hash) const;
 		udm::PropertyWrapper GetApiData() const;
+		Flags GetFlags() const {return m_flags;}
 
 		virtual bool ShouldUseProgressiveFloatFormat() const;
 		bool ShouldUseTransparentSky() const;
@@ -109,7 +110,7 @@ namespace unirender
 		const TileManager &GetTileManager() const {return const_cast<Renderer*>(this)->GetTileManager();}
 		std::vector<unirender::TileManager::TileData> GetRenderedTileBatch();
 	protected:
-		Renderer(const Scene &scene);
+		Renderer(const Scene &scene,Flags flags);
 		bool Initialize();
 		Object *FindObject(const std::string &objectName) const;
 		friend RenderWorker;
@@ -148,6 +149,7 @@ namespace unirender
 		std::pair<uint32_t,std::string> AddOutput(const std::string &type);
 
 		std::shared_ptr<Scene> m_scene = nullptr;
+		Flags m_flags = Flags::None;
 		TileManager m_tileManager {};
 		udm::PProperty m_apiData = nullptr;
 
