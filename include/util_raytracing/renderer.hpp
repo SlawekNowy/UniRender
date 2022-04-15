@@ -10,6 +10,7 @@
 
 #include "definitions.hpp"
 #include "util_raytracing/tilemanager.hpp"
+#include <util_image.hpp>
 #include <sharedutils/util_parallel_job.hpp>
 #include <sharedutils/util.h>
 #include <sharedutils/util_event_reply.hpp>
@@ -147,6 +148,8 @@ namespace unirender
 		virtual void FinalizeImage(uimg::ImageBuffer &imgBuf,StereoEye eyeStage) {};
 		void UpdateActorMap();
 		std::pair<uint32_t,std::string> AddOutput(const std::string &type);
+		void DumpImage(const std::string &renderStage,uimg::ImageBuffer &imgBuffer,uimg::ImageFormat format=uimg::ImageFormat::HDR,const std::optional<std::string> &fileName={}) const;
+		bool ShouldDumpRenderStageImages() const;
 
 		std::shared_ptr<Scene> m_scene = nullptr;
 		Flags m_flags = Flags::None;

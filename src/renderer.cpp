@@ -18,6 +18,7 @@
 #include <util_ocio.hpp>
 #include <sharedutils/util_path.hpp>
 #include <sharedutils/util_library.hpp>
+#include <fsys/ifile.hpp>
 
 #pragma optimize("",off)
 unirender::RenderWorker::RenderWorker(Renderer &renderer)
@@ -124,6 +125,28 @@ unirender::Renderer::RenderStageResult unirender::Renderer::StartNextRenderStage
 	auto handled = HandleRenderStage(worker,stage,eyeStage,&result);
 	return result;
 }
+void unirender::Renderer::DumpImage(const std::string &renderStage,uimg::ImageBuffer &imgBuffer,uimg::ImageFormat format,const std::optional<std::string> &fileNameOverride) const
+{
+	filemanager::create_path("temp");
+	auto fileName = fileNameOverride.has_value() ? *fileNameOverride : ("temp/render_output_" +renderStage +"." +uimg::get_file_extension(format));
+	auto f = filemanager::open_file(fileName,filemanager::FileMode::Write | filemanager::FileMode::Binary);
+	if(!f)
+	{
+		std::cout<<"Failed to dump render stage image '"<<renderStage<<"': Could not open file '"<<fileName<<"' for writing!"<<std::endl;
+		return;
+	}
+	fsys::File fp {f};
+	auto res = uimg::save_image(fp,imgBuffer,uimg::ImageFormat::HDR);
+	if(!res)
+		std::cout<<"Failed to dump render stage image '"<<renderStage<<"': Unknown error!"<<std::endl;
+}
+bool unirender::Renderer::ShouldDumpRenderStageImages() const
+{
+	auto apiData = GetApiData();
+	auto dumpRenderStageImages = false;
+	apiData.GetFromPath("debug/dumpRenderStageImages")(dumpRenderStageImages);
+	return dumpRenderStageImages;
+}
 util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,unirender::Renderer::ImageRenderStage stage,StereoEye eyeStage,unirender::Renderer::RenderStageResult *optResult)
 {
 	switch(stage)
@@ -167,6 +190,8 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 			denoise::denoise(denoiseInfo,*resultImageBuffer,albedoImageBuffer.get(),normalImageBuffer.get(),[this,&worker](float progress) -> bool {
 				return !worker.IsCancelled();
 			});
+			if(ShouldDumpRenderStageImages())
+				DumpImage("denoise",*resultImageBuffer,uimg::ImageFormat::HDR);
 		}
 
 		if(UpdateStereoEye(worker,stage,eyeStage))
@@ -186,8 +211,12 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 			std::string err;
 			if(m_colorTransformProcessor->Apply(*resultImageBuffer,err) == false)
 				m_scene->HandleError("Unable to apply color transform: " +err);
+			if(ShouldDumpRenderStageImages())
+				DumpImage("color_transform",*resultImageBuffer,uimg::ImageFormat::HDR);
 		}
 		resultImageBuffer->ClearAlpha();
+		if(ShouldDumpRenderStageImages())
+			DumpImage("alpha",*resultImageBuffer,uimg::ImageFormat::HDR);
 		FinalizeImage(*resultImageBuffer,eyeStage);
 		if(UpdateStereoEye(worker,stage,eyeStage))
 		{
