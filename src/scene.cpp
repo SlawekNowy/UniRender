@@ -162,7 +162,7 @@ void unirender::Scene::PrintLogInfo()
 		ss<<"Name: "<<l->GetName()<<"\n";
 		ss<<"Type: "<<magic_enum::enum_name(l->GetType())<<"\n";
 		ss<<"Outer cone angle: "<<l->GetOuterConeAngle()<<"\n";
-		ss<<"Inner cone angle: "<<l->GetInnerConeAngle()<<"\n";
+		ss<<"Blend fraction: "<<l->GetBlendFraction()<<"\n";
 		ss<<"Color: "<<l->GetColor()<<"\n";
 		ss<<"Intensity: "<<l->GetIntensity()<<"\n";
 		ss<<"Size: "<<l->GetSize()<<"\n";

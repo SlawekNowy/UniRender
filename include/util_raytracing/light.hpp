@@ -44,7 +44,7 @@ namespace unirender
 		util::WeakHandle<Light> GetHandle();
 
 		void SetType(Type type);
-		void SetConeAngles(umath::Degree innerAngle,umath::Degree outerAngle);
+		void SetConeAngle(umath::Degree outerAngle,umath::Fraction blendFraction);
 		void SetColor(const Color &color);
 		void SetIntensity(Lumen intensity);
 		void SetSize(float size);
@@ -62,7 +62,7 @@ namespace unirender
 		float GetSize() const {return m_size;}
 		const Vector3 &GetColor() const {return m_color;}
 		Lumen GetIntensity() const {return m_intensity;}
-		umath::Degree GetInnerConeAngle() const {return m_spotInnerAngle;}
+		umath::Fraction GetBlendFraction() const {return m_blendFraction;}
 		umath::Degree GetOuterConeAngle() const {return m_spotOuterAngle;}
 		const Vector3 &GetAxisU() const {return m_axisU;}
 		const Vector3 &GetAxisV() const {return m_axisV;}
@@ -79,7 +79,7 @@ namespace unirender
 		Vector3 m_color = {1.f,1.f,1.f};
 		Lumen m_intensity = 1'600.f;
 		Type m_type = Type::Point;
-		umath::Degree m_spotInnerAngle = 0.f;
+		umath::Fraction m_blendFraction = 0.f;
 		umath::Degree m_spotOuterAngle = 0.f;
 
 		Vector3 m_axisU = {};

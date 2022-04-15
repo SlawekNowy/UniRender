@@ -37,9 +37,9 @@ util::WeakHandle<unirender::Light> unirender::Light::GetHandle()
 
 void unirender::Light::SetType(Type type) {m_type = type;}
 
-void unirender::Light::SetConeAngles(umath::Radian innerAngle,umath::Radian outerAngle)
+void unirender::Light::SetConeAngle(umath::Degree outerAngle,umath::Fraction blendFraction)
 {
-	m_spotInnerAngle = innerAngle;
+	m_blendFraction = blendFraction;
 	m_spotOuterAngle = outerAngle;
 }
 
