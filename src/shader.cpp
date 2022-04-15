@@ -1378,7 +1378,7 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_clear::IN_ABSORPTION,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
 		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::volume_clear::IN_EMISSION,STVector{0.f,0.f,0.f},unirender::SocketIO::In);
 		
-		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_clear::IN_DEFAULT_WORLD_VOLUME,false,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_clear::IN_DEFAULT_WORLD_VOLUME,false);
 
 		desc->RegisterSocket<unirender::SocketType::Closure>(nodes::volume_clear::OUT_VOLUME,unirender::SocketIO::Out);
 		desc->RegisterPrimaryOutputSocket(nodes::volume_clear::OUT_VOLUME);
@@ -1397,7 +1397,7 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_homogeneous::IN_MULTI_SCATTERING,false,unirender::SocketIO::In);
 		
 		desc->RegisterSocket<unirender::SocketType::Float>(nodes::volume_homogeneous::IN_ABSORPTION_DEPTH,0.01f,unirender::SocketIO::In);
-		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_homogeneous::IN_DEFAULT_WORLD_VOLUME,false,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_homogeneous::IN_DEFAULT_WORLD_VOLUME,false);
 
 		desc->RegisterSocket<unirender::SocketType::Closure>(nodes::volume_homogeneous::OUT_VOLUME,unirender::SocketIO::Out);
 		desc->RegisterPrimaryOutputSocket(nodes::volume_homogeneous::OUT_VOLUME);
@@ -1418,7 +1418,7 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterSocket<unirender::SocketType::Float>(nodes::volume_heterogeneous::IN_STEP_SIZE,0.f,unirender::SocketIO::In);
 		desc->RegisterSocket<unirender::SocketType::Int>(nodes::volume_heterogeneous::IN_STEP_MAX_COUNT,0,unirender::SocketIO::In);
 		
-		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_heterogeneous::IN_DEFAULT_WORLD_VOLUME,false,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::volume_heterogeneous::IN_DEFAULT_WORLD_VOLUME,false);
 
 		desc->RegisterSocket<unirender::SocketType::Closure>(nodes::volume_heterogeneous::OUT_VOLUME,unirender::SocketIO::Out);
 		desc->RegisterPrimaryOutputSocket(nodes::volume_heterogeneous::OUT_VOLUME);
