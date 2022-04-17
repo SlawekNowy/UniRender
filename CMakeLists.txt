@@ -67,33 +67,18 @@ link_external_library(vfilesystem)
 link_external_library(util_udm)
 link_external_library(opensubdiv)
 
-add_include_dir(cycles)
-add_include_dir(cycles_atomic)
-add_include_dir(openimageio)
-add_external_library(openimageio)
 link_external_library(openimagedenoise)
-add_include_dir(openexr)
 add_include_dir(glm)
 add_external_library(glew)
-add_external_library(tiff)
 add_external_library(lpng)
 add_external_library(zlib)
-add_external_library(jpeg)
 add_external_library(lz4)
 
 # Required for color management
 link_external_library(util_ocio)
-add_external_library(OpenEXR_Half)
-add_external_library(OpenEXR_Iex)
-add_external_library(OpenEXR_IlmThread)
-add_external_library(OpenEXR_Imath)
-add_external_library(OpenEXR_IlmImf)
-add_external_library(OpenColorIO)
-add_external_library(OpenImageIO)
+link_external_library(OpenColorIO)
 #
 
-set(DEPENDENCY_CYCLES_LIBRARY_LOCATION "" CACHE FILEPATH "Path to cycles libraries.")
-set(DEPENDENCY_OPENEXR_LIBRARY_LOCATION "" CACHE FILEPATH "Path to openexr libraries.")
 add_def(OIIO_STATIC_BUILD)
 add_def(GLEW_STATIC)
 add_def(RTUTIL_DLL)
@@ -156,49 +141,3 @@ target_link_libraries(${PROJ_NAME}
 )
 
 add_dependencies(${PROJ_NAME} mathutil sharedutils vfilesystem util_image)
-
-if(WIN32)
-	set(DEPENDENCY_CYCLES_UTIL_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/cycles_util.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_CYCLES_DEVICE_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/cycles_device.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_CYCLES_RENDER_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/cycles_render.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_CYCLES_KERNEL_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/cycles_kernel.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_CYCLES_GRAPH_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/cycles_graph.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_CYCLES_SUBD_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/cycles_subd.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_CYCLES_BVH_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/cycles_bvh.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_CYCLES_CLEW_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/extern_clew.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_CYCLES_CUEW_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/extern_cuew.lib CACHE PATH "Path to library." FORCE)
-	set(DEPENDENCY_CYCLES_NUMAAPI_LIBRARY ${DEPENDENCY_CYCLES_LIBRARY_LOCATION}/extern_numaapi.lib CACHE PATH "Path to library." FORCE)
-
-	# set(DEPENDENCY_OPENEXR_HALF_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Half-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	# set(DEPENDENCY_OPENEXR_IEX_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Iex-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	# set(DEPENDENCY_OPENEXR_IEX_MATH_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IexMath-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	# set(DEPENDENCY_OPENEXR_ILM_IMF_LIBRARY ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmImf-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	# set(DEPENDENCY_OPENEXR_ILM_IMF_UTIL ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmImfUtil-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	# set(DEPENDENCY_OPENEXR_ILM_THREAD ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/IlmThread-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	# set(DEPENDENCY_OPENEXR_IMATH ${DEPENDENCY_OPENEXR_LIBRARY_LOCATION}/Imath-2_3_static.lib CACHE PATH "Path to library." FORCE)
-	target_link_libraries(${PROJ_NAME}
-		${DEPENDENCY_CYCLES_UTIL_LIBRARY}
-		${DEPENDENCY_CYCLES_DEVICE_LIBRARY}
-		${DEPENDENCY_CYCLES_RENDER_LIBRARY}
-		${DEPENDENCY_CYCLES_KERNEL_LIBRARY}
-		${DEPENDENCY_CYCLES_GRAPH_LIBRARY}
-		${DEPENDENCY_CYCLES_SUBD_LIBRARY}
-		${DEPENDENCY_CYCLES_BVH_LIBRARY}
-		${DEPENDENCY_CYCLES_CLEW_LIBRARY}
-		${DEPENDENCY_CYCLES_CUEW_LIBRARY}
-		${DEPENDENCY_CYCLES_NUMAAPI_LIBRARY}
-
-		${DEPENDENCY_OPENEXR_HALF_LIBRARY}
-		${DEPENDENCY_OPENEXR_IEX_LIBRARY}
-		${DEPENDENCY_OPENEXR_IEX_MATH_LIBRARY}
-		${DEPENDENCY_OPENEXR_ILM_IMF_LIBRARY}
-		${DEPENDENCY_OPENEXR_ILM_IMF_UTIL}
-		${DEPENDENCY_OPENEXR_ILM_THREAD}
-		${DEPENDENCY_OPENEXR_IMATH}
-		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_filesystem-vc142-mt-x64-1_76.lib
-		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_date_time-vc142-mt-x64-1_76.lib
-		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_thread-vc142-mt-x64-1_76.lib
-		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_chrono-vc142-mt-x64-1_76.lib
-		${DEPENDENCY_BOOST_LIBRARY_LOCATION}/libboost_regex-vc142-mt-x64-1_76.lib
-	)
-endif()
