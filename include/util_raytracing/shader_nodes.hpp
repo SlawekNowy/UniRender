@@ -497,6 +497,21 @@ namespace unirender
 
 			constexpr auto *OUT_BSDF = "BSDF";
 		};
+		namespace principled_volume
+		{
+			constexpr auto *IN_COLOR = "color";
+			constexpr auto *IN_DENSITY = "density";
+			constexpr auto *IN_ANISOTROPY = "anisotropy";
+			constexpr auto *IN_ABSORPTION_COLOR = "absorption_color";
+			constexpr auto *IN_EMISSION_STRENGTH = "emission_strength";
+			constexpr auto *IN_EMISSION_COLOR = "emission_color";
+			constexpr auto *IN_BLACKBODY_INTENSITY = "blackbody_intensity";
+			constexpr auto *IN_BLACKBODY_TINT = "blackbody_tint";
+			constexpr auto *IN_TEMPERATURE = "temperature";
+			constexpr auto *IN_VOLUME_MIX_WEIGHT = "volume_mix_weight";
+
+			constexpr auto *OUT_VOLUME = "volume";
+		};
 		namespace toon_bsdf
 		{
 			constexpr auto *IN_COMPONENT = "component";
@@ -716,7 +731,7 @@ namespace unirender
 			constexpr auto *OUT_FACING = "facing";
 		};
 	};
-	constexpr uint32_t NODE_COUNT = 40;
+	constexpr uint32_t NODE_COUNT = 41;
 };
 
 DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::Socket &socket);

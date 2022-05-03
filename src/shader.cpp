@@ -1317,6 +1317,24 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterPrimaryOutputSocket(nodes::principled_bsdf::OUT_BSDF);
 		return desc;
 	});
+	RegisterNodeType(NODE_PRINCIPLED_VOLUME,[](GroupNodeDesc *parent) {
+		auto desc = NodeDesc::Create(parent);
+		
+		desc->RegisterSocket<unirender::SocketType::Color>(nodes::principled_volume::IN_COLOR,STColor{0.5f,0.5f,0.5f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::principled_volume::IN_DENSITY,1.f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::principled_volume::IN_ANISOTROPY,0.f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Color>(nodes::principled_volume::IN_ABSORPTION_COLOR,STColor{0.f,0.f,0.f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::principled_volume::IN_EMISSION_STRENGTH,0.f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Color>(nodes::principled_volume::IN_EMISSION_COLOR,STColor{0.f,0.f,0.f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::principled_volume::IN_BLACKBODY_INTENSITY,0.f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Color>(nodes::principled_volume::IN_BLACKBODY_TINT,STColor{0.f,0.f,0.f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::principled_volume::IN_TEMPERATURE,1000.f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::principled_volume::IN_VOLUME_MIX_WEIGHT,0.f,unirender::SocketIO::In);
+
+		desc->RegisterSocket<unirender::SocketType::Closure>(nodes::principled_volume::OUT_VOLUME,unirender::SocketIO::Out);
+		desc->RegisterPrimaryOutputSocket(nodes::principled_volume::OUT_VOLUME);
+		return desc;
+	});
 	RegisterNodeType(NODE_TOON_BSDF,[](GroupNodeDesc *parent) {
 		auto desc = NodeDesc::Create(parent);
 
@@ -1509,7 +1527,7 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterPrimaryOutputSocket(nodes::layer_weight::OUT_FRESNEL);
 		return desc;
 	});
-	static_assert(NODE_COUNT == 40,"Increase this number if new node types are added!");
+	static_assert(NODE_COUNT == 41,"Increase this number if new node types are added!");
 }
 
 std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc) {os<<desc.ToString(); return os;}

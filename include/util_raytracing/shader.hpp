@@ -450,6 +450,7 @@ namespace unirender
 	constexpr auto *NODE_DIFFUSE_BSDF = "diffuse_bsdf";
 	constexpr auto *NODE_NORMAL_MAP = "normal_map";
 	constexpr auto *NODE_PRINCIPLED_BSDF = "principled_bsdf";
+	constexpr auto *NODE_PRINCIPLED_VOLUME = "principled_volume";
 	constexpr auto *NODE_TOON_BSDF = "toon_bsdf";
 	constexpr auto *NODE_GLASS_BSDF = "glass_bsdf";
 	constexpr auto *NODE_GLOSSY_BSDF = "glossy_bsdf";
@@ -465,7 +466,7 @@ namespace unirender
 	constexpr auto *NODE_VOLUME_CLEAR = "volume_clear";
 	constexpr auto *NODE_VOLUME_HOMOGENEOUS = "volume_homogeneous";
 	constexpr auto *NODE_VOLUME_HETEROGENEOUS = "volume_heterogeneous";
-	static_assert(NODE_COUNT == 40,"Increase this number if new node types are added!");
+	static_assert(NODE_COUNT == 41,"Increase this number if new node types are added!");
 };
 
 DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc);
