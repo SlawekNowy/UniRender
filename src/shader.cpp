@@ -1476,6 +1476,20 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterPrimaryOutputSocket(nodes::mix::OUT_COLOR);
 		return desc;
 	});
+	RegisterNodeType(NODE_NOISE_TEXTURE,[](GroupNodeDesc *parent) {
+		auto desc =  NodeDesc::Create(parent);
+		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::noise_texture::IN_VECTOR,STVector{},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::noise_texture::IN_W,0.f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::noise_texture::IN_SCALE,1.f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::noise_texture::IN_DETAIL,2.f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::noise_texture::IN_ROUGHNESS,0.5f,unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::noise_texture::IN_DISTORTION,0.f,unirender::SocketIO::In);
+
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::noise_texture::OUT_FAC,unirender::SocketIO::Out);
+		desc->RegisterSocket<unirender::SocketType::Color>(nodes::noise_texture::OUT_COLOR,unirender::SocketIO::Out);
+		desc->RegisterPrimaryOutputSocket(nodes::noise_texture::OUT_COLOR);
+		return desc;
+	});
 	RegisterNodeType(NODE_RGB_TO_BW,[](GroupNodeDesc *parent) {
 		auto desc =  NodeDesc::Create(parent);
 		desc->RegisterSocket<unirender::SocketType::Color>(nodes::rgb_to_bw::IN_COLOR,STColor{},unirender::SocketIO::In);
@@ -1527,7 +1541,7 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterPrimaryOutputSocket(nodes::layer_weight::OUT_FRESNEL);
 		return desc;
 	});
-	static_assert(NODE_COUNT == 41,"Increase this number if new node types are added!");
+	static_assert(NODE_COUNT == 42,"Increase this number if new node types are added!");
 }
 
 std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc) {os<<desc.ToString(); return os;}

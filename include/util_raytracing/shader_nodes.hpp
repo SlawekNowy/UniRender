@@ -317,6 +317,18 @@ namespace unirender
 			constexpr auto *OUT_COLOR = "color";
 			constexpr auto *OUT_ALPHA = "alpha";
 		};
+		namespace noise_texture
+		{
+			constexpr auto *IN_VECTOR = "vector";
+			constexpr auto *IN_W = "w";
+			constexpr auto *IN_SCALE = "scale";
+			constexpr auto *IN_DETAIL = "detail";
+			constexpr auto *IN_ROUGHNESS = "roughness";
+			constexpr auto *IN_DISTORTION = "distortion";
+
+			constexpr auto *OUT_FAC = "fac";
+			constexpr auto *OUT_COLOR = "color";
+		};
 		namespace mix_closure
 		{
 			constexpr auto *IN_FAC = "fac";
@@ -731,7 +743,7 @@ namespace unirender
 			constexpr auto *OUT_FACING = "facing";
 		};
 	};
-	constexpr uint32_t NODE_COUNT = 41;
+	constexpr uint32_t NODE_COUNT = 42;
 };
 
 DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::Socket &socket);

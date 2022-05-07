@@ -462,11 +462,12 @@ namespace unirender
 	constexpr auto *NODE_VECTOR_TRANSFORM = "vector_transform";
 	constexpr auto *NODE_RGB_RAMP = "rgb_ramp";
 	constexpr auto *NODE_LAYER_WEIGHT = "layer_weight";
+	constexpr auto *NODE_NOISE_TEXTURE = "noise_texture";
 
 	constexpr auto *NODE_VOLUME_CLEAR = "volume_clear";
 	constexpr auto *NODE_VOLUME_HOMOGENEOUS = "volume_homogeneous";
 	constexpr auto *NODE_VOLUME_HETEROGENEOUS = "volume_heterogeneous";
-	static_assert(NODE_COUNT == 41,"Increase this number if new node types are added!");
+	static_assert(NODE_COUNT == 42,"Increase this number if new node types are added!");
 };
 
 DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc);
