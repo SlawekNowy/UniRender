@@ -162,6 +162,24 @@ void unirender::Mesh::Serialize(DataStream &dsOut,const std::function<std::optio
 
 	dsOut->Write<size_t>(m_lightmapUvs.size());
 	dsOut->Write(reinterpret_cast<const uint8_t*>(m_lightmapUvs.data()),m_lightmapUvs.size() *sizeof(m_lightmapUvs.front()));
+
+	dsOut->Write<size_t>(m_hairStrandDataSets.size());
+	for(auto &set : m_hairStrandDataSets)
+	{
+		dsOut->Write<uint32_t>(set.shaderIndex);
+
+		dsOut->Write<size_t>(set.strandData.hairSegments.size());
+		dsOut->Write(reinterpret_cast<const uint8_t*>(set.strandData.hairSegments.data()),util::size_of_container(set.strandData.hairSegments));
+
+		dsOut->Write<size_t>(set.strandData.points.size());
+		dsOut->Write(reinterpret_cast<const uint8_t*>(set.strandData.points.data()),util::size_of_container(set.strandData.points));
+
+		dsOut->Write<size_t>(set.strandData.uvs.size());
+		dsOut->Write(reinterpret_cast<const uint8_t*>(set.strandData.uvs.data()),util::size_of_container(set.strandData.uvs));
+
+		dsOut->Write<size_t>(set.strandData.thicknessData.size());
+		dsOut->Write(reinterpret_cast<const uint8_t*>(set.strandData.thicknessData.data()),util::size_of_container(set.strandData.thicknessData));
+	}
 }
 void unirender::Mesh::Serialize(DataStream &dsOut,const std::unordered_map<const Shader*,size_t> shaderToIndexTable) const
 {
@@ -271,6 +289,24 @@ void unirender::Mesh::Deserialize(DataStream &dsIn,const std::function<PShader(u
 	auto numLightmapUvs = dsIn->Read<size_t>();
 	m_lightmapUvs.resize(numLightmapUvs);
 	dsIn->Read(m_lightmapUvs.data(),m_lightmapUvs.size() *sizeof(m_lightmapUvs.front()));
+
+	auto numHairStrandData = dsIn->Read<size_t>();
+	m_hairStrandDataSets.reserve(numHairStrandData);
+	for(auto i=decltype(numHairStrandData){0u};i<numHairStrandData;++i)
+	{
+		m_hairStrandDataSets.push_back({});
+		auto &set = m_hairStrandDataSets.back();
+		set.shaderIndex = dsIn->Read<uint32_t>();
+		auto readArray = [&dsIn](auto &data) {
+			auto size = dsIn->Read<size_t>();
+			data.resize(size);
+			dsIn->Read(data.data(),sizeof(data[0]) *size);
+		};
+		readArray(set.strandData.hairSegments);
+		readArray(set.strandData.points);
+		readArray(set.strandData.uvs);
+		readArray(set.strandData.thicknessData);
+	}
 }
 
 template<typename T>
@@ -391,6 +427,9 @@ bool unirender::Mesh::AddAlpha(float alpha)
 	m_perVertexAlphas.push_back(alpha);
 	return true;
 }
+
+void unirender::Mesh::AddHairStrandData(const util::HairStrandData &hairStrandData,uint32_t shaderIdx) {m_hairStrandDataSets.push_back({hairStrandData,shaderIdx});}
+const std::vector<unirender::Mesh::HairStandDataSet> &unirender::Mesh::GetHairStrandDataSets() const {return m_hairStrandDataSets;}
 
 bool unirender::Mesh::AddWrinkleFactor(float factor)
 {

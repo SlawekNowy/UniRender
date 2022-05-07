@@ -15,6 +15,7 @@
 #include <optional>
 #include <mathutil/uvec.h>
 #include <sharedutils/util.h>
+#include <sharedutils/util_hair.hpp>
 
 class DataStream;
 namespace unirender
@@ -30,6 +31,11 @@ namespace unirender
 		public std::enable_shared_from_this<Mesh>
 	{
 	public:
+		struct DLLRTUTIL HairStandDataSet
+		{
+			util::HairStrandData strandData;
+			uint32_t shaderIndex;
+		};
 		enum class Flags : uint8_t
 		{
 			None = 0u,
@@ -78,6 +84,8 @@ namespace unirender
 		const std::vector<Smooth> &GetSmooth() const {return m_smooth;}
 		const std::vector<int> &GetShaders() const {return m_shader;}
 		const std::vector<Vector2> &GetPerVertexUvs() const {return m_perVertexUvs;}
+		void AddHairStrandData(const util::HairStrandData &hairStrandData,uint32_t shaderIdx);
+		const std::vector<HairStandDataSet> &GetHairStrandDataSets() const;
 
 		// For internal use only
 		std::vector<uint32_t> &GetOriginalShaderIndexTable() {return m_originShaderIndexTable;}
@@ -89,6 +97,7 @@ namespace unirender
 		std::vector<float> m_perVertexAlphas = {};
 		std::vector<PShader> m_subMeshShaders = {};
 		std::vector<Vector2> m_lightmapUvs = {};
+		std::vector<HairStandDataSet> m_hairStrandDataSets;
 		uint64_t m_numVerts = 0ull;
 		uint64_t m_numTris = 0ull;
 		Flags m_flags = Flags::None;
