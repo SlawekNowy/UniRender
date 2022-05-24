@@ -549,6 +549,10 @@ void unirender::Scene::Save(DataStream &dsOut,const std::string &rootDir,const S
 		light->Serialize(dsOut);
 
 	m_camera->Serialize(dsOut);
+
+	dsOut->Write<bool>(m_bakeTargetName.has_value());
+	if(m_bakeTargetName.has_value())
+		dsOut->WriteString(*m_bakeTargetName);
 }
 bool unirender::Scene::ReadSerializationHeader(DataStream &dsIn,RenderMode &outRenderMode,CreateInfo &outCreateInfo,SerializationData &outSerializationData,uint32_t &outVersion,SceneInfo *optOutSceneInfo)
 {
@@ -615,6 +619,10 @@ bool unirender::Scene::Load(DataStream &dsIn,const std::string &rootDir)
 		m_lights.push_back(Light::Create(version,dsIn));
 
 	m_camera->Deserialize(version,dsIn);
+
+	auto hasBakeTarget = dsIn->Read<bool>();
+	if(hasBakeTarget)
+		m_bakeTargetName = dsIn->ReadString();
 	return true;
 }
 
@@ -635,7 +643,13 @@ void unirender::Scene::SetMaxDiffuseBounces(uint32_t bounces) {m_sceneInfo.maxDi
 void unirender::Scene::SetMaxGlossyBounces(uint32_t bounces) {m_sceneInfo.maxGlossyBounces = bounces;}
 void unirender::Scene::SetMaxTransmissionBounces(uint32_t bounces) {m_sceneInfo.maxTransmissionBounces = bounces;}
 void unirender::Scene::SetMotionBlurStrength(float strength) {m_sceneInfo.motionBlurStrength = strength;}
-void unirender::Scene::SetAOBakeTarget(Object &o) {o.SetName("bake_target");}
+const std::string *unirender::Scene::GetBakeTargetName() const {return m_bakeTargetName.has_value() ? &*m_bakeTargetName : nullptr;}
+bool unirender::Scene::HasBakeTarget() const {return m_bakeTargetName.has_value();}
+void unirender::Scene::SetBakeTarget(Object &o)
+{
+	o.SetName("bake_target");
+	m_bakeTargetName = "bake_target";
+}
 Vector2i unirender::Scene::GetResolution() const
 {
 	return {m_camera->GetWidth(),m_camera->GetHeight()};

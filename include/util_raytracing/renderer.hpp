@@ -77,6 +77,7 @@ namespace unirender
 		static constexpr const char *OUTPUT_ALBEDO = "ALBEDO";
 		static constexpr const char *OUTPUT_NORMAL = "NORMAL";
 		static constexpr const char *OUTPUT_DEPTH = "DEPTH";
+		static constexpr const char *OUTPUT_AO = "AO";
 
 		virtual ~Renderer()=default;
 		virtual void Wait()=0;

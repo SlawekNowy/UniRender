@@ -248,7 +248,9 @@ namespace unirender
 		void SetMaxGlossyBounces(uint32_t bounces);
 		void SetMaxTransmissionBounces(uint32_t bounces);
 		void SetMotionBlurStrength(float strength);
-		void SetAOBakeTarget(Object &o);
+		void SetBakeTarget(Object &o);
+		const std::string *GetBakeTargetName() const;
+		bool HasBakeTarget() const;
 		Vector2i GetResolution() const;
 		const CreateInfo &GetCreateInfo() const {return m_createInfo;}
 
@@ -281,6 +283,7 @@ namespace unirender
 		SceneInfo m_sceneInfo {};
 		std::vector<std::shared_ptr<ModelCache>> m_mdlCaches {};
 		std::vector<PLight> m_lights = {};
+		std::optional<std::string> m_bakeTargetName {};
 		CreateInfo m_createInfo {};
 		PCamera m_camera = nullptr;
 		StateFlags m_stateFlags = StateFlags::None;
