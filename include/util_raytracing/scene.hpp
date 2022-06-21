@@ -117,6 +117,7 @@ namespace unirender
 			BakeAmbientOcclusion,
 			BakeNormals,
 			BakeDiffuseLighting,
+			BakeDiffuseLightingSeparate,
 			SceneAlbedo,
 			SceneNormals,
 			SceneDepth,
@@ -185,6 +186,7 @@ namespace unirender
 			bool preCalculateLight = false;
 		};
 		static bool IsRenderSceneMode(RenderMode renderMode);
+		static bool IsLightmapRenderMode(RenderMode renderMode);
 		static void SetKernelPath(const std::string &kernelPath);
 		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,RenderMode renderMode,const CreateInfo &createInfo={});
 		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,DataStream &dsIn,const std::string &rootDir,RenderMode renderMode,const CreateInfo &createInfo={});

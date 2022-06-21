@@ -17,6 +17,8 @@
 #include <udm_types.hpp>
 #include <cinttypes>
 
+namespace uimg {struct ImageLayerSet;};
+
 namespace unirender
 {
 	DLLRTUTIL void set_log_handler(const std::function<void(const std::string)> &logHandler=nullptr);
@@ -29,18 +31,18 @@ namespace unirender
 	class Renderer;
 	using PRenderer = std::shared_ptr<Renderer>;
 	class DLLRTUTIL RenderWorker
-		: public util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>
+		: public util::ParallelWorker<uimg::ImageLayerSet>
 	{
 	public:
 		friend Renderer;
 		RenderWorker(Renderer &renderer);
-		using util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::Cancel;
+		using util::ParallelWorker<uimg::ImageLayerSet>::Cancel;
 		virtual void Wait() override;
-		virtual std::shared_ptr<uimg::ImageBuffer> GetResult() override;
+		virtual uimg::ImageLayerSet GetResult() override;
 
-		using util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::SetResultMessage;
-		using util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::AddThread;
-		using util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::UpdateProgress;
+		using util::ParallelWorker<uimg::ImageLayerSet>::SetResultMessage;
+		using util::ParallelWorker<uimg::ImageLayerSet>::AddThread;
+		using util::ParallelWorker<uimg::ImageLayerSet>::UpdateProgress;
 	private:
 		virtual void DoCancel(const std::string &resultMsg,std::optional<int32_t> resultCode) override;
 		PRenderer m_renderer = nullptr;
@@ -78,6 +80,9 @@ namespace unirender
 		static constexpr const char *OUTPUT_NORMAL = "NORMAL";
 		static constexpr const char *OUTPUT_DEPTH = "DEPTH";
 		static constexpr const char *OUTPUT_AO = "AO";
+		static constexpr const char *OUTPUT_DIFFUSE = "DIFFUSE";
+		static constexpr const char *OUTPUT_DIFFUSE_DIRECT = "DIFFUSE_DIRECT";
+		static constexpr const char *OUTPUT_DIFFUSE_INDIRECT = "DIFFUSE_INDIRECT";
 
 		virtual ~Renderer()=default;
 		virtual void Wait()=0;
@@ -94,7 +99,7 @@ namespace unirender
 		virtual bool SyncEditedActor(const util::Uuid &uuid)=0;
 		virtual bool Export(const std::string &path)=0;
 		virtual std::optional<std::string> SaveRenderPreview(const std::string &path,std::string &outErr) const=0;
-		virtual util::ParallelJob<std::shared_ptr<uimg::ImageBuffer>> StartRender()=0;
+		virtual util::ParallelJob<uimg::ImageLayerSet> StartRender()=0;
 		void StopRendering();
 
 		const std::unordered_map<size_t,unirender::WorldObject*> &GetActorMap() const {return m_actorMap;}
@@ -111,6 +116,8 @@ namespace unirender
 		TileManager &GetTileManager() {return m_tileManager;}
 		const TileManager &GetTileManager() const {return const_cast<Renderer*>(this)->GetTileManager();}
 		std::vector<unirender::TileManager::TileData> GetRenderedTileBatch();
+
+		const std::unordered_map<std::string,std::array<std::shared_ptr<uimg::ImageBuffer>,umath::to_integral(StereoEye::Count)>> &GetResultImageBuffers() const {return m_resultImageBuffers;}
 	protected:
 		Renderer(const Scene &scene,Flags flags);
 		bool Initialize();

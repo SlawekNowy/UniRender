@@ -175,6 +175,11 @@ void unirender::Scene::PrintLogInfo()
 	logHandler(ss.str());
 }
 
+bool unirender::Scene::IsLightmapRenderMode(RenderMode renderMode)
+{
+	return renderMode == RenderMode::BakeDiffuseLighting ||
+		renderMode == RenderMode::BakeDiffuseLightingSeparate;
+}
 
 bool unirender::Scene::IsRenderSceneMode(RenderMode renderMode)
 {

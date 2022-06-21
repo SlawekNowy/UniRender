@@ -22,19 +22,30 @@
 
 #pragma optimize("",off)
 unirender::RenderWorker::RenderWorker(Renderer &renderer)
-	: util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>{},m_renderer{renderer.shared_from_this()}
+	: util::ParallelWorker<uimg::ImageLayerSet>{},m_renderer{renderer.shared_from_this()}
 {}
 void unirender::RenderWorker::DoCancel(const std::string &resultMsg,std::optional<int32_t> resultCode)
 {
-	util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::DoCancel(resultMsg,resultCode);
+	util::ParallelWorker<uimg::ImageLayerSet>::DoCancel(resultMsg,resultCode);
 	m_renderer->OnParallelWorkerCancelled();
 }
 void unirender::RenderWorker::Wait()
 {
-	util::ParallelWorker<std::shared_ptr<uimg::ImageBuffer>>::Wait();
+	util::ParallelWorker<uimg::ImageLayerSet>::Wait();
 	m_renderer->Wait();
 }
-std::shared_ptr<uimg::ImageBuffer> unirender::RenderWorker::GetResult() {return m_renderer->GetResultImageBuffer(unirender::Renderer::OUTPUT_COLOR);}
+uimg::ImageLayerSet unirender::RenderWorker::GetResult()
+{
+	uimg::ImageLayerSet result {};
+	for(auto &pair : m_renderer->GetResultImageBuffers())
+	{
+		auto &imgBuf = pair.second.front();
+		if(!imgBuf)
+			continue;
+		result.images[pair.first] = imgBuf;
+	}
+	return result;
+}
 
 ///////////////////
 
@@ -158,7 +169,7 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 		auto &resultImageBuffer = GetResultImageBuffer(OUTPUT_COLOR,eyeStage);
 		denoiseInfo.width = resultImageBuffer->GetWidth();
 		denoiseInfo.height = resultImageBuffer->GetHeight();
-		denoiseInfo.lightmap = (m_scene->GetRenderMode() == unirender::Scene::RenderMode::BakeDiffuseLighting);
+		denoiseInfo.lightmap = Scene::IsLightmapRenderMode(m_scene->GetRenderMode());
 
 		static auto dbgAlbedo = false;
 		static auto dbgNormals = false;
@@ -205,19 +216,24 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 	}
 	case ImageRenderStage::FinalizeImage:
 	{
-		auto &resultImageBuffer = GetResultImageBuffer(OUTPUT_COLOR,eyeStage);
-		if(m_colorTransformProcessor) // TODO: Should we really apply color transform if we're not denoising?
+		for(auto &pair : m_resultImageBuffers)
 		{
-			std::string err;
-			if(m_colorTransformProcessor->Apply(*resultImageBuffer,err) == false)
-				m_scene->HandleError("Unable to apply color transform: " +err);
+			auto &resultImageBuffer = pair.second[umath::to_integral((eyeStage != StereoEye::None) ? eyeStage : StereoEye::Left)];
+			if(!resultImageBuffer)
+				continue;
+			if(m_colorTransformProcessor) // TODO: Should we really apply color transform if we're not denoising?
+			{
+				std::string err;
+				if(m_colorTransformProcessor->Apply(*resultImageBuffer,err) == false)
+					m_scene->HandleError("Unable to apply color transform: " +err);
+				if(ShouldDumpRenderStageImages())
+					DumpImage("color_transform",*resultImageBuffer,uimg::ImageFormat::HDR);
+			}
+			resultImageBuffer->ClearAlpha();
 			if(ShouldDumpRenderStageImages())
-				DumpImage("color_transform",*resultImageBuffer,uimg::ImageFormat::HDR);
+				DumpImage("alpha",*resultImageBuffer,uimg::ImageFormat::HDR);
+			FinalizeImage(*resultImageBuffer,eyeStage);
 		}
-		resultImageBuffer->ClearAlpha();
-		if(ShouldDumpRenderStageImages())
-			DumpImage("alpha",*resultImageBuffer,uimg::ImageFormat::HDR);
-		FinalizeImage(*resultImageBuffer,eyeStage);
 		if(UpdateStereoEye(worker,stage,eyeStage))
 		{
 			if(optResult)
