@@ -1541,7 +1541,22 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterPrimaryOutputSocket(nodes::layer_weight::OUT_FRESNEL);
 		return desc;
 	});
-	static_assert(NODE_COUNT == 42,"Increase this number if new node types are added!");
+	RegisterNodeType(NODE_AMBIENT_OCCLUSION,[](GroupNodeDesc *parent) {
+		auto desc =  NodeDesc::Create(parent);
+		desc->RegisterSocket<unirender::SocketType::Int>(nodes::ambient_occlusion::IN_SAMPLES,STInt{16});
+		desc->RegisterSocket<unirender::SocketType::Color>(nodes::ambient_occlusion::IN_COLOR,STColor{},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::ambient_occlusion::IN_DISTANCE,STFloat{1.f},unirender::SocketIO::In);
+		desc->RegisterSocket<unirender::SocketType::Normal>(nodes::ambient_occlusion::IN_NORMAL,STNormal{},unirender::SocketIO::In);
+
+		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::ambient_occlusion::IN_INSIDE,STBool{false});
+		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::ambient_occlusion::IN_ONLY_LOCAL,STBool{false});
+
+		desc->RegisterSocket<unirender::SocketType::Color>(nodes::ambient_occlusion::OUT_COLOR,unirender::SocketIO::Out);
+		desc->RegisterSocket<unirender::SocketType::Float>(nodes::ambient_occlusion::OUT_AO,unirender::SocketIO::Out);
+		desc->RegisterPrimaryOutputSocket(nodes::layer_weight::OUT_FRESNEL);
+		return desc;
+	});
+	static_assert(NODE_COUNT == 43,"Increase this number if new node types are added!");
 }
 
 std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc) {os<<desc.ToString(); return os;}

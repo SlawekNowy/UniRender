@@ -742,8 +742,20 @@ namespace unirender
 			constexpr auto *OUT_FRESNEL = "fresnel";
 			constexpr auto *OUT_FACING = "facing";
 		};
+		namespace ambient_occlusion
+		{
+			constexpr auto *IN_SAMPLES = "samples";
+			constexpr auto *IN_COLOR = "color";
+			constexpr auto *IN_DISTANCE = "distance";
+			constexpr auto *IN_NORMAL = "normal";
+			constexpr auto *IN_INSIDE = "inside";
+			constexpr auto *IN_ONLY_LOCAL = "only_local";
+
+			constexpr auto *OUT_COLOR = "color";
+			constexpr auto *OUT_AO = "ao";
+		};
 	};
-	constexpr uint32_t NODE_COUNT = 42;
+	constexpr uint32_t NODE_COUNT = 43;
 };
 
 DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::Socket &socket);
