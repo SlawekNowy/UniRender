@@ -30,6 +30,7 @@ namespace unirender
 		BitDepth bitDepth = BitDepth::Float32;
 	};
 	DLLRTUTIL std::shared_ptr<util::ocio::ColorProcessor> create_color_transform_processor(const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr,float exposure=0.f,float gamma=2.2f);
+	DLLRTUTIL bool apply_color_transform(uimg::ImageBuffer &imgBuf,const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr,float exposure=0.f,float gamma=2.2f);
 };
 
 #endif

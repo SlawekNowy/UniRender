@@ -10,6 +10,15 @@
 #include <sharedutils/util.h>
 #include <sharedutils/util_path.hpp>
 
+bool unirender::apply_color_transform(
+	uimg::ImageBuffer &imgBuf,const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr,float exposure,float gamma
+)
+{
+	auto processor = create_color_transform_processor(createInfo,outErr,exposure,gamma);
+	if(!processor)
+		return false;
+	return processor->Apply(imgBuf,outErr);
+}
 std::shared_ptr<util::ocio::ColorProcessor> unirender::create_color_transform_processor(const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr,float exposure,float gamma)
 {
 	auto ocioConfigLocation = util::Path::CreatePath(util::get_program_path());
