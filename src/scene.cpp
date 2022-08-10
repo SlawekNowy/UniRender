@@ -411,6 +411,10 @@ void unirender::Scene::Close()
 
 float unirender::Scene::GetGamma() const {return m_createInfo.hdrOutput ? 1.f : DEFAULT_GAMMA;}
 
+void unirender::Scene::AddActorToActorMap(std::unordered_map<size_t,WorldObject*> &map,WorldObject &obj)
+{
+	map[util::get_uuid_hash(obj.GetUuid())] = &obj;
+}
 std::unordered_map<size_t,unirender::WorldObject*> unirender::Scene::BuildActorMap() const
 {
 	std::unordered_map<size_t,unirender::WorldObject*> map;

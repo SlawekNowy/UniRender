@@ -97,6 +97,7 @@ namespace unirender
 		virtual bool BeginSceneEdit() {return false;}
 		virtual bool EndSceneEdit() {return false;}
 		virtual bool SyncEditedActor(const util::Uuid &uuid)=0;
+		virtual bool AddLiveActor(unirender::WorldObject &actor)=0;
 		virtual bool Export(const std::string &path)=0;
 		virtual std::optional<std::string> SaveRenderPreview(const std::string &path,std::string &outErr) const=0;
 		virtual util::ParallelJob<uimg::ImageLayerSet> StartRender()=0;
@@ -116,6 +117,7 @@ namespace unirender
 		TileManager &GetTileManager() {return m_tileManager;}
 		const TileManager &GetTileManager() const {return const_cast<Renderer*>(this)->GetTileManager();}
 		std::vector<unirender::TileManager::TileData> GetRenderedTileBatch();
+		void AddActorToActorMap(WorldObject &obj);
 
 		const std::unordered_map<std::string,std::array<std::shared_ptr<uimg::ImageBuffer>,umath::to_integral(StereoEye::Count)>> &GetResultImageBuffers() const {return m_resultImageBuffers;}
 	protected:

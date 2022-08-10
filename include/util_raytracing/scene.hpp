@@ -268,6 +268,7 @@ namespace unirender
 		float GetGamma() const;
 
 		std::unordered_map<size_t,WorldObject*> BuildActorMap() const;
+		static void AddActorToActorMap(std::unordered_map<size_t,WorldObject*> &map,WorldObject &obj);
 
 		void PrintLogInfo();
 	private:

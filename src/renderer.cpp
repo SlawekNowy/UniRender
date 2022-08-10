@@ -328,6 +328,7 @@ void unirender::Renderer::OnParallelWorkerCancelled()
 	// StopRendering();
 }
 std::vector<unirender::TileManager::TileData> unirender::Renderer::GetRenderedTileBatch() {return m_tileManager.GetRenderedTileBatch();}
+void unirender::Renderer::AddActorToActorMap(WorldObject &obj) {Scene::AddActorToActorMap(m_actorMap,obj);}
 bool unirender::Renderer::Initialize()
 {
 	m_scene->GetCamera().Finalize(*m_scene);
