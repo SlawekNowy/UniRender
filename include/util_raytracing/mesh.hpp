@@ -42,6 +42,15 @@ namespace unirender
 			HasAlphas = 1u,
 			HasWrinkles = HasAlphas<<1u
 		};
+		struct DLLRTUTIL SerializationHeader
+		{
+			~SerializationHeader();
+			std::string name;
+			Flags flags;
+			uint64_t numVerts;
+			uint64_t numTris;
+			void *udmProperty;
+		};
 		static const std::string TANGENT_POSTFIX;
 		static const std::string TANGENT_SIGN_POSTIFX;
 		using Smooth = uint8_t; // Boolean value
@@ -53,7 +62,8 @@ namespace unirender
 
 		void Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Shader&)> &fGetShaderIndex) const;
 		void Serialize(DataStream &dsOut,const std::unordered_map<const Shader*,size_t> shaderToIndexTable) const;
-		void Deserialize(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader);
+		void Deserialize(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader,SerializationHeader &header);
+		static void ReadSerializationHeader(DataStream &dsIn,SerializationHeader &outHeader);
 
 		void Merge(const Mesh &other);
 

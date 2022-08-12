@@ -14,6 +14,11 @@
 #pragma optimize("",off)
 const std::string unirender::Mesh::TANGENT_POSTFIX = ".tangent";
 const std::string unirender::Mesh::TANGENT_SIGN_POSTIFX = ".tangent_sign";
+unirender::Mesh::SerializationHeader::~SerializationHeader()
+{
+	delete static_cast<udm::PProperty*>(udmProperty);
+}
+
 unirender::PMesh unirender::Mesh::Create(const std::string &name,uint64_t numVerts,uint64_t numTris,Flags flags)
 {
 	auto meshWrapper = PMesh{new Mesh{numVerts,numTris,flags}};
@@ -47,12 +52,10 @@ unirender::PMesh unirender::Mesh::Create(const std::string &name,uint64_t numVer
 
 unirender::PMesh unirender::Mesh::Create(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader)
 {
-	auto name = dsIn->ReadString();
-	auto flags = dsIn->Read<decltype(m_flags)>();
-	auto numVerts = dsIn->Read<decltype(m_numVerts)>();
-	auto numTris = dsIn->Read<decltype(m_numTris)>();
-	auto mesh = Create(name,numVerts,numTris,flags);
-	mesh->Deserialize(dsIn,fGetShader);
+	SerializationHeader header {};
+	ReadSerializationHeader(dsIn,header);
+	auto mesh = Create(header.name,header.numVerts,header.numTris,header.flags);
+	mesh->Deserialize(dsIn,fGetShader,header);
 	return mesh;
 }
 
@@ -93,14 +96,39 @@ enum class SerializationFlags : uint8_t
 	UseSubdivFaces = UseAlphas<<1u
 };
 REGISTER_BASIC_BITWISE_OPERATORS(SerializationFlags)
+static void serialize_udm_property(DataStream &dsOut,const udm::Property &prop)
+{
+	std::stringstream ss;
+	ufile::OutStreamFile f {std::move(ss)};
+	prop.Write(f);
+	dsOut->Write<size_t>(f.GetSize());
+
+	std::vector<uint8_t> data;
+	data.resize(f.GetSize());
+	ss = f.MoveStream();
+	ss.seekg(0,std::ios_base::beg);
+	ss.read(reinterpret_cast<char*>(data.data()),data.size());
+	dsOut->Write(data.data(),data.size());
+}
+static void deserialize_udm_property(DataStream &dsIn,udm::Property &prop)
+{
+	auto size = dsIn->Read<size_t>();
+	ufile::VectorFile f {size};
+	dsIn->Read(f.GetData(),size);
+	prop.Read(f);
+}
 void unirender::Mesh::Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Shader&)> &fGetShaderIndex) const
 {
+	auto prop = udm::Property::Create<udm::Element>();
+	auto &udmEl = prop->GetValue<udm::Element>();
+	udm::LinkedPropertyWrapper udm {*prop};
+	
 	auto numVerts = umath::min(m_numVerts,m_verts.size());
 	auto numTris = umath::min(m_numTris,m_triangles.size() /3);
-	dsOut->WriteString(GetName());
-	dsOut->Write(m_flags);
-	dsOut->Write<decltype(m_numVerts)>(numVerts);
-	dsOut->Write<decltype(m_numTris)>(numTris);
+	udm["name"] = GetName();
+	udm["flags"] = udm::flags_to_string(m_flags);
+	udm["numVerts"] = numVerts;
+	udm["numTris"] = numTris;
 
 	auto flags = SerializationFlags::None;
 	if(m_alphas)
@@ -108,13 +136,13 @@ void unirender::Mesh::Serialize(DataStream &dsOut,const std::function<std::optio
 	if(m_numSubdFaces > 0)
 		flags |= SerializationFlags::UseSubdivFaces;
 
-	dsOut->Write<SerializationFlags>(flags);
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_verts.data()),numVerts *sizeof(m_verts.front()));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_perVertexUvs.data()),numVerts *sizeof(m_perVertexUvs.front()));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_perVertexTangents.data()),numVerts *sizeof(m_perVertexTangents.front()));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_perVertexTangentSigns.data()),numVerts *sizeof(m_perVertexTangentSigns.front()));
+	udm["serializationFlags"] = udm::flags_to_string(flags);
+	udm.AddArray<Vector3>("verts",m_verts,udm::ArrayType::Compressed);
+	udm.AddArray<Vector2>("perVertexUvs",m_perVertexUvs,udm::ArrayType::Compressed);
+	udm.AddArray<Vector4>("perVertexTangents",m_perVertexTangents,udm::ArrayType::Compressed);
+	udm.AddArray<float>("perVertexTangentSigns",m_perVertexTangentSigns,udm::ArrayType::Compressed);
 	if(umath::is_flag_set(flags,SerializationFlags::UseAlphas))
-		dsOut->Write(reinterpret_cast<const uint8_t*>(m_perVertexAlphas.data()),numVerts *sizeof(m_perVertexAlphas.front()));
+		udm.AddArray<float>("perVertexAlphas",m_perVertexAlphas,udm::ArrayType::Compressed);
 
 	/*if(umath::is_flag_set(flags,SerializationFlags::UseSubdivFaces))
 	{
@@ -136,50 +164,49 @@ void unirender::Mesh::Serialize(DataStream &dsOut,const std::function<std::optio
 	*/
 	// Validate();
 
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_triangles.data()),numTris *3 *sizeof(m_triangles[0]));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_shader.data()),numTris *sizeof(m_shader[0]));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_smooth.data()),numTris *sizeof(m_smooth[0]));
+	udm.AddArray<int32_t>("tris",m_triangles,udm::ArrayType::Compressed);
+	udm.AddArray<int32_t>("shaders",m_shader,udm::ArrayType::Compressed);
+	udm.AddArray<uint8_t>("smooth",m_smooth,udm::ArrayType::Compressed);
 
 	//if(umath::is_flag_set(flags,SerializationFlags::UseSubdivFaces))
 	//	dsOut->Write(reinterpret_cast<const uint8_t*>(m_mesh.get_triangle_patch().data()),numTris *sizeof(m_mesh.get_triangle_patch()[0]));
 
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_vertexNormals.data()),numVerts *sizeof(m_vertexNormals[0]));
-
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_uvs.data()),numTris *3 *sizeof(m_uvs[0]));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_uvTangents.data()),numTris *3 *sizeof(m_uvTangents[0]));
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_uvTangentSigns.data()),numTris *3 *sizeof(m_uvTangentSigns[0]));
+	udm.AddArray<Vector3>("vertexNormals",m_vertexNormals,udm::ArrayType::Compressed);
+	
+	udm.AddArray<Vector2>("uvs",m_uvs,udm::ArrayType::Compressed);
+	udm.AddArray<Vector3>("uvTangents",m_uvTangents,udm::ArrayType::Compressed);
+	udm.AddArray<float>("uvTangentSigns",m_uvTangentSigns,udm::ArrayType::Compressed);
 
 	if(umath::is_flag_set(flags,SerializationFlags::UseAlphas))
-		dsOut->Write(reinterpret_cast<const uint8_t*>(m_alphas->data()),numVerts *sizeof((*m_alphas)[0]));
+		udm.AddArray<float>("alphas",*m_alphas,udm::ArrayType::Compressed);
 
-	dsOut->Write<size_t>(m_subMeshShaders.size());
+	std::vector<uint32_t> subMeshShaders;
+	subMeshShaders.reserve(m_subMeshShaders.size());
 	for(auto &shader : m_subMeshShaders)
 	{
 		auto idx = fGetShaderIndex(*shader);
 		assert(idx.has_value());
-		dsOut->Write<uint32_t>(*idx);
+		subMeshShaders.push_back(*idx);
 	}
+	udm.AddArray<uint32_t>("subMeshShaders",subMeshShaders,udm::ArrayType::Compressed);
 
-	dsOut->Write<size_t>(m_lightmapUvs.size());
-	dsOut->Write(reinterpret_cast<const uint8_t*>(m_lightmapUvs.data()),m_lightmapUvs.size() *sizeof(m_lightmapUvs.front()));
+	udm.AddArray<Vector2>("lightmapUvs",m_lightmapUvs,udm::ArrayType::Compressed);
 
-	dsOut->Write<size_t>(m_hairStrandDataSets.size());
+	auto udmHairDs = udm.AddArray("hairStrandDataSets",m_hairStrandDataSets.size(),udm::Type::Element);
+	uint32_t idx = 0;
 	for(auto &set : m_hairStrandDataSets)
 	{
-		dsOut->Write<uint32_t>(set.shaderIndex);
+		auto udm = udmHairDs[idx++];
+		udm["shaderIndex"] = set.shaderIndex;
 
-		dsOut->Write<size_t>(set.strandData.hairSegments.size());
-		dsOut->Write(reinterpret_cast<const uint8_t*>(set.strandData.hairSegments.data()),util::size_of_container(set.strandData.hairSegments));
-
-		dsOut->Write<size_t>(set.strandData.points.size());
-		dsOut->Write(reinterpret_cast<const uint8_t*>(set.strandData.points.data()),util::size_of_container(set.strandData.points));
-
-		dsOut->Write<size_t>(set.strandData.uvs.size());
-		dsOut->Write(reinterpret_cast<const uint8_t*>(set.strandData.uvs.data()),util::size_of_container(set.strandData.uvs));
-
-		dsOut->Write<size_t>(set.strandData.thicknessData.size());
-		dsOut->Write(reinterpret_cast<const uint8_t*>(set.strandData.thicknessData.data()),util::size_of_container(set.strandData.thicknessData));
+		auto udmStrandData = udm["strandData"];
+		udmStrandData.AddArray<uint32_t>("hairSegments",set.strandData.hairSegments,udm::ArrayType::Compressed);
+		udmStrandData.AddArray<Vector3>("points",set.strandData.points,udm::ArrayType::Compressed);
+		udmStrandData.AddArray<Vector2>("uvs",set.strandData.uvs,udm::ArrayType::Compressed);
+		udmStrandData.AddArray<float>("thicknessData",set.strandData.thicknessData,udm::ArrayType::Compressed);
 	}
+
+	serialize_udm_property(dsOut,*prop);
 }
 void unirender::Mesh::Serialize(DataStream &dsOut,const std::unordered_map<const Shader*,size_t> shaderToIndexTable) const
 {
@@ -188,124 +215,85 @@ void unirender::Mesh::Serialize(DataStream &dsOut,const std::unordered_map<const
 		return (it != shaderToIndexTable.end()) ? it->second : std::optional<uint32_t>{};
 	});
 }
-void unirender::Mesh::Deserialize(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader)
+void unirender::Mesh::ReadSerializationHeader(DataStream &dsIn,SerializationHeader &outHeader)
 {
-	auto flags = dsIn->Read<SerializationFlags>();
+	auto prop = udm::Property::Create<udm::Element>();
+	deserialize_udm_property(dsIn,*prop);
 
-	m_verts.resize(m_numVerts);
-	dsIn->Read(m_verts.data(),m_numVerts *sizeof(m_verts[0]));
+	auto &udmEl = prop->GetValue<udm::Element>();
+	udm::LinkedPropertyWrapper udm {*prop};
 
-	m_perVertexUvs.resize(m_numVerts);
-	dsIn->Read(m_perVertexUvs.data(),m_numVerts *sizeof(m_perVertexUvs.front()));
-	m_perVertexTangents.resize(m_numVerts);
-	dsIn->Read(m_perVertexTangents.data(),m_numVerts *sizeof(m_perVertexTangents.front()));
-	m_perVertexTangentSigns.resize(m_numVerts);
-	dsIn->Read(m_perVertexTangentSigns.data(),m_numVerts *sizeof(m_perVertexTangentSigns.front()));
-	if(umath::is_flag_set(flags,SerializationFlags::UseAlphas))
+	udm["name"](outHeader.name);
+	udm["numVerts"](outHeader.numVerts);
+	udm["numTris"](outHeader.numTris);
+	udm["flags"] = udm::flags_to_string(outHeader.flags);
+	outHeader.udmProperty = new udm::PProperty{prop};
+}
+void unirender::Mesh::Deserialize(DataStream &dsIn,const std::function<PShader(uint32_t)> &fGetShader,SerializationHeader &header)
+{
+	auto &prop = *static_cast<udm::PProperty*>(header.udmProperty);
+	auto &udmEl = prop->GetValue<udm::Element>();
+	udm::LinkedPropertyWrapper udm {*prop};
+
+	m_flags = udm::string_to_flags<decltype(m_flags)>(udm["flags"],Flags::None);
+	uint64_t numVerts = 0;
+	uint64_t numTris = 0;
+	udm["numVerts"](numVerts);
+	udm["numTris"](numTris);
+
+	auto flags = SerializationFlags::None;
+	flags = udm::string_to_flags<decltype(flags)>(udm["serializationFlags"],SerializationFlags::None);
+
+	udm["verts"](m_verts);
+	udm["perVertexUvs"](m_perVertexUvs);
+	udm["perVertexTangents"](m_perVertexTangents);
+	udm["perVertexTangentSigns"](m_perVertexTangentSigns);
+	udm["perVertexAlphas"](m_perVertexAlphas);
+	udm["tris"](m_triangles);
+	udm["shaders"](m_shader);
+	udm["smooth"](m_smooth);
+	udm["vertexNormals"](m_vertexNormals);
+	udm["uvs"](m_uvs);
+	udm["uvTangents"](m_uvTangents);
+	udm["uvTangentSigns"](m_uvTangentSigns);
+	if(udm["alphas"])
 	{
-		m_perVertexAlphas.resize(m_numVerts);
-		dsIn->Read(m_perVertexAlphas.data(),m_numVerts *sizeof(m_perVertexAlphas.front()));
+		m_alphas = unirender::STFloatArray{};
+		udm["alphas"](*m_alphas);
 	}
 
-	/*if(umath::is_flag_set(flags,SerializationFlags::UseSubdivFaces))
+	std::vector<uint32_t> subMeshShaders;
+	udm["subMeshShaders"](subMeshShaders);
+	m_subMeshShaders.resize(subMeshShaders.size());
+	for(auto i=decltype(subMeshShaders.size()){0u};i<subMeshShaders.size();++i)
 	{
-		auto numSubdFaces = dsIn->Read<uint32_t>();
-		auto numNgons = dsIn->Read<uint32_t>();
-		auto numCorners = dsIn->Read<uint32_t>();
-		m_mesh.resize_subd_faces(m_numVerts,numNgons,numCorners);
-		auto &numSubdCorners = m_mesh.get_subd_num_corners();
-		numSubdCorners.resize(numCorners);
-		dsIn->Read(numSubdCorners.data(),numSubdCorners.size() *sizeof(numSubdCorners[0]));
-		std::vector<ccl::Mesh::SubdFace> subdFaces;
-		subdFaces.resize(m_numVerts);
-		dsIn->Read(subdFaces.data(),m_numVerts *sizeof(subdFaces[0]));
-		ccl::array<int> startCorners;
-		ccl::array<int> shaders;
-		ccl::array<bool> smooth;
-		ccl::array<int> ptexOffsets;
-		startCorners.reserve(subdFaces.size());
-		startCorners.reserve(shaders.size());
-		startCorners.reserve(smooth.size());
-		startCorners.reserve(ptexOffsets.size());
-		for(auto i=decltype(subdFaces.size()){0u};i<subdFaces.size();++i)
-		{
-			auto &subdFace = subdFaces.at(i);
-			startCorners.push_back_reserved(subdFace.start_corner);
-			startCorners.push_back_reserved(subdFace.num_corners);
-			startCorners.push_back_reserved(subdFace.shader);
-			startCorners.push_back_reserved(subdFace.smooth);
-			startCorners.push_back_reserved(subdFace.ptex_offset);
-		}
-		m_mesh.set_subd_start_corner(startCorners);
-		m_mesh.set_subd_shader(shaders);
-		m_mesh.set_subd_smooth(smooth);
-		m_mesh.set_subd_ptex_offset(ptexOffsets);
-	}*/
-
-	m_triangles.resize(m_numTris *3);
-	dsIn->Read(m_triangles.data(),m_numTris *3 *sizeof(m_triangles[0]));
-	m_shader.resize(m_numTris);
-	dsIn->Read(m_shader.data(),m_numTris *sizeof(m_shader[0]));
-	m_smooth.resize(m_numTris);
-	dsIn->Read(m_smooth.data(),m_numTris *sizeof(m_smooth[0]));
-
-	// Validate();
-
-	/*if(umath::is_flag_set(flags,SerializationFlags::UseSubdivFaces))
-	{
-		m_mesh.get_triangle_patch().resize(m_numTris);
-		dsIn->Read(m_mesh.get_triangle_patch().data(),m_numTris *sizeof(m_mesh.get_triangle_patch()[0]));
-	}*/
-
-	m_vertexNormals.resize(m_numVerts);
-	dsIn->Read(m_vertexNormals.data(),m_numVerts *sizeof(m_vertexNormals[0]));
-
-	m_uvs.resize(m_numTris *3);
-	dsIn->Read(m_uvs.data(),m_numTris *3 *sizeof(m_uvs[0]));
-
-	m_uvTangents.resize(m_numTris *3);
-	dsIn->Read(m_uvTangents.data(),m_numTris *3 *sizeof(m_uvTangents[0]));
-
-	m_uvTangentSigns.resize(m_numTris *3);
-	dsIn->Read(m_uvTangentSigns.data(),m_numTris *3 *sizeof(m_uvTangentSigns[0]));
-
-	if(umath::is_flag_set(flags,SerializationFlags::UseAlphas))
-	{
-		m_alphas = std::vector<float>{};
-		m_alphas->resize(m_numVerts);
-		dsIn->Read(m_alphas->data(),m_numVerts *sizeof((*m_alphas)[0]));
-	}
-
-	auto numMeshShaders = dsIn->Read<size_t>();
-	m_subMeshShaders.resize(numMeshShaders);
-	for(auto i=decltype(m_subMeshShaders.size()){0u};i<m_subMeshShaders.size();++i)
-	{
-		auto shaderIdx = dsIn->Read<uint32_t>();
+		auto shaderIdx = subMeshShaders[i];
 		auto shader = fGetShader(shaderIdx);
 		assert(shader);
 		m_subMeshShaders.at(i) = shader;
 	}
 
-	auto numLightmapUvs = dsIn->Read<size_t>();
-	m_lightmapUvs.resize(numLightmapUvs);
-	dsIn->Read(m_lightmapUvs.data(),m_lightmapUvs.size() *sizeof(m_lightmapUvs.front()));
+	udm["lightmapUvs"](m_lightmapUvs);
 
-	auto numHairStrandData = dsIn->Read<size_t>();
-	m_hairStrandDataSets.reserve(numHairStrandData);
-	for(auto i=decltype(numHairStrandData){0u};i<numHairStrandData;++i)
+	auto udmHairDs = udm["hairStrandDataSets"];
+	if(udmHairDs)
 	{
-		m_hairStrandDataSets.push_back({});
-		auto &set = m_hairStrandDataSets.back();
-		set.shaderIndex = dsIn->Read<uint32_t>();
-		auto readArray = [&dsIn](auto &data) {
-			auto size = dsIn->Read<size_t>();
-			data.resize(size);
-			dsIn->Read(data.data(),sizeof(data[0]) *size);
-		};
-		readArray(set.strandData.hairSegments);
-		readArray(set.strandData.points);
-		readArray(set.strandData.uvs);
-		readArray(set.strandData.thicknessData);
+		m_hairStrandDataSets.reserve(udmHairDs.GetSize());
+		for(auto &udm : udmHairDs)
+		{
+			m_hairStrandDataSets.push_back({});
+			auto &set = m_hairStrandDataSets.back();
+			udm["shaderIndex"](set.shaderIndex);
+
+			auto udmStrandData = udm["strandData"];
+			if(udmStrandData)
+			{
+				udmStrandData["hairSegments"](set.strandData.hairSegments);
+				udmStrandData["points"](set.strandData.points);
+				udmStrandData["uvs"](set.strandData.uvs);
+				udmStrandData["thicknessData"](set.strandData.thicknessData);
+			}
+		}
 	}
 }
 
