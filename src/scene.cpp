@@ -40,34 +40,89 @@
 #undef __UTIL_STRING_H__
 #include <sharedutils/util_string.h>
 
-#pragma optimize("",off)
+
+void unirender::serialize_udm_property(DataStream &dsOut,const udm::Property &prop)
+{
+	std::stringstream ss;
+	ufile::OutStreamFile f {std::move(ss)};
+	prop.Write(f);
+	dsOut->Write<size_t>(f.GetSize());
+
+	std::vector<uint8_t> data;
+	data.resize(f.GetSize());
+	ss = f.MoveStream();
+	ss.seekg(0,std::ios_base::beg);
+	ss.read(reinterpret_cast<char*>(data.data()),data.size());
+	dsOut->Write(data.data(),data.size());
+}
+void unirender::deserialize_udm_property(DataStream &dsIn,udm::Property &prop)
+{
+	auto size = dsIn->Read<size_t>();
+	ufile::VectorFile f {size};
+	dsIn->Read(f.GetData(),size);
+	prop.Read(f);
+}
+
 void unirender::Scene::CreateInfo::Serialize(DataStream &ds) const
 {
-	ds->WriteString(renderer);
-	ds->Write(reinterpret_cast<const uint8_t*>(this),offsetof(CreateInfo,colorTransform));
-	ds->Write<bool>(colorTransform.has_value());
+	auto prop = udm::Property::Create<udm::Element>();
+	auto &udmEl = prop->GetValue<udm::Element>();
+	udm::LinkedPropertyWrapper udm {*prop};
+
+	udm["renderer"] = renderer;
+	if(samples.has_value())
+		udm["samples"] = *samples;
+	udm["hdrOutput"] = hdrOutput;
+	udm["denoiseMode"] = udm::enum_to_string(denoiseMode);
+	udm["progressive"] = progressive;
+	udm["progressiveRefine"] = progressiveRefine;
+	udm["deviceType"] = udm::enum_to_string(deviceType);
+	udm["exposure"] = exposure;
+	udm["preCalculateLight"] = preCalculateLight;
+
 	if(colorTransform.has_value())
 	{
-		ds->WriteString(colorTransform->config);
-		ds->Write<bool>(colorTransform->lookName.has_value());
+		auto udmColorTransform = udm["colorTransform"];
+		udmColorTransform["config"] = colorTransform->config;
 		if(colorTransform->lookName.has_value())
-			ds->WriteString(*colorTransform->lookName);
+			udmColorTransform["lookName"] = *colorTransform->lookName;
 	}
+	serialize_udm_property(ds,*prop);
 }
 void unirender::Scene::CreateInfo::Deserialize(DataStream &ds,uint32_t version)
 {
-	if(version >= 6u)
-		renderer = ds->ReadString();
-	ds->Read(this,offsetof(CreateInfo,colorTransform));
-	auto hasColorTransform = ds->Read<bool>();
-	if(hasColorTransform == false)
-		return;
-	colorTransform = ColorTransformInfo{};
-	colorTransform->config = ds->ReadString();
-	auto hasLookName = ds->Read<bool>();
-	if(hasLookName == false)
-		return;
-	colorTransform->lookName = ds->ReadString();
+	auto prop = udm::Property::Create<udm::Element>();
+	deserialize_udm_property(ds,*prop);
+
+	auto &udmEl = prop->GetValue<udm::Element>();
+	udm::LinkedPropertyWrapper udm {*prop};
+
+	udm["renderer"](renderer);
+	if(udm["samples"])
+	{
+		samples = uint32_t{};
+		udm["samples"](*samples);
+	}
+	udm["hdrOutput"](hdrOutput);
+	denoiseMode = udm::string_to_enum(udm["denoiseMode"],util::declvalue(&CreateInfo::denoiseMode));
+	udm["progressive"](progressive);
+	udm["progressiveRefine"](progressiveRefine);
+	deviceType = udm::string_to_enum(udm["deviceType"],util::declvalue(&CreateInfo::deviceType));
+	udm["exposure"](exposure);
+	udm["preCalculateLight"](preCalculateLight);
+
+	auto udmColorTransform = udm["colorTransform"];
+	if(udmColorTransform)
+	{
+		colorTransform = ColorTransformInfo{};
+		udmColorTransform["config"](colorTransform->config);
+		auto udmLookName = udmColorTransform["lookName"];
+		if(udmLookName)
+		{
+			colorTransform->lookName = std::string{};
+			udmLookName(*colorTransform->lookName);
+		}
+	}
 }
 
 ///////////////////
@@ -496,9 +551,35 @@ void unirender::Scene::Save(DataStream &dsOut,const std::string &rootDir,const S
 	dsOut->Write(m_renderMode);
 	dsOut->WriteString(serializationData.outputFileName);
 
+	auto prop = udm::Property::Create<udm::Element>();
+	auto &udmEl = prop->GetValue<udm::Element>();
+	udm::LinkedPropertyWrapper udm {*prop};
+
+	auto udmScene = udm["sceneInfo"];
+	auto udmSky = udmScene["sky"];
 	auto absSky = GetAbsSkyPath(m_sceneInfo.sky);
-	dsOut->WriteString(absSky.has_value() ? ToRelativePath(*absSky) : "");
-	dsOut->Write(reinterpret_cast<const uint8_t*>(&m_sceneInfo.transparentSky),sizeof(SceneInfo) -offsetof(SceneInfo,transparentSky));
+	if(absSky.has_value())
+		udmSky["texture"] = *absSky;
+	udmSky["angles"] = m_sceneInfo.skyAngles;
+	udmSky["strength"] = m_sceneInfo.skyStrength;
+	udmSky["transparent"] = m_sceneInfo.transparentSky;
+
+	udmScene["emissionStrength"] = m_sceneInfo.emissionStrength;
+	udmScene["lightIntensityFactor"] = m_sceneInfo.lightIntensityFactor;
+	udmScene["motionBlurStrength"] = m_sceneInfo.motionBlurStrength;
+	
+	auto udmLimits = udmScene["limits"];
+	udmLimits["maxTransparencyBounces"] = m_sceneInfo.maxTransparencyBounces;
+	udmLimits["maxBounces"] = m_sceneInfo.maxBounces;
+	udmLimits["maxDiffuseBounces"] = m_sceneInfo.maxDiffuseBounces;
+	udmLimits["maxGlossyBounces"] = m_sceneInfo.maxGlossyBounces;
+	udmLimits["maxTransmissionBounces"] = m_sceneInfo.maxTransmissionBounces;
+
+	udmScene["exposure"] = m_sceneInfo.exposure;
+	udmScene["useAdaptiveSampling"] = m_sceneInfo.useAdaptiveSampling;
+	udmScene["adaptiveSamplingThreshold"] = m_sceneInfo.adaptiveSamplingThreshold;
+	udmScene["adaptiveMinSamples"] = m_sceneInfo.adaptiveMinSamples;
+	serialize_udm_property(dsOut,*prop);
 
 	dsOut->Write(m_stateFlags);
 	
@@ -579,8 +660,41 @@ bool unirender::Scene::ReadSerializationHeader(DataStream &dsIn,RenderMode &outR
 
 	if(optOutSceneInfo)
 	{
-		optOutSceneInfo->sky = ToAbsolutePath(dsIn->ReadString());
-		dsIn->Read(&optOutSceneInfo->transparentSky,sizeof(SceneInfo) -offsetof(SceneInfo,transparentSky));
+		auto prop = udm::Property::Create<udm::Element>();
+		deserialize_udm_property(dsIn,*prop);
+
+		auto &udmEl = prop->GetValue<udm::Element>();
+		udm::LinkedPropertyWrapper udm {*prop};
+		
+		auto &sceneInfo = *optOutSceneInfo;
+		auto udmScene = udm["sceneInfo"];
+		auto udmSky = udmScene["sky"];
+		auto udmSkyTex = udmSky["texture"];
+		if(udmSkyTex)
+		{
+			std::string skyTex;
+			udmSkyTex(skyTex);
+			sceneInfo.sky = ToAbsolutePath(skyTex);
+		}
+		udmSky["angles"](sceneInfo.skyAngles);
+		udmSky["strength"](sceneInfo.skyStrength);
+		udmSky["transparent"](sceneInfo.transparentSky);
+
+		udmScene["emissionStrength"](sceneInfo.emissionStrength);
+		udmScene["lightIntensityFactor"](sceneInfo.lightIntensityFactor);
+		udmScene["motionBlurStrength"](sceneInfo.motionBlurStrength);
+	
+		auto udmLimits = udmScene["limits"];
+		udmLimits["maxTransparencyBounces"](sceneInfo.maxTransparencyBounces);
+		udmLimits["maxBounces"](sceneInfo.maxBounces);
+		udmLimits["maxDiffuseBounces"](sceneInfo.maxDiffuseBounces);
+		udmLimits["maxGlossyBounces"](sceneInfo.maxGlossyBounces);
+		udmLimits["maxTransmissionBounces"](sceneInfo.maxTransmissionBounces);
+
+		udmScene["exposure"](sceneInfo.exposure);
+		udmScene["useAdaptiveSampling"](sceneInfo.useAdaptiveSampling);
+		udmScene["adaptiveSamplingThreshold"](sceneInfo.adaptiveSamplingThreshold);
+		udmScene["adaptiveMinSamples"](sceneInfo.adaptiveMinSamples);
 	}
 	return true;
 }
@@ -652,6 +766,12 @@ void unirender::Scene::SetMaxDiffuseBounces(uint32_t bounces) {m_sceneInfo.maxDi
 void unirender::Scene::SetMaxGlossyBounces(uint32_t bounces) {m_sceneInfo.maxGlossyBounces = bounces;}
 void unirender::Scene::SetMaxTransmissionBounces(uint32_t bounces) {m_sceneInfo.maxTransmissionBounces = bounces;}
 void unirender::Scene::SetMotionBlurStrength(float strength) {m_sceneInfo.motionBlurStrength = strength;}
+void unirender::Scene::SetAdaptiveSampling(bool enabled,float adaptiveSamplingThreshold,uint32_t adaptiveMinSamples)
+{
+	m_sceneInfo.useAdaptiveSampling = enabled;
+	m_sceneInfo.adaptiveSamplingThreshold = adaptiveSamplingThreshold;
+	m_sceneInfo.adaptiveMinSamples = adaptiveMinSamples;
+}
 const std::string *unirender::Scene::GetBakeTargetName() const {return m_bakeTargetName.has_value() ? &*m_bakeTargetName : nullptr;}
 bool unirender::Scene::HasBakeTarget() const {return m_bakeTargetName.has_value();}
 void unirender::Scene::SetBakeTarget(Object &o)
@@ -701,4 +821,3 @@ void unirender::Scene::AddLight(Light &light)
 		m_lights.reserve(m_lights.size() *1.5 +50);
 	m_lights.push_back(light.shared_from_this());
 }
-#pragma optimize("",on)

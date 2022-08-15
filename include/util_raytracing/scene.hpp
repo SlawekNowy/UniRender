@@ -37,6 +37,10 @@ namespace ccl
 	class BufferParams;
 	class SessionParams;
 };
+namespace udm
+{
+	struct Property;
+};
 namespace OpenImageIO_v2_1
 {
 	class ustring;
@@ -65,6 +69,9 @@ namespace unirender
 	using PMesh = std::shared_ptr<Mesh>;
 	struct Socket;
 
+	DLLRTUTIL void serialize_udm_property(DataStream &dsOut,const udm::Property &prop);
+	DLLRTUTIL void deserialize_udm_property(DataStream &dsIn,udm::Property &prop);
+
 	class ModelCache;
 	class ShaderCache;
 	class NodeManager;
@@ -88,7 +95,7 @@ namespace unirender
 
 			Count
 		};
-#pragma pack(push,1)
+
 		struct SceneInfo
 		{
 			std::string sky = "";
@@ -104,8 +111,11 @@ namespace unirender
 			uint32_t maxGlossyBounces = 4;
 			uint32_t maxTransmissionBounces = 12;
 			float exposure = 1.f;
+			bool useAdaptiveSampling = true;
+			float adaptiveSamplingThreshold = 0.01f;
+			uint32_t adaptiveMinSamples = 0;
 		};
-#pragma pack(pop)
+
 		enum class ColorSpace : uint8_t
 		{
 			SRGB = 0,
@@ -250,6 +260,7 @@ namespace unirender
 		void SetMaxGlossyBounces(uint32_t bounces);
 		void SetMaxTransmissionBounces(uint32_t bounces);
 		void SetMotionBlurStrength(float strength);
+		void SetAdaptiveSampling(bool enabled,float adaptiveSamplingThreshold=0.01f,uint32_t adaptiveMinSamples=0);
 		void SetBakeTarget(Object &o);
 		const std::string *GetBakeTargetName() const;
 		bool HasBakeTarget() const;

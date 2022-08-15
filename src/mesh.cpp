@@ -96,27 +96,6 @@ enum class SerializationFlags : uint8_t
 	UseSubdivFaces = UseAlphas<<1u
 };
 REGISTER_BASIC_BITWISE_OPERATORS(SerializationFlags)
-static void serialize_udm_property(DataStream &dsOut,const udm::Property &prop)
-{
-	std::stringstream ss;
-	ufile::OutStreamFile f {std::move(ss)};
-	prop.Write(f);
-	dsOut->Write<size_t>(f.GetSize());
-
-	std::vector<uint8_t> data;
-	data.resize(f.GetSize());
-	ss = f.MoveStream();
-	ss.seekg(0,std::ios_base::beg);
-	ss.read(reinterpret_cast<char*>(data.data()),data.size());
-	dsOut->Write(data.data(),data.size());
-}
-static void deserialize_udm_property(DataStream &dsIn,udm::Property &prop)
-{
-	auto size = dsIn->Read<size_t>();
-	ufile::VectorFile f {size};
-	dsIn->Read(f.GetData(),size);
-	prop.Read(f);
-}
 void unirender::Mesh::Serialize(DataStream &dsOut,const std::function<std::optional<uint32_t>(const Shader&)> &fGetShaderIndex) const
 {
 	auto prop = udm::Property::Create<udm::Element>();
