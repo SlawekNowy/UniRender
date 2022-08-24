@@ -27,9 +27,11 @@ const umath::ScaledTransform &unirender::WorldObject::GetPose() const {return co
 void unirender::WorldObject::Serialize(DataStream &dsOut) const
 {
 	dsOut->Write(m_pose);
+	dsOut->Write(m_uuid);
 }
 void unirender::WorldObject::Deserialize(uint32_t version,DataStream &dsIn)
 {
 	m_pose = dsIn->Read<decltype(m_pose)>();
+	m_uuid = dsIn->Read<decltype(m_uuid)>();
 }
 #pragma optimize("",on)
