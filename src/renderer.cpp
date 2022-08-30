@@ -283,6 +283,7 @@ void unirender::Renderer::PrepareCyclesSceneForRendering()
 }
 bool unirender::Renderer::ShouldUseProgressiveFloatFormat() const {return true;}
 bool unirender::Renderer::ShouldUseTransparentSky() const {return m_scene->GetSceneInfo().transparentSky;}
+bool unirender::Renderer::IsDisplayDriverEnabled() const {return !umath::is_flag_set(m_flags,Flags::DisableDisplayDriver);}
 udm::PropertyWrapper unirender::Renderer::GetApiData() const {return *m_apiData;}
 unirender::WorldObject *unirender::Renderer::FindActor(const util::Uuid &uuid)
 {

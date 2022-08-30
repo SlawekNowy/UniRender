@@ -62,7 +62,8 @@ namespace unirender
 		enum class Flags : uint32_t
 		{
 			None = 0u,
-			EnableLiveEditing = 1u
+			EnableLiveEditing = 1u,
+			DisableDisplayDriver = EnableLiveEditing<<1u
 		};
 		enum class StereoEye : uint8_t
 		{
@@ -112,6 +113,7 @@ namespace unirender
 
 		virtual bool ShouldUseProgressiveFloatFormat() const;
 		bool ShouldUseTransparentSky() const;
+		bool IsDisplayDriverEnabled() const;
 		Scene &GetScene() {return *m_scene;}
 		const Scene &GetScene() const {return const_cast<Renderer*>(this)->GetScene();}
 		TileManager &GetTileManager() {return m_tileManager;}
