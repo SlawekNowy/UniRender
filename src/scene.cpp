@@ -559,7 +559,9 @@ void unirender::Scene::Save(DataStream &dsOut,const std::string &rootDir,const S
 	auto udmSky = udmScene["sky"];
 	auto absSky = GetAbsSkyPath(m_sceneInfo.sky);
 	if(absSky.has_value())
-		udmSky["texture"] = *absSky;
+		udmSky["absTexture"] = *absSky;
+	else
+		udmSky["relTexture"] = m_sceneInfo.sky;
 	udmSky["angles"] = m_sceneInfo.skyAngles;
 	udmSky["strength"] = m_sceneInfo.skyStrength;
 	udmSky["transparent"] = m_sceneInfo.transparentSky;
@@ -669,13 +671,18 @@ bool unirender::Scene::ReadSerializationHeader(DataStream &dsIn,RenderMode &outR
 		auto &sceneInfo = *optOutSceneInfo;
 		auto udmScene = udm["sceneInfo"];
 		auto udmSky = udmScene["sky"];
-		auto udmSkyTex = udmSky["texture"];
-		if(udmSkyTex)
+
+		auto absTex = udmSky["absTexture"];
+		auto relTex = udmSky["relTexture"];
+		if(absTex)
+			absTex(sceneInfo.sky);
+		else if(relTex)
 		{
 			std::string skyTex;
-			udmSkyTex(skyTex);
+			relTex(skyTex);
 			sceneInfo.sky = ToAbsolutePath(skyTex);
 		}
+
 		udmSky["angles"](sceneInfo.skyAngles);
 		udmSky["strength"](sceneInfo.skyStrength);
 		udmSky["transparent"](sceneInfo.transparentSky);
