@@ -147,7 +147,7 @@ void unirender::Renderer::DumpImage(const std::string &renderStage,uimg::ImageBu
 		return;
 	}
 	fsys::File fp {f};
-	auto res = uimg::save_image(fp,imgBuffer,uimg::ImageFormat::HDR);
+	auto res = uimg::save_image(fp,imgBuffer,format);
 	if(!res)
 		std::cout<<"Failed to dump render stage image '"<<renderStage<<"': Unknown error!"<<std::endl;
 }
@@ -221,6 +221,8 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 			auto &resultImageBuffer = pair.second[umath::to_integral((eyeStage != StereoEye::None) ? eyeStage : StereoEye::Left)];
 			if(!resultImageBuffer)
 				continue;
+			if(ShouldDumpRenderStageImages())
+				DumpImage("raw_output",*resultImageBuffer,uimg::ImageFormat::PNG);
 			if(m_colorTransformProcessor) // TODO: Should we really apply color transform if we're not denoising?
 			{
 				std::string err;
@@ -229,7 +231,8 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 				if(ShouldDumpRenderStageImages())
 					DumpImage("color_transform",*resultImageBuffer,uimg::ImageFormat::HDR);
 			}
-			resultImageBuffer->ClearAlpha();
+			if(!ShouldUseTransparentSky())
+				resultImageBuffer->ClearAlpha();
 			if(ShouldDumpRenderStageImages())
 				DumpImage("alpha",*resultImageBuffer,uimg::ImageFormat::HDR);
 			FinalizeImage(*resultImageBuffer,eyeStage);
