@@ -232,8 +232,14 @@ void unirender::Scene::PrintLogInfo()
 
 bool unirender::Scene::IsLightmapRenderMode(RenderMode renderMode)
 {
-	return renderMode == RenderMode::BakeDiffuseLighting ||
-		renderMode == RenderMode::BakeDiffuseLightingSeparate;
+	return umath::to_integral(renderMode) >= umath::to_integral(RenderMode::LightmapBakingStart) &&
+		umath::to_integral(renderMode) <= umath::to_integral(RenderMode::LightmapBakingEnd);
+}
+
+bool unirender::Scene::IsBakingRenderMode(RenderMode renderMode)
+{
+	return umath::to_integral(renderMode) >= umath::to_integral(RenderMode::BakingStart) &&
+		umath::to_integral(renderMode) <= umath::to_integral(RenderMode::BakingEnd);
 }
 
 bool unirender::Scene::IsRenderSceneMode(RenderMode renderMode)
@@ -299,6 +305,8 @@ bool unirender::Scene::IsValidTexture(const std::string &filePath) const
 
 std::optional<std::string> unirender::Scene::GetAbsSkyPath(const std::string &skyTex)
 {
+	if(skyTex.empty())
+		return {};
 	std::string absPath = skyTex;
 	if(FileManager::ExistsSystem(absPath) == false && FileManager::FindAbsolutePath("materials/" +skyTex,absPath) == false)
 		return {};
@@ -557,11 +565,14 @@ void unirender::Scene::Save(DataStream &dsOut,const std::string &rootDir,const S
 
 	auto udmScene = udm["sceneInfo"];
 	auto udmSky = udmScene["sky"];
-	auto absSky = GetAbsSkyPath(m_sceneInfo.sky);
-	if(absSky.has_value())
-		udmSky["absTexture"] = *absSky;
-	else
-		udmSky["relTexture"] = m_sceneInfo.sky;
+	if(!m_sceneInfo.sky.empty())
+	{
+		auto absSky = GetAbsSkyPath(m_sceneInfo.sky);
+		if(absSky.has_value())
+			udmSky["absTexture"] = *absSky;
+		else
+			udmSky["relTexture"] = m_sceneInfo.sky;
+	}
 	udmSky["angles"] = m_sceneInfo.skyAngles;
 	udmSky["strength"] = m_sceneInfo.skyStrength;
 	udmSky["transparent"] = m_sceneInfo.transparentSky;

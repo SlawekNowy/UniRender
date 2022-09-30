@@ -156,7 +156,12 @@ namespace unirender
 			Noise,
 			Caustic,
 
-			Count
+			Count,
+
+			BakingStart = BakeAmbientOcclusion,
+			BakingEnd = BakeDiffuseLightingSeparate,
+			LightmapBakingStart = BakeDiffuseLighting,
+			LightmapBakingEnd = BakeDiffuseLightingSeparate
 		};
 		enum class StateFlags : uint16_t
 		{
@@ -197,6 +202,7 @@ namespace unirender
 		};
 		static bool IsRenderSceneMode(RenderMode renderMode);
 		static bool IsLightmapRenderMode(RenderMode renderMode);
+		static bool IsBakingRenderMode(RenderMode renderMode);
 		static void SetKernelPath(const std::string &kernelPath);
 		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,RenderMode renderMode,const CreateInfo &createInfo={});
 		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,DataStream &dsIn,const std::string &rootDir,RenderMode renderMode,const CreateInfo &createInfo={});

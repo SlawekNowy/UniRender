@@ -231,7 +231,7 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker,uni
 				if(ShouldDumpRenderStageImages())
 					DumpImage("color_transform",*resultImageBuffer,uimg::ImageFormat::HDR);
 			}
-			if(!ShouldUseTransparentSky())
+			if(!ShouldUseTransparentSky() || unirender::Scene::IsLightmapRenderMode(m_scene->GetRenderMode()))
 				resultImageBuffer->ClearAlpha();
 			if(ShouldDumpRenderStageImages())
 				DumpImage("alpha",*resultImageBuffer,uimg::ImageFormat::HDR);
