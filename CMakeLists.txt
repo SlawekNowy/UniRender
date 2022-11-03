@@ -85,6 +85,8 @@ add_def(RTUTIL_DLL)
 add_def(CCL_NAMESPACE_BEGIN=namespace\ ccl\ {)
 add_def(CCL_NAMESPACE_END=})
 
+set(UNIRENDER_ENABLE_DEPENDENCIES 1 CACHE BOOL "Enable dependencies?")
+
 ##### CONFIGURATION #####
 
 set(LIB_TYPE SHARED)
@@ -135,9 +137,13 @@ if(DEFINED PRECOMPILED_HEADER)
 endif()
 set_target_properties(${PROJ_NAME} PROPERTIES ${TARGET_PROPERTIES})
 
-target_link_libraries(${PROJ_NAME}
-	opengl32
-	glu32
-)
+if(WIN32)
+	target_link_libraries(${PROJ_NAME}
+		opengl32
+		glu32
+	)
+endif()
 
-add_dependencies(${PROJ_NAME} mathutil sharedutils vfilesystem util_image)
+if(${UNIRENDER_ENABLE_DEPENDENCIES})
+	add_dependencies(${PROJ_NAME} mathutil sharedutils vfilesystem util_image)
+endif()

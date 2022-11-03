@@ -1,0 +1,114 @@
+name: Build
+description: 'Build library'
+inputs:
+  root_dir:
+    description: 'Root directory'
+    required: true
+  should_checkout:
+    description: 'Checkout the core library?'
+    required: true
+    default: '1'
+  dir:
+    description: 'Library directory'
+    required: true
+    default: 'external_libs/util_raytracing'
+  build_shared:
+    description: 'Build as shared library?'
+    required: true
+    default: '0'
+outputs:
+  include_directory:
+    description: 'The include directory for this library'
+    value: ${{ steps.write-outputs.outputs.include-directory }}
+  library_file_path:
+    description: 'The path (including filename and extension) of the generated library'
+    value: ${{ steps.write-outputs.outputs.library-file-path }}
+  binary_file_path:
+    description: 'The path (including filename and extension) of the generated binary'
+    value: ${{ steps.write-outputs.outputs.binary-file-path }}
+runs:
+  using: "composite"
+  steps:
+    - name: Initialize Env
+      id: init-env
+      uses: Silverlan/common_actions/set_common_env_vars@main
+      
+    - uses: ChristopherHX/conditional@b4a9649204f81002ec9a4ef7d4bf7d6b2ab7fa55
+      name: CMake Build
+      with:
+        if: ${{inputs.should_checkout == '1'}}
+        step: |
+          uses: Silverlan/common_actions/get_submodule@main
+          with:
+            repo: 'Silverlan/tmp_unirender_ci'
+            repo_name: 'util_raytracing'
+            cmake_var: 'DEPENDENCY_UTIL_RAYTRACING_INCLUDE'
+            dir: '.'
+            cmake_definitions_tmp: ' -DUNIRENDER_ENABLE_DEPENDENCIES=0 '
+            
+    - name: Download dependencies
+      shell: bash
+      run: |
+        git clone https://github.com/Silverlan/util_udm.git external_libs/util_udm
+        git clone https://github.com/Silverlan/util_image.git external_libs/util_image
+        git clone --recursive https://github.com/OpenImageDenoise/oidn.git third_party_libs/oidn
+        sudo apt-get install cmake-curses-gui
+        sudo apt-get install libtbb-dev
+        
+    - name: Install GLFW dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install libglfw3
+        sudo apt-get install libglfw3-dev
+        sudo apt-get install -y libxxf86vm-dev
+        sudo apt install xorg-dev
+        
+    - name: Download ISPC
+      shell: bash
+      run: |
+        cd third_party_libs/oidn
+        wget https://github.com/ispc/ispc/releases/download/v1.18.0/ispc-v1.18.0-linux.tar.gz
+        tar -xf ispc-v1.18.0-linux.tar.gz
+        cd ispc-v1.18.0-linux/bin
+        echo "$(pwd)" >> $GITHUB_PATH
+        cd ../../
+        
+    - name: Build OIDN
+      shell: bash
+      run: |
+        cd third_party_libs/oidn
+        mkdir build
+        cd build
+        cmake -DCMAKE_CXX_COMPILER=clang++-14 -DCMAKE_C_COMPILER=clang-14 ..
+        make
+        
+    - name: Build OpenSubdiv
+      shell: bash
+      run: |
+        cd third_party_libs
+        git clone --recursive https://github.com/PixarAnimationStudios/OpenSubdiv.git
+        cd OpenSubdiv
+        git reset --hard 82ab1b9f54c87fdd7e989a3470d53e137b8ca270
+        mkdir build
+        cd build
+        cmake -DNO_TBB=1 -DNO_EXAMPLES=1 -DNO_TUTORIALS=1 -DNO_REGRESSION=1 -DNO_DOC=1 -DCMAKE_CXX_COMPILER=clang++-14 -DCMAKE_C_COMPILER=clang-14 ..
+        make
+    
+    - name: Download common external libs
+      uses: Silverlan/common_actions/get_common_external_libs@main
+
+    - name: Build
+      shell: bash
+      run: |
+        value="$(cat cmake_vars.txt)"
+        cmake -G "Unix Makefiles" -DUNIRENDER_ENABLE_DEPENDENCIES=0 $value -DDEPENDENCY_UTIL_OCIO_INCLUDE=external_libs/util_ocio/include -DDEPENDENCY_UTIL_IMAGE_INCLUDE=external_libs/util_image/include -DDEPENDENCY_UTIL_UDM_INCLUDE=external_libs/util_udm/include -DDEPENDENCY_OPENIMAGEDENOISE_INCLUDE=third_party_libs/oidn/include -DDEPENDENCY_OPENSUBDIV_INCLUDE=third_party_libs/OpenSubdiv
+        cmake --build ./ --verbose --target util_raytracing
+        
+    - name: Write outputs
+      shell: bash
+      id: write-outputs
+      run: |
+        echo "::set-output name=include-directory::$(echo ${{ inputs.root_dir }}/${{ inputs.dir }}/include)"
+        echo "::set-output name=library-file-path::$(echo ${{ steps.build.outputs.library_file_path }})"
+        echo "::set-output name=binary-file-path::$(echo ${{ steps.build.outputs.binary_file_path }})"
