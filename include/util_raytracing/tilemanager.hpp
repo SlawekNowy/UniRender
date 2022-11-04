@@ -114,7 +114,7 @@ namespace unirender
 		std::mutex m_renderedTileMutex;
 		std::vector<TileData> m_renderedTiles;
 		std::array<std::future<void>,10> m_ppThreadPoolHandles;
-		ctpl::thread_pool m_ppThreadPool {m_ppThreadPoolHandles.size()};
+		ctpl::thread_pool m_ppThreadPool {static_cast<int32_t>(m_ppThreadPoolHandles.size())};
 		std::condition_variable m_threadWaitCondition {};
 		std::mutex m_threadWaitMutex {};
 		std::atomic<State> m_state = State::Initial;
