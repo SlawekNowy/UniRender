@@ -11,8 +11,8 @@
 #include <util_ocio.hpp>
 #include <util_image_buffer.hpp>
 #include <sharedutils/util.h>
+#include <cstring>
 
-#pragma optimize("",off)
 bool unirender::TileManager::TileData::IsFloatData() const {return !IsHDRData();}
 bool unirender::TileManager::TileData::IsHDRData() const {return umath::is_flag_set(flags,Flags::HDRData);}
 
@@ -232,7 +232,7 @@ void unirender::TileManager::ApplyRectData(const TileData &tile)
 	uint64_t dstOffset = (tile.y *m_progressiveImage->GetWidth() +tile.x) *sizePerPixel;
 	for(auto y=tile.y;y<(tile.y +tile.h);++y)
 	{
-		memcpy(dstData +dstOffset,srcData +srcOffset,tile.w *sizePerPixel);
+		std::memcpy(dstData +dstOffset,srcData +srcOffset,tile.w *sizePerPixel);
 		srcOffset += srcSizePerRow;
 		dstOffset += dstSizePerRow;
 	}
@@ -292,4 +292,3 @@ void unirender::TileManager::ApplyPostProcessingForProgressiveTile(TileData &dat
 	if(result == false)
 		std::cout<<"Unable to apply color transform: "<<err<<std::endl;
 }
-#pragma optimize("",on)

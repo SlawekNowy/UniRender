@@ -194,7 +194,7 @@ namespace unirender
 			if constexpr(std::is_same_v<T,EulerAngles>)
 				return ToTypeValue(Vector3{umath::deg_to_rad(v.p),umath::deg_to_rad(v.y),umath::deg_to_rad(v.r)},type);
 			else if constexpr(std::is_same_v<T,umath::Transform> || std::is_same_v<T,umath::ScaledTransform>)
-				return ToTypeValue(Mat4x3{v.ToMatrix()});
+				return ToTypeValue(Mat4x3{v.ToMatrix()},type);
 			switch(type)
 			{
 			case SocketType::Bool:

@@ -9,6 +9,7 @@
 #define __UTIL_RAYTRACING_SCENE_HPP__
 
 #include "definitions.hpp"
+#include <sharedutils/datastream.h>
 #include <sharedutils/util_weak_handle.hpp>
 #include <sharedutils/util.h>
 #include <condition_variable>
@@ -186,6 +187,7 @@ namespace unirender
 
 		struct CreateInfo
 		{
+			CreateInfo();
 			void Serialize(DataStream &ds) const;
 			void Deserialize(DataStream &ds,uint32_t version);
 

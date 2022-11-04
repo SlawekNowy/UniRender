@@ -13,6 +13,7 @@
 #include <mathutil/vertex.hpp>
 #include <mathutil/uvec.h>
 #include <vector>
+#include <memory>
 #include <functional>
 
 

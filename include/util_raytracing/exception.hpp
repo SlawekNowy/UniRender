@@ -21,7 +21,7 @@ namespace unirender
 		Exception(const std::string &msg)
 			: m_message{msg}
 		{}
-		virtual char const *what() const override
+		virtual char const *what() const noexcept override
 		{
 			return m_message.c_str();
 		}

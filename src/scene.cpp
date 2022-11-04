@@ -63,6 +63,9 @@ void unirender::deserialize_udm_property(DataStream &dsIn,udm::Property &prop)
 	prop.Read(f);
 }
 
+unirender::Scene::CreateInfo::CreateInfo()
+{}
+
 void unirender::Scene::CreateInfo::Serialize(DataStream &ds) const
 {
 	auto prop = udm::Property::Create<udm::Element>();

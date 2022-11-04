@@ -11,6 +11,8 @@
 #include "definitions.hpp"
 #include <cinttypes>
 #include <functional>
+#include <string>
+#include <memory>
 #include <optional>
 
 namespace uimg {class ImageBuffer;};

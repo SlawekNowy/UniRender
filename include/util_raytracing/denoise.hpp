@@ -12,6 +12,7 @@
 #include <util_image_types.hpp>
 #include <cinttypes>
 #include <functional>
+#include <memory>
 
 namespace uimg {class ImageBuffer;};
 namespace oidn {class DeviceRef;};
