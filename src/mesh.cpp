@@ -178,7 +178,7 @@ void unirender::Mesh::Serialize(DataStream &dsOut,const std::function<std::optio
 		auto udm = udmHairDs[idx++];
 		udm["shaderIndex"] = set.shaderIndex;
 
-		auto udmStrandData = udm["strandData"];
+		auto udmStrandData = udm.Add("strandData");
 		udmStrandData.AddArray<uint32_t>("hairSegments",set.strandData.hairSegments,udm::ArrayType::Compressed);
 		udmStrandData.AddArray<Vector3>("points",set.strandData.points,udm::ArrayType::Compressed);
 		udmStrandData.AddArray<Vector2>("uvs",set.strandData.uvs,udm::ArrayType::Compressed);

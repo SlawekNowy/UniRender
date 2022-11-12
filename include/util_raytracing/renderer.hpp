@@ -73,7 +73,9 @@ namespace unirender
 
 			None = std::numeric_limits<uint8_t>::max()
 		};
-		static std::shared_ptr<Renderer> Create(const unirender::Scene &scene,const std::string &rendererIdentifier,Flags flags=Flags::None);
+		static std::shared_ptr<Renderer> Create(
+			const unirender::Scene &scene,const std::string &rendererIdentifier,std::string &outErr,Flags flags=Flags::None
+		);
 		static bool UnloadRendererLibrary(const std::string &rendererIdentifier);
 		static void Close();
 		static constexpr const char *OUTPUT_COLOR = "COLOR";

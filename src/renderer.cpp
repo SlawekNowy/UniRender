@@ -57,11 +57,17 @@ void unirender::Renderer::Close()
 	g_rendererLibs.clear();
 	unirender::set_log_handler();
 }
-std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(const unirender::Scene &scene,const std::string &rendererIdentifier,Flags flags)
+std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(
+	const unirender::Scene &scene,const std::string &rendererIdentifier,
+	std::string &outErr,Flags flags
+)
 {
 	auto res = scene.GetResolution();
 	if(res.x <= 0 || res.y <= 0)
+	{
+		outErr = "Illegal resolution " +std::to_string(res.x) +"x" +std::to_string(res.y) +": Resolution must not be 0.";
 		return nullptr;
+	}
 	unirender::PRenderer renderer = nullptr;
 	auto it = g_rendererLibs.find(rendererIdentifier);
 	if(it == g_rendererLibs.end())
@@ -76,15 +82,19 @@ std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(const unirender
 		if(lib == nullptr)
 		{
 			std::cout<<"Unable to load renderer module for '"<<rendererIdentifier<<"': "<<err<<std::endl;
+			outErr = "Failed to load renderer module '" +rendererIdentifier +"/" +"UniRender_" +rendererIdentifier +"': " +err;
 			return nullptr;
 		}
 		it = g_rendererLibs.insert(std::make_pair(rendererIdentifier,lib)).first;
 	}
 	auto &lib = it->second;
-	auto *func = lib->FindSymbolAddress<bool(*)(const unirender::Scene&,Flags,std::shared_ptr<unirender::Renderer>&)>("create_renderer");
+	auto *func = lib->FindSymbolAddress<bool(*)(const unirender::Scene&,Flags,std::shared_ptr<unirender::Renderer>&,std::string&)>("create_renderer");
 	if(func == nullptr)
+	{
+		outErr = "Failed to locate symbol 'create_renderer' in renderer module!";
 		return nullptr;
-	auto success = func(scene,flags,renderer);
+	}
+	auto success = func(scene,flags,renderer,outErr);
 	return renderer;
 }
 bool unirender::Renderer::UnloadRendererLibrary(const std::string &rendererIdentifier)
