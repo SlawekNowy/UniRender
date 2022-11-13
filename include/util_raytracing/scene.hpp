@@ -84,7 +84,7 @@ namespace unirender
 	{
 	public:
 		static constexpr uint32_t SERIALIZATION_VERSION = 6;
-		struct SerializationData
+		struct DLLRTUTIL SerializationData
 		{
 			std::string outputFileName;
 		};
@@ -97,7 +97,7 @@ namespace unirender
 			Count
 		};
 
-		struct SceneInfo
+		struct DLLRTUTIL SceneInfo
 		{
 			std::string sky = "";
 			EulerAngles skyAngles {};
@@ -179,13 +179,13 @@ namespace unirender
 			OpenImage
 		};
 
-		struct ColorTransformInfo
+		struct DLLRTUTIL ColorTransformInfo
 		{
 			std::string config;
 			std::optional<std::string> lookName {};
 		};
 
-		struct CreateInfo
+		struct DLLRTUTIL CreateInfo
 		{
 			CreateInfo();
 			void Serialize(DataStream &ds) const;
