@@ -87,6 +87,8 @@ add_def(CCL_NAMESPACE_END=})
 
 set(UNIRENDER_ENABLE_DEPENDENCIES 1 CACHE BOOL "Enable dependencies?")
 
+search_lib_recursive(DEPENDENCY_UTIL_RAYTRACING_LIBRARY ${BINARY_PRAGMA_DIR} util_raytracing)
+
 ##### CONFIGURATION #####
 
 set(LIB_TYPE SHARED)
@@ -145,5 +147,5 @@ if(WIN32)
 endif()
 
 if(${UNIRENDER_ENABLE_DEPENDENCIES})
-	add_dependencies(${PROJ_NAME} mathutil sharedutils vfilesystem util_image)
+	add_dependencies(${PROJ_NAME} mathutil sharedutils vfilesystem util_image util_ocio)
 endif()
