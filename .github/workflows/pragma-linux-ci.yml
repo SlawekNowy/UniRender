@@ -42,7 +42,7 @@ jobs:
           
       - name: Build
         id: build
-        uses: Silverlan/UniRender/github_actions/build@master
+        uses: Silverlan/unirender/github_actions/build@master
         with:
           root_dir: "${{ env.GA_ROOT_DIR }}"
           should_checkout: "0"
@@ -57,6 +57,8 @@ jobs:
           rsync libutil_raytracing.so release/lib/
           rsync third_party_libs/OpenSubdiv/build/lib/libosdGPU.so release/lib/
           rsync third_party_libs/OpenSubdiv/build/lib/libosdCPU.so release/lib/
+          rsync --links third_party_libs/OpenSubdiv/build/lib/libosdCPU.so.3.4.3 release/lib/
+          rsync --links third_party_libs/OpenSubdiv/build/lib/libosdGPU.so.3.4.3 release/lib/
           rsync third_party_libs/oidn/ispc-v1.18.0-linux/lib64/libispcrt.so release/lib/
           rsync third_party_libs/oidn/build/libOpenImageDenoise.so release/lib/
           rsync build/external_libs/sharedutils/libsharedutils.so release/lib/
@@ -71,3 +73,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit: master
+
+      - name: Handle Error
+        uses: Silverlan/common_actions/action_handle_error@main
+        if: failure()

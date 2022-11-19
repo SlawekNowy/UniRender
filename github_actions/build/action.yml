@@ -40,7 +40,7 @@ runs:
         step: |
           uses: Silverlan/common_actions/get_submodule@main
           with:
-            repo: 'Silverlan/tmp_unirender_ci'
+            repo: 'Silverlan/unirender'
             repo_name: 'util_raytracing'
             cmake_var: 'DEPENDENCY_UTIL_RAYTRACING_INCLUDE'
             dir: '.'
@@ -102,9 +102,9 @@ runs:
       shell: bash
       run: |
         value="$(cat cmake_vars.txt)"
-        cmake -G "Unix Makefiles" -DUNIRENDER_ENABLE_DEPENDENCIES=0 $value -DDEPENDENCY_UTIL_OCIO_INCLUDE=external_libs/util_ocio/include -DDEPENDENCY_UTIL_IMAGE_INCLUDE=external_libs/util_image/include -DDEPENDENCY_UTIL_UDM_INCLUDE=external_libs/util_udm/include -DDEPENDENCY_OPENIMAGEDENOISE_INCLUDE=third_party_libs/oidn/include -DDEPENDENCY_OPENSUBDIV_INCLUDE=third_party_libs/OpenSubdiv
+        cmake -G "Unix Makefiles" -DUNIRENDER_ENABLE_DEPENDENCIES=0 $value -DDEPENDENCY_UTIL_OCIO_INCLUDE=external_libs/util_ocio/include -DDEPENDENCY_UTIL_IMAGE_INCLUDE=external_libs/util_image/include -DDEPENDENCY_UTIL_UDM_INCLUDE=external_libs/util_udm/include -DDEPENDENCY_OPENIMAGEDENOISE_INCLUDE=third_party_libs/oidn/include -DDEPENDENCY_OPENSUBDIV_INCLUDE=./third_party_libs/OpenSubdiv -DDEPENDENCY_OPENSUBDIV_LIBRARY=./third_party_libs/OpenSubdiv/build/lib/libosdGPU.so
         cmake --build ./ --verbose --target util_raytracing
-        
+
     - name: Write outputs
       shell: bash
       id: write-outputs
