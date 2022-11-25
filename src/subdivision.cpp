@@ -13,8 +13,6 @@
 #include <opensubdiv/far/topologyDescriptor.h>
 #include <opensubdiv/far/primvarRefiner.h>
 
-#pragma comment(lib,"E:/projects/OpenSubdiv/build_winx64/lib/RelWithDebInfo/osdCPU.lib")
-
 struct OsdVertexWeight
 {
 	OsdVertexWeight()
