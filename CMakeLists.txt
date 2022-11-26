@@ -66,6 +66,7 @@ link_external_library(mathutil)
 link_external_library(vfilesystem)
 link_external_library(util_udm)
 link_external_library(opensubdiv)
+add_external_library(opensubdiv_cpu)
 
 link_external_library(openimagedenoise)
 add_include_dir(glm)
