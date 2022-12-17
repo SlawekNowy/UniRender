@@ -148,5 +148,5 @@ if(WIN32)
 endif()
 
 if(${UNIRENDER_ENABLE_DEPENDENCIES})
-	add_dependencies(${PROJ_NAME} mathutil sharedutils vfilesystem util_image util_ocio)
+	add_dependencies(${PROJ_NAME} mathutil sharedutils vfilesystem util_image util_ocio lz4)
 endif()
