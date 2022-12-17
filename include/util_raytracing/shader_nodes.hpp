@@ -222,8 +222,6 @@ namespace unirender
 		};
 		namespace geometry
 		{
-			constexpr auto *IN_NORMAL_OSL = "normal_osl";
-
 			constexpr auto *OUT_POSITION = "position";
 			constexpr auto *OUT_NORMAL = "normal";
 			constexpr auto *OUT_TANGENT = "tangent";
@@ -357,7 +355,6 @@ namespace unirender
 			constexpr auto *IN_FROM_DUPLI = "from_dupli";
 			constexpr auto *IN_USE_TRANSFORM = "use_transform";
 			constexpr auto *IN_OB_TFM = "ob_tfm";
-			constexpr auto *IN_NORMAL_OSL = "normal_osl";
 
 			constexpr auto *OUT_GENERATED = "generated";
 			constexpr auto *OUT_NORMAL = "normal";
@@ -464,7 +461,6 @@ namespace unirender
 		{
 			constexpr auto *IN_SPACE = "space";
 			constexpr auto *IN_ATTRIBUTE = "attribute";
-			constexpr auto *IN_NORMAL_OSL = "normal_osl";
 			constexpr auto *IN_STRENGTH = "strength";
 			constexpr auto *IN_COLOR = "color";
 

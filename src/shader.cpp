@@ -1057,7 +1057,6 @@ void unirender::NodeManager::RegisterNodeTypes()
 	});
 	RegisterNodeType(NODE_GEOMETRY,[](GroupNodeDesc *parent) {
 		auto desc = NodeDesc::Create(parent);
-		desc->RegisterSocket<unirender::SocketType::Normal>(nodes::geometry::IN_NORMAL_OSL,STNormal{},SocketIO::In);
 
 		desc->RegisterSocket<unirender::SocketType::Point>(nodes::geometry::OUT_POSITION,SocketIO::Out);
 		desc->RegisterSocket<unirender::SocketType::Normal>(nodes::geometry::OUT_NORMAL,SocketIO::Out);
@@ -1154,8 +1153,6 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::texture_coordinate::IN_FROM_DUPLI,false);
 		desc->RegisterSocket<unirender::SocketType::Bool>(nodes::texture_coordinate::IN_USE_TRANSFORM,false);
 		desc->RegisterSocket<unirender::SocketType::Transform>(nodes::texture_coordinate::IN_OB_TFM,STTransform{1.f,0,0,0,0,1.f,0,0,0,0,1.f,0});
-
-		desc->RegisterSocket<unirender::SocketType::Vector>(nodes::texture_coordinate::IN_NORMAL_OSL,STVector{},SocketIO::In);
 
 		desc->RegisterSocket<unirender::SocketType::Point>(nodes::texture_coordinate::OUT_GENERATED,SocketIO::Out);
 		desc->RegisterSocket<unirender::SocketType::Normal>(nodes::texture_coordinate::OUT_NORMAL,SocketIO::Out);
@@ -1271,7 +1268,6 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::normal_map::IN_SPACE,nodes::normal_map::Space::Tangent);
 		desc->RegisterSocket<unirender::SocketType::String>(nodes::normal_map::IN_ATTRIBUTE,STString{});
 
-		desc->RegisterSocket<unirender::SocketType::Normal>(nodes::normal_map::IN_NORMAL_OSL,STNormal{},unirender::SocketIO::In);
 		desc->RegisterSocket<unirender::SocketType::Float>(nodes::normal_map::IN_STRENGTH,1.0f,unirender::SocketIO::In);
 		desc->RegisterSocket<unirender::SocketType::Color>(nodes::normal_map::IN_COLOR,STColor{0.5f,0.5f,1.0f},unirender::SocketIO::In);
 
