@@ -234,6 +234,9 @@ namespace unirender
 		float GetProgress() const;
 		RenderMode GetRenderMode() const {return m_renderMode;}
 
+		void SetDebugHandler(const std::string &identifier,const std::function<void(const std::shared_ptr<void>&)> &f);
+		std::function<void(const std::shared_ptr<void>&)> GetDebugHandler(const std::string &identifier);
+
 		bool IsProgressive() const;
 		bool IsProgressiveRefine() const;
 
@@ -301,6 +304,7 @@ namespace unirender
 		void DenoiseHDRImageArea(uimg::ImageBuffer &imgBuffer,uint32_t imgWidth,uint32_t imgHeight,uint32_t x,uint32_t y,uint32_t w,uint32_t h) const;
 		bool IsValidTexture(const std::string &filePath) const;
 
+		std::unordered_map<std::string,std::function<void(const std::shared_ptr<void>&)>> m_debugHandlers;
 		std::shared_ptr<NodeManager> m_nodeManager = nullptr;
 		SceneInfo m_sceneInfo {};
 		std::vector<std::shared_ptr<ModelCache>> m_mdlCaches {};

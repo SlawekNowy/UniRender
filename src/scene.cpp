@@ -541,6 +541,9 @@ bool unirender::Scene::IsProgressive() const {return m_createInfo.progressive;}
 bool unirender::Scene::IsProgressiveRefine() const {return m_createInfo.progressiveRefine;}
 //unirender::Scene::RenderMode unirender::Scene::GetRenderMode() const {return m_renderMode;}
 
+void unirender::Scene::SetDebugHandler(const std::string &identifier,const std::function<void(const std::shared_ptr<void>&)> &f) {m_debugHandlers[identifier] = f;}
+std::function<void(const std::shared_ptr<void>&)> unirender::Scene::GetDebugHandler(const std::string &identifier) {return m_debugHandlers[identifier];}
+
 void unirender::Scene::SetLightIntensityFactor(float f) {m_sceneInfo.lightIntensityFactor = f;}
 float unirender::Scene::GetLightIntensityFactor() const {return m_sceneInfo.lightIntensityFactor;}
 
