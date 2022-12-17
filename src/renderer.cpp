@@ -78,11 +78,15 @@ std::shared_ptr<unirender::Renderer> unirender::Renderer::Create(
 		std::vector<std::string> additionalSearchDirectories;
 		additionalSearchDirectories.push_back(moduleLocation.GetString());
 		std::string err;
-		auto lib = util::Library::Load(moduleLocation.GetString() +"UniRender_" +rendererIdentifier,additionalSearchDirectories,&err);
+		auto libName = "UniRender_" +rendererIdentifier;
+#ifdef __linux__
+		libName = "lib" +libName;
+#endif
+		auto lib = util::Library::Load(moduleLocation.GetString() +libName,additionalSearchDirectories,&err);
 		if(lib == nullptr)
 		{
 			std::cout<<"Unable to load renderer module for '"<<rendererIdentifier<<"': "<<err<<std::endl;
-			outErr = "Failed to load renderer module '" +rendererIdentifier +"/" +"UniRender_" +rendererIdentifier +"': " +err;
+			outErr = "Failed to load renderer module '" +rendererIdentifier +"/" +libName +"': " +err;
 			return nullptr;
 		}
 		it = g_rendererLibs.insert(std::make_pair(rendererIdentifier,lib)).first;
