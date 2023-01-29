@@ -15,14 +15,12 @@
 #include <mathutil/transform.hpp>
 
 class DataStream;
-namespace unirender
-{
+namespace unirender {
 	class WorldObject;
 	using PWorldObject = std::shared_ptr<WorldObject>;
-	class DLLRTUTIL WorldObject
-	{
-	public:
-		virtual ~WorldObject()=default;
+	class DLLRTUTIL WorldObject {
+	  public:
+		virtual ~WorldObject() = default;
 		void SetPos(const Vector3 &pos);
 		const Vector3 &GetPos() const;
 
@@ -35,16 +33,16 @@ namespace unirender
 		umath::ScaledTransform &GetPose();
 		const umath::ScaledTransform &GetPose() const;
 
-		void SetUuid(const util::Uuid &uuid) {m_uuid = uuid;}
-		const util::Uuid &GetUuid() const {return m_uuid;}
+		void SetUuid(const util::Uuid &uuid) { m_uuid = uuid; }
+		const util::Uuid &GetUuid() const { return m_uuid; }
 
 		void Serialize(DataStream &dsOut) const;
-		void Deserialize(uint32_t version,DataStream &dsIn);
-	protected:
+		void Deserialize(uint32_t version, DataStream &dsIn);
+	  protected:
 		WorldObject();
-	private:
+	  private:
 		umath::ScaledTransform m_pose = {};
-		util::Uuid m_uuid = {0,0};
+		util::Uuid m_uuid = {0, 0};
 	};
 };
 

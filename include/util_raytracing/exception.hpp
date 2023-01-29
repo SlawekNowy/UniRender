@@ -12,20 +12,12 @@
 #include <exception>
 #include <string>
 
-namespace unirender
-{
-	class DLLRTUTIL Exception
-		: public std::exception
-	{
-	public:
-		Exception(const std::string &msg)
-			: m_message{msg}
-		{}
-		virtual char const *what() const noexcept override
-		{
-			return m_message.c_str();
-		}
-	private:
+namespace unirender {
+	class DLLRTUTIL Exception : public std::exception {
+	  public:
+		Exception(const std::string &msg) : m_message {msg} {}
+		virtual char const *what() const noexcept override { return m_message.c_str(); }
+	  private:
 		std::string m_message {};
 	};
 };

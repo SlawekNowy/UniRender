@@ -16,10 +16,8 @@
 #include <optional>
 #include <functional>
 
-namespace unirender
-{
-	enum class ColorSpace : uint8_t
-	{
+namespace unirender {
+	enum class ColorSpace : uint8_t {
 		Srgb = 0,
 		Raw,
 		Auto,
@@ -27,16 +25,14 @@ namespace unirender
 		Count
 	};
 
-	enum class EnvironmentProjection : uint8_t
-	{
+	enum class EnvironmentProjection : uint8_t {
 		Equirectangular = 0,
 		MirrorBall,
 
 		Count
 	};
 
-	enum class ClosureType : uint32_t
-	{
+	enum class ClosureType : uint32_t {
 		None = 0,
 		BsdfMicroFacetMultiGgxGlass,
 		BsdfDiffuseToon,
@@ -49,18 +45,21 @@ namespace unirender
 	class NodeDesc;
 	class GroupNodeDesc;
 	struct MathNode;
-	namespace nodes::math {enum class MathType : uint32_t;};
-	namespace nodes::vector_math {enum class MathType : uint32_t;};
-	struct DLLRTUTIL Socket
-	{
-		Socket()=default;
+	namespace nodes::math {
+		enum class MathType : uint32_t;
+	};
+	namespace nodes::vector_math {
+		enum class MathType : uint32_t;
+	};
+	struct DLLRTUTIL Socket {
+		Socket() = default;
 		Socket(const DataValue &value);
 		Socket(float value);
 		Socket(const Vector3 &value);
-		Socket(NodeDesc &node,const std::string &socketName,bool output);
-		Socket(const Socket &other)=default;
-		Socket &operator=(const Socket &other)=default;
-		Socket &operator=(Socket &&other)=default;
+		Socket(NodeDesc &node, const std::string &socketName, bool output);
+		Socket(const Socket &other) = default;
+		Socket &operator=(const Socket &other) = default;
+		Socket &operator=(Socket &&other) = default;
 
 		bool operator==(const Socket &other) const;
 		bool operator!=(const Socket &other) const;
@@ -78,9 +77,9 @@ namespace unirender
 		NodeDesc *GetNode() const;
 		std::optional<DataValue> GetValue() const;
 
-		void Serialize(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const;
-		void Deserialize(GroupNodeDesc &parentGroupNode,DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable);
-		
+		void Serialize(DataStream &dsOut, const std::unordered_map<const NodeDesc *, uint64_t> &nodeIndexTable) const;
+		void Deserialize(GroupNodeDesc &parentGroupNode, DataStream &dsIn, const std::vector<const NodeDesc *> &nodeIndexTable);
+
 		Socket operator-() const;
 		Socket operator+(float f) const;
 		Socket operator-(float f) const;
@@ -102,9 +101,9 @@ namespace unirender
 		Socket operator<=(const Socket &socket) const;
 		Socket operator>(const Socket &socket) const;
 		Socket operator>=(const Socket &socket) const;
-	private:
-		Socket ApplyOperator(const Socket &other,nodes::math::MathType opType,std::optional<nodes::vector_math::MathType> opTypeVec,float(*applyValue)(float,float)) const;
-		Socket ApplyComparisonOperator(const Socket &other,bool(*op)(float,float),Socket(*opNode)(GroupNodeDesc&,const Socket&,const Socket&)) const;
+	  private:
+		Socket ApplyOperator(const Socket &other, nodes::math::MathType opType, std::optional<nodes::vector_math::MathType> opTypeVec, float (*applyValue)(float, float)) const;
+		Socket ApplyComparisonOperator(const Socket &other, bool (*op)(float, float), Socket (*opNode)(GroupNodeDesc &, const Socket &, const Socket &)) const;
 		unirender::GroupNodeDesc *GetCommonGroupNode(const Socket &other) const;
 		// Socket can either be a concrete value (e.g. float), OR an input or output of a node
 		std::optional<DataValue> m_value {};
@@ -115,15 +114,12 @@ namespace unirender
 		} m_nodeSocketRef;
 	};
 
-	struct DLLRTUTIL SocketHasher
-	{
-		std::size_t operator()(const Socket& k) const;
+	struct DLLRTUTIL SocketHasher {
+		std::size_t operator()(const Socket &k) const;
 	};
 
-	namespace nodes
-	{
-		namespace math
-		{
+	namespace nodes {
+		namespace math {
 			constexpr auto *IN_TYPE = "type";
 			constexpr auto *IN_USE_CLAMP = "use_clamp";
 			constexpr auto *IN_VALUE1 = "value1";
@@ -132,8 +128,7 @@ namespace unirender
 
 			constexpr auto *OUT_VALUE = "value";
 
-			enum class MathType : uint32_t
-			{
+			enum class MathType : uint32_t {
 				Add = 0u,
 				Subtract,
 				Multiply,
@@ -178,8 +173,7 @@ namespace unirender
 				Count
 			};
 		};
-		namespace hsv
-		{
+		namespace hsv {
 			constexpr auto *IN_HUE = "hue";
 			constexpr auto *IN_SATURATION = "saturation";
 			constexpr auto *IN_VALUE = "value";
@@ -188,40 +182,35 @@ namespace unirender
 
 			constexpr auto *OUT_COLOR = "color";
 		};
-		namespace separate_xyz
-		{
+		namespace separate_xyz {
 			constexpr auto *IN_VECTOR = "vector";
-			
+
 			constexpr auto *OUT_X = "x";
 			constexpr auto *OUT_Y = "y";
 			constexpr auto *OUT_Z = "z";
 		};
-		namespace combine_xyz
-		{
+		namespace combine_xyz {
 			constexpr auto *IN_X = "x";
 			constexpr auto *IN_Y = "Y";
 			constexpr auto *IN_Z = "Z";
 
 			constexpr auto *OUT_VECTOR = "vector";
 		};
-		namespace separate_rgb
-		{
+		namespace separate_rgb {
 			constexpr auto *IN_COLOR = "color";
 
 			constexpr auto *OUT_R = "r";
 			constexpr auto *OUT_G = "g";
 			constexpr auto *OUT_B = "b";
 		};
-		namespace combine_rgb
-		{
+		namespace combine_rgb {
 			constexpr auto *IN_R = "r";
 			constexpr auto *IN_G = "g";
 			constexpr auto *IN_B = "b";
 
 			constexpr auto *OUT_IMAGE = "image";
 		};
-		namespace geometry
-		{
+		namespace geometry {
 			constexpr auto *OUT_POSITION = "position";
 			constexpr auto *OUT_NORMAL = "normal";
 			constexpr auto *OUT_TANGENT = "tangent";
@@ -232,14 +221,12 @@ namespace unirender
 			constexpr auto *OUT_POINTINESS = "pointiness";
 			constexpr auto *OUT_RANDOM_PER_ISLAND = "random_per_island";
 		};
-		namespace camera_info
-		{
+		namespace camera_info {
 			constexpr auto *OUT_VIEW_VECTOR = "view_vector";
 			constexpr auto *OUT_VIEW_Z_DEPTH = "view_z_depth";
 			constexpr auto *OUT_VIEW_DISTANCE = "view_distance";
 		};
-		namespace image_texture
-		{
+		namespace image_texture {
 			// Note: These have to match ccl::u_colorspace_raw and ccl::u_colorspace_srgb
 			constexpr auto *COLOR_SPACE_RAW = "__builtin_raw";
 			constexpr auto *COLOR_SPACE_SRGB = "__builtin_srgb";
@@ -256,8 +243,7 @@ namespace unirender
 			constexpr auto *OUT_COLOR = "color";
 			constexpr auto *OUT_ALPHA = "alpha";
 
-			enum class AlphaType : uint32_t
-			{
+			enum class AlphaType : uint32_t {
 				Unassociated = 0,
 				Associated,
 				ChannelPacked,
@@ -267,8 +253,7 @@ namespace unirender
 				Count
 			};
 
-			enum class InterpolationType : uint32_t
-			{
+			enum class InterpolationType : uint32_t {
 				Linear = 0,
 				Closest,
 				Cubic,
@@ -277,8 +262,7 @@ namespace unirender
 				Count
 			};
 
-			enum class ExtensionType : uint32_t
-			{
+			enum class ExtensionType : uint32_t {
 				Repeat = 0,
 				Extend,
 				Clip,
@@ -286,8 +270,7 @@ namespace unirender
 				Count
 			};
 
-			enum class Projection : uint32_t
-			{
+			enum class Projection : uint32_t {
 				Flat = 0,
 				Box,
 				Sphere,
@@ -296,15 +279,13 @@ namespace unirender
 				Count
 			};
 		};
-		namespace normal_texture
-		{
+		namespace normal_texture {
 			constexpr auto *IN_FILENAME = "filename";
 			constexpr auto *IN_STRENGTH = "strength";
 
 			constexpr auto *OUT_NORMAL = "normal";
 		};
-		namespace environment_texture
-		{
+		namespace environment_texture {
 			constexpr auto *IN_FILENAME = "filename";
 			constexpr auto *IN_COLORSPACE = "colorspace";
 			constexpr auto *IN_ALPHA_TYPE = "alpha_type";
@@ -315,8 +296,7 @@ namespace unirender
 			constexpr auto *OUT_COLOR = "color";
 			constexpr auto *OUT_ALPHA = "alpha";
 		};
-		namespace noise_texture
-		{
+		namespace noise_texture {
 			constexpr auto *IN_VECTOR = "vector";
 			constexpr auto *IN_W = "w";
 			constexpr auto *IN_SCALE = "scale";
@@ -327,31 +307,27 @@ namespace unirender
 			constexpr auto *OUT_FAC = "fac";
 			constexpr auto *OUT_COLOR = "color";
 		};
-		namespace mix_closure
-		{
+		namespace mix_closure {
 			constexpr auto *IN_FAC = "fac";
 			constexpr auto *IN_CLOSURE1 = "closure1";
 			constexpr auto *IN_CLOSURE2 = "closure2";
 
 			constexpr auto *OUT_CLOSURE = "closure";
 		};
-		namespace add_closure
-		{
+		namespace add_closure {
 			constexpr auto *IN_CLOSURE1 = "closure1";
 			constexpr auto *IN_CLOSURE2 = "closure2";
 
 			constexpr auto *OUT_CLOSURE = "closure";
 		};
-		namespace background_shader
-		{
+		namespace background_shader {
 			constexpr auto *IN_COLOR = "color";
 			constexpr auto *IN_STRENGTH = "strength";
 			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
 
 			constexpr auto *OUT_BACKGROUND = "background";
 		};
-		namespace texture_coordinate
-		{
+		namespace texture_coordinate {
 			constexpr auto *IN_FROM_DUPLI = "from_dupli";
 			constexpr auto *IN_USE_TRANSFORM = "use_transform";
 			constexpr auto *IN_OB_TFM = "ob_tfm";
@@ -364,8 +340,7 @@ namespace unirender
 			constexpr auto *OUT_WINDOW = "window";
 			constexpr auto *OUT_REFLECTION = "reflection";
 		};
-		namespace mapping
-		{
+		namespace mapping {
 			constexpr auto *IN_TYPE = "type";
 			constexpr auto *IN_VECTOR = "vector";
 			constexpr auto *IN_LOCATION = "location";
@@ -374,8 +349,7 @@ namespace unirender
 
 			constexpr auto *OUT_VECTOR = "vector";
 
-			enum class Type : uint32_t
-			{
+			enum class Type : uint32_t {
 				Point = 0,
 				Texture,
 				Vector,
@@ -384,8 +358,7 @@ namespace unirender
 				Count
 			};
 		};
-		namespace scatter_volume
-		{
+		namespace scatter_volume {
 			constexpr auto *IN_COLOR = "color";
 			constexpr auto *IN_DENSITY = "density";
 			constexpr auto *IN_ANISOTROPY = "anisotropy";
@@ -393,30 +366,26 @@ namespace unirender
 
 			constexpr auto *OUT_VOLUME = "volume";
 		};
-		namespace emission
-		{
+		namespace emission {
 			constexpr auto *IN_COLOR = "color";
 			constexpr auto *IN_STRENGTH = "strength";
 			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
 
 			constexpr auto *OUT_EMISSION = "emission";
 		};
-		namespace color
-		{
+		namespace color {
 			constexpr auto *IN_VALUE = "value";
 
 			constexpr auto *OUT_COLOR = "color";
 		};
-		namespace attribute
-		{
+		namespace attribute {
 			constexpr auto *IN_ATTRIBUTE = "attribute";
 
 			constexpr auto *OUT_COLOR = "color";
 			constexpr auto *OUT_VECTOR = "vector";
 			constexpr auto *OUT_FAC = "fac";
 		};
-		namespace light_path
-		{
+		namespace light_path {
 			constexpr auto *OUT_IS_CAMERA_RAY = "is_camera_ray";
 			constexpr auto *OUT_IS_SHADOW_RAY = "is_shadow_ray";
 			constexpr auto *OUT_IS_DIFFUSE_RAY = "is_diffuse_ray";
@@ -433,23 +402,20 @@ namespace unirender
 			constexpr auto *OUT_TRANSPARENT_DEPTH = "transparent_depth";
 			constexpr auto *OUT_TRANSMISSION_DEPTH = "transmission_depth";
 		};
-		namespace transparent_bsdf
-		{
+		namespace transparent_bsdf {
 			constexpr auto *IN_COLOR = "color";
 			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
 
 			constexpr auto *OUT_BSDF = "BSDF";
 		};
-		namespace translucent_bsdf
-		{
+		namespace translucent_bsdf {
 			constexpr auto *IN_COLOR = "color";
 			constexpr auto *IN_NORMAL = "normal";
 			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
 
 			constexpr auto *OUT_BSDF = "BSDF";
 		};
-		namespace diffuse_bsdf
-		{
+		namespace diffuse_bsdf {
 			constexpr auto *IN_COLOR = "color";
 			constexpr auto *IN_NORMAL = "normal";
 			constexpr auto *IN_SURFACE_MIX_WEIGHT = "surface_mix_weight";
@@ -457,8 +423,7 @@ namespace unirender
 
 			constexpr auto *OUT_BSDF = "BSDF";
 		};
-		namespace normal_map
-		{
+		namespace normal_map {
 			constexpr auto *IN_SPACE = "space";
 			constexpr auto *IN_ATTRIBUTE = "attribute";
 			constexpr auto *IN_STRENGTH = "strength";
@@ -466,8 +431,7 @@ namespace unirender
 
 			constexpr auto *OUT_NORMAL = "normal";
 
-			enum class Space : uint32_t
-			{
+			enum class Space : uint32_t {
 				Tangent = 0,
 				Object,
 				World,
@@ -475,8 +439,7 @@ namespace unirender
 				Count
 			};
 		};
-		namespace principled_bsdf
-		{
+		namespace principled_bsdf {
 			constexpr auto *IN_DISTRIBUTION = "distribution";
 			constexpr auto *IN_SUBSURFACE_METHOD = "subsurface_method";
 			constexpr auto *IN_BASE_COLOR = "base_color";
@@ -505,8 +468,7 @@ namespace unirender
 
 			constexpr auto *OUT_BSDF = "BSDF";
 		};
-		namespace principled_volume
-		{
+		namespace principled_volume {
 			constexpr auto *IN_COLOR = "color";
 			constexpr auto *IN_DENSITY = "density";
 			constexpr auto *IN_ANISOTROPY = "anisotropy";
@@ -520,8 +482,7 @@ namespace unirender
 
 			constexpr auto *OUT_VOLUME = "volume";
 		};
-		namespace toon_bsdf
-		{
+		namespace toon_bsdf {
 			constexpr auto *IN_COMPONENT = "component";
 			constexpr auto *IN_COLOR = "color";
 			constexpr auto *IN_NORMAL = "normal";
@@ -531,8 +492,7 @@ namespace unirender
 
 			constexpr auto *OUT_BSDF = "BSDF";
 		};
-		namespace glossy_bsdf
-		{
+		namespace glossy_bsdf {
 			constexpr auto *IN_COLOR = "color";
 			constexpr auto *IN_ALPHA = "alpha";
 			constexpr auto *IN_NORMAL = "normal";
@@ -542,8 +502,7 @@ namespace unirender
 
 			constexpr auto *OUT_BSDF = "BSDF";
 		};
-		namespace glass_bsdf
-		{
+		namespace glass_bsdf {
 			constexpr auto *IN_DISTRIBUTION = "distribution";
 			constexpr auto *IN_COLOR = "color";
 			constexpr auto *IN_NORMAL = "normal";
@@ -553,19 +512,17 @@ namespace unirender
 
 			constexpr auto *OUT_BSDF = "BSDF";
 		};
-		namespace volume_clear
-		{
+		namespace volume_clear {
 			constexpr auto *IN_PRIORITY = "priority";
 			constexpr auto *IN_IOR = "IOR";
 			constexpr auto *IN_ABSORPTION = "absorption";
 			constexpr auto *IN_EMISSION = "emission";
-			
+
 			constexpr auto *IN_DEFAULT_WORLD_VOLUME = "default_world_volume";
 
 			constexpr auto *OUT_VOLUME = "volume";
 		};
-		namespace volume_homogeneous
-		{
+		namespace volume_homogeneous {
 			constexpr auto *IN_PRIORITY = "priority";
 			constexpr auto *IN_IOR = "IOR";
 			constexpr auto *IN_ABSORPTION = "absorption";
@@ -580,8 +537,7 @@ namespace unirender
 
 			constexpr auto *OUT_VOLUME = "homogeneous";
 		};
-		namespace volume_heterogeneous
-		{
+		namespace volume_heterogeneous {
 			constexpr auto *IN_PRIORITY = "priority";
 			constexpr auto *IN_IOR = "IOR";
 			constexpr auto *IN_ABSORPTION = "absorption";
@@ -593,20 +549,18 @@ namespace unirender
 
 			constexpr auto *IN_STEP_SIZE = "step_size";
 			constexpr auto *IN_STEP_MAX_COUNT = "step_max_count";
-			
+
 			constexpr auto *IN_DEFAULT_WORLD_VOLUME = "default_world_volume";
 
 			constexpr auto *OUT_VOLUME = "heterogeneous";
 		};
-		namespace output
-		{
+		namespace output {
 			constexpr auto *IN_SURFACE = "surface";
 			constexpr auto *IN_VOLUME = "volume";
 			constexpr auto *IN_DISPLACEMENT = "displacement";
 			constexpr auto *IN_NORMAL = "normal";
 		};
-		namespace vector_math
-		{
+		namespace vector_math {
 			constexpr auto *IN_TYPE = "type";
 			constexpr auto *IN_VECTOR1 = "vector1";
 			constexpr auto *IN_VECTOR2 = "vector2";
@@ -614,9 +568,8 @@ namespace unirender
 
 			constexpr auto *OUT_VALUE = "value";
 			constexpr auto *OUT_VECTOR = "vector";
-			
-			enum class MathType : uint32_t
-			{
+
+			enum class MathType : uint32_t {
 				Add = 0u,
 				Subtract,
 				Multiply,
@@ -644,8 +597,7 @@ namespace unirender
 				Count
 			};
 		};
-		namespace mix
-		{
+		namespace mix {
 			constexpr auto *IN_TYPE = "type";
 			constexpr auto *IN_USE_CLAMP = "use_clamp";
 			constexpr auto *IN_FAC = "fac";
@@ -654,8 +606,7 @@ namespace unirender
 
 			constexpr auto *OUT_COLOR = "color";
 
-			enum class Mix : uint32_t
-			{
+			enum class Mix : uint32_t {
 				Blend = 0,
 				Add,
 				Mul,
@@ -679,21 +630,18 @@ namespace unirender
 				Count
 			};
 		};
-		namespace rgb_to_bw
-		{
+		namespace rgb_to_bw {
 			constexpr auto *IN_COLOR = "color";
 
 			constexpr auto *OUT_VAL = "val";
 		};
-		namespace invert
-		{
+		namespace invert {
 			constexpr auto *IN_COLOR = "color";
 			constexpr auto *IN_FAC = "fac";
 
 			constexpr auto *OUT_COLOR = "color";
 		};
-		namespace vector_transform
-		{
+		namespace vector_transform {
 			constexpr auto *IN_TYPE = "type";
 			constexpr auto *IN_CONVERT_FROM = "convert_from";
 			constexpr auto *IN_CONVERT_TO = "convert_to";
@@ -701,8 +649,7 @@ namespace unirender
 
 			constexpr auto *OUT_VECTOR = "vector";
 
-			enum class Type : uint32_t
-			{
+			enum class Type : uint32_t {
 				None = 0,
 				Vector,
 				Point,
@@ -711,8 +658,7 @@ namespace unirender
 				Count
 			};
 
-			enum class ConvertSpace : uint32_t
-			{
+			enum class ConvertSpace : uint32_t {
 				World = 0,
 				Object,
 				Camera,
@@ -720,8 +666,7 @@ namespace unirender
 				Count
 			};
 		};
-		namespace rgb_ramp
-		{
+		namespace rgb_ramp {
 			constexpr auto *IN_RAMP = "ramp";
 			constexpr auto *IN_RAMP_ALPHA = "ramp_alpha";
 			constexpr auto *IN_INTERPOLATE = "interpolate";
@@ -730,16 +675,14 @@ namespace unirender
 			constexpr auto *OUT_COLOR = "color";
 			constexpr auto *OUT_ALPHA = "alpha";
 		};
-		namespace layer_weight
-		{
+		namespace layer_weight {
 			constexpr auto *IN_NORMAL = "normal";
 			constexpr auto *IN_BLEND = "blend";
 
 			constexpr auto *OUT_FRESNEL = "fresnel";
 			constexpr auto *OUT_FACING = "facing";
 		};
-		namespace ambient_occlusion
-		{
+		namespace ambient_occlusion {
 			constexpr auto *IN_SAMPLES = "samples";
 			constexpr auto *IN_COLOR = "color";
 			constexpr auto *IN_DISTANCE = "distance";
@@ -754,22 +697,21 @@ namespace unirender
 	constexpr uint32_t NODE_COUNT = 43;
 };
 
-DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::Socket &socket);
+DLLRTUTIL std::ostream &operator<<(std::ostream &os, const unirender::Socket &socket);
 
 namespace std {
-	template <>
-		struct hash<unirender::Socket>
-	{
-		std::size_t operator()(const unirender::Socket& k) const
+	template<>
+	struct hash<unirender::Socket> {
+		std::size_t operator()(const unirender::Socket &k) const
 		{
-			using std::size_t;
 			using std::hash;
+			using std::size_t;
 			using std::string;
 
 			std::string socketName;
 			auto *node = k.GetNode(socketName);
 			assert(node);
-			return util::hash_combine(util::hash_combine(0,node),socketName);
+			return util::hash_combine(util::hash_combine(0, node), socketName);
 		}
 	};
 }

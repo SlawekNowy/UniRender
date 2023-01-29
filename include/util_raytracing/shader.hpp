@@ -21,8 +21,7 @@
 #include <udm.hpp>
 #include <mathutil/transform.hpp>
 
-namespace unirender
-{
+namespace unirender {
 	static std::string COLORSPACE_AUTO = "";
 	static std::string COLORSPACE_RAW = "__builtin_raw";
 	static std::string COLORSPACE_SRGB = "__builtin_srgb";
@@ -30,105 +29,96 @@ namespace unirender
 	class NodeDesc;
 	class GroupNodeDesc;
 	struct NodeSocketDesc;
-	struct DLLRTUTIL NodeDescLink
-	{
+	struct DLLRTUTIL NodeDescLink {
 		Socket fromSocket;
 		Socket toSocket;
-		void Serialize(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable) const;
-		void Deserialize(GroupNodeDesc &groupNode,DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable);
+		void Serialize(DataStream &dsOut, const std::unordered_map<const NodeDesc *, uint64_t> &nodeIndexTable) const;
+		void Deserialize(GroupNodeDesc &groupNode, DataStream &dsIn, const std::vector<const NodeDesc *> &nodeIndexTable);
 	};
 
-	enum class SocketIO : uint8_t
-	{
-		None = 0u,
-		In = 1u,
-		Out = In<<1u
-	};
+	enum class SocketIO : uint8_t { None = 0u, In = 1u, Out = In << 1u };
 
-	struct NodeSocketDesc
-	{
+	struct NodeSocketDesc {
 		SocketIO io = SocketIO::None;
 		DataValue dataValue {};
 		void Serialize(DataStream &dsOut) const;
 		static NodeSocketDesc Deserialize(DataStream &dsIn);
 	};
-	
+
 	using NodeIndex = uint32_t;
 	using NodeTypeId = uint32_t;
-	class DLLRTUTIL NodeDesc
-		: public std::enable_shared_from_this<NodeDesc>
-	{
-	public:
+	class DLLRTUTIL NodeDesc : public std::enable_shared_from_this<NodeDesc> {
+	  public:
 		static std::shared_ptr<NodeDesc> Create(GroupNodeDesc *parent);
 
-		NodeDesc(const NodeDesc&)=delete;
-		NodeDesc(NodeDesc&&)=delete;
-		NodeDesc &operator=(const NodeDesc&)=delete;
-		virtual ~NodeDesc()=default;
+		NodeDesc(const NodeDesc &) = delete;
+		NodeDesc(NodeDesc &&) = delete;
+		NodeDesc &operator=(const NodeDesc &) = delete;
+		virtual ~NodeDesc() = default;
 		std::string GetName() const;
 		const std::string &GetTypeName() const;
 		std::string ToString() const;
-		virtual bool IsGroupNode() const {return false;}
+		virtual bool IsGroupNode() const { return false; }
 
 		NodeIndex GetIndex() const;
 
 		operator Socket() const;
-		Socket operator-() const {return static_cast<Socket>(*this).operator-();}
-		Socket operator+(float f) const {return static_cast<Socket>(*this).operator+(f);}
-		Socket operator-(float f) const {return static_cast<Socket>(*this).operator-(f);}
-		Socket operator*(float f) const {return static_cast<Socket>(*this).operator*(f);}
-		Socket operator/(float f) const {return static_cast<Socket>(*this).operator/(f);}
-		Socket operator^(float f) const {return static_cast<Socket>(*this).operator^(f);}
-		Socket operator%(float f) const {return static_cast<Socket>(*this).operator%(f);}
-		Socket operator<(float f) const {return static_cast<Socket>(*this).operator<(f);}
-		Socket operator<=(float f) const {return static_cast<Socket>(*this).operator<=(f);}
-		Socket operator>(float f) const {return static_cast<Socket>(*this).operator>(f);}
-		Socket operator>=(float f) const {return static_cast<Socket>(*this).operator>=(f);}
-		Socket operator+(const Vector3 &v) const {return static_cast<Socket>(*this).operator+(v);}
-		Socket operator-(const Vector3 &v) const {return static_cast<Socket>(*this).operator-(v);}
-		Socket operator*(const Vector3 &v) const {return static_cast<Socket>(*this).operator*(v);}
-		Socket operator/(const Vector3 &v) const {return static_cast<Socket>(*this).operator/(v);}
-		Socket operator%(const Vector3 &v) const {return static_cast<Socket>(*this).operator%(v);}
-		Socket operator+(const Socket &s) const {return static_cast<Socket>(*this).operator+(s);}
-		Socket operator-(const Socket &s) const {return static_cast<Socket>(*this).operator-(s);}
-		Socket operator*(const Socket &s) const {return static_cast<Socket>(*this).operator*(s);}
-		Socket operator/(const Socket &s) const {return static_cast<Socket>(*this).operator/(s);}
-		Socket operator^(const Socket &s) const {return static_cast<Socket>(*this).operator^(s);}
-		Socket operator%(const Socket &s) const {return static_cast<Socket>(*this).operator%(s);}
-		Socket operator<(const Socket &s) const {return static_cast<Socket>(*this).operator<(s);}
-		Socket operator<=(const Socket &s) const {return static_cast<Socket>(*this).operator<=(s);}
-		Socket operator>(const Socket &s) const {return static_cast<Socket>(*this).operator>(s);}
-		Socket operator>=(const Socket &s) const {return static_cast<Socket>(*this).operator>=(s);}
+		Socket operator-() const { return static_cast<Socket>(*this).operator-(); }
+		Socket operator+(float f) const { return static_cast<Socket>(*this).operator+(f); }
+		Socket operator-(float f) const { return static_cast<Socket>(*this).operator-(f); }
+		Socket operator*(float f) const { return static_cast<Socket>(*this).operator*(f); }
+		Socket operator/(float f) const { return static_cast<Socket>(*this).operator/(f); }
+		Socket operator^(float f) const { return static_cast<Socket>(*this).operator^(f); }
+		Socket operator%(float f) const { return static_cast<Socket>(*this).operator%(f); }
+		Socket operator<(float f) const { return static_cast<Socket>(*this).operator<(f); }
+		Socket operator<=(float f) const { return static_cast<Socket>(*this).operator<=(f); }
+		Socket operator>(float f) const { return static_cast<Socket>(*this).operator>(f); }
+		Socket operator>=(float f) const { return static_cast<Socket>(*this).operator>=(f); }
+		Socket operator+(const Vector3 &v) const { return static_cast<Socket>(*this).operator+(v); }
+		Socket operator-(const Vector3 &v) const { return static_cast<Socket>(*this).operator-(v); }
+		Socket operator*(const Vector3 &v) const { return static_cast<Socket>(*this).operator*(v); }
+		Socket operator/(const Vector3 &v) const { return static_cast<Socket>(*this).operator/(v); }
+		Socket operator%(const Vector3 &v) const { return static_cast<Socket>(*this).operator%(v); }
+		Socket operator+(const Socket &s) const { return static_cast<Socket>(*this).operator+(s); }
+		Socket operator-(const Socket &s) const { return static_cast<Socket>(*this).operator-(s); }
+		Socket operator*(const Socket &s) const { return static_cast<Socket>(*this).operator*(s); }
+		Socket operator/(const Socket &s) const { return static_cast<Socket>(*this).operator/(s); }
+		Socket operator^(const Socket &s) const { return static_cast<Socket>(*this).operator^(s); }
+		Socket operator%(const Socket &s) const { return static_cast<Socket>(*this).operator%(s); }
+		Socket operator<(const Socket &s) const { return static_cast<Socket>(*this).operator<(s); }
+		Socket operator<=(const Socket &s) const { return static_cast<Socket>(*this).operator<=(s); }
+		Socket operator>(const Socket &s) const { return static_cast<Socket>(*this).operator>(s); }
+		Socket operator>=(const Socket &s) const { return static_cast<Socket>(*this).operator>=(s); }
 
 		template<SocketType type>
-			Socket RegisterSocket(const std::string &name,SocketIO io=SocketIO::None)
+		Socket RegisterSocket(const std::string &name, SocketIO io = SocketIO::None)
 		{
 			assert(io == SocketIO::Out || type == SocketType::Closure);
-			return RegisterSocket(name,DataValue{type,nullptr},io);
+			return RegisterSocket(name, DataValue {type, nullptr}, io);
 		}
 
-		template<SocketType type,typename T>
-			Socket RegisterSocket(const std::string &name,const T &def,SocketIO io=SocketIO::None)
+		template<SocketType type, typename T>
+		Socket RegisterSocket(const std::string &name, const T &def, SocketIO io = SocketIO::None)
 		{
 			if constexpr(std::is_enum_v<T>)
-				return RegisterSocket(name,DataValue::Create<std::underlying_type_t<T>,type>(static_cast<std::underlying_type_t<T>>(def)),io);
+				return RegisterSocket(name, DataValue::Create<std::underlying_type_t<T>, type>(static_cast<std::underlying_type_t<T>>(def)), io);
 			else
-				return RegisterSocket(name,DataValue::Create<T,type>(def),io);
+				return RegisterSocket(name, DataValue::Create<T, type>(def), io);
 		}
-		Socket RegisterSocket(const std::string &name,const DataValue &value,SocketIO io=SocketIO::None);
+		Socket RegisterSocket(const std::string &name, const DataValue &value, SocketIO io = SocketIO::None);
 		void RegisterPrimaryOutputSocket(const std::string &name);
 
 		template<typename T>
-			void SetProperty(const std::string &name,const T &value)
+		void SetProperty(const std::string &name, const T &value)
 		{
 			if constexpr(std::is_enum_v<T>)
-				SetProperty<std::underlying_type_t<T>>(name,static_cast<std::underlying_type_t<T>>(value));
+				SetProperty<std::underlying_type_t<T>>(name, static_cast<std::underlying_type_t<T>>(value));
 			else
-				SetProperty<T>(m_properties,name,value);
+				SetProperty<T>(m_properties, name, value);
 		}
 
 		template<typename T>
-			std::optional<T> GetPropertyValue(const std::string &name) const
+		std::optional<T> GetPropertyValue(const std::string &name) const
 		{
 			auto it = m_properties.find(name);
 			if(it == m_properties.end())
@@ -158,140 +148,129 @@ namespace unirender
 		GroupNodeDesc *GetParent() const;
 		void SetParent(GroupNodeDesc *parent);
 
-		const std::unordered_map<std::string,NodeSocketDesc> &GetInputs() const;
-		const std::unordered_map<std::string,NodeSocketDesc> &GetOutputs() const;
-		const std::unordered_map<std::string,NodeSocketDesc> &GetProperties() const;
-		
+		const std::unordered_map<std::string, NodeSocketDesc> &GetInputs() const;
+		const std::unordered_map<std::string, NodeSocketDesc> &GetOutputs() const;
+		const std::unordered_map<std::string, NodeSocketDesc> &GetProperties() const;
+
 		// Internal use only
 		void SetTypeName(const std::string &typeName);
-	protected:
+	  protected:
 		template<class TNodeDesc>
-			static std::shared_ptr<TNodeDesc> Create(GroupNodeDesc *parent);
+		static std::shared_ptr<TNodeDesc> Create(GroupNodeDesc *parent);
 		NodeDesc();
 
 		template<typename T>
-			void SetProperty(std::unordered_map<std::string,NodeSocketDesc> &properties,const std::string &name,const T &value)
+		void SetProperty(std::unordered_map<std::string, NodeSocketDesc> &properties, const std::string &name, const T &value)
 		{
 			auto it = properties.find(name);
-			if(it == properties.end())
-			{
+			if(it == properties.end()) {
 				it = m_inputs.find(name);
 				assert(it != m_inputs.end());
 				if(it == m_inputs.end())
-					throw Exception{"No property named '" +name +"' found for node of type '" +GetTypeName() +"'!"};
+					throw Exception {"No property named '" + name + "' found for node of type '" + GetTypeName() + "'!"};
 			}
-			
+
 			auto &prop = it->second;
-			it->second.dataValue.value = ToTypeValue<T>(value,prop.dataValue.type);
+			it->second.dataValue.value = ToTypeValue<T>(value, prop.dataValue.type);
 			assert(it->second.dataValue.value != nullptr);
 			if(it->second.dataValue.value == nullptr)
-				throw Exception{"Invalid argument type '" +std::string{typeid(value).name()} +"' for property '" +name +"' of type " +to_string(prop.dataValue.type) +"!"};
+				throw Exception {"Invalid argument type '" + std::string {typeid(value).name()} + "' for property '" + name + "' of type " + to_string(prop.dataValue.type) + "!"};
 		}
-	private:
+	  private:
 		template<typename T>
-			std::shared_ptr<void> ToTypeValue(const T &v,SocketType type)
+		std::shared_ptr<void> ToTypeValue(const T &v, SocketType type)
 		{
-			if constexpr(std::is_same_v<T,EulerAngles>)
-				return ToTypeValue(Vector3{umath::deg_to_rad(v.p),umath::deg_to_rad(v.y),umath::deg_to_rad(v.r)},type);
-			else if constexpr(std::is_same_v<T,umath::Transform> || std::is_same_v<T,umath::ScaledTransform>)
-				return ToTypeValue(Mat4x3{v.ToMatrix()},type);
-			switch(type)
-			{
+			if constexpr(std::is_same_v<T, EulerAngles>)
+				return ToTypeValue(Vector3 {umath::deg_to_rad(v.p), umath::deg_to_rad(v.y), umath::deg_to_rad(v.r)}, type);
+			else if constexpr(std::is_same_v<T, umath::Transform> || std::is_same_v<T, umath::ScaledTransform>)
+				return ToTypeValue(Mat4x3 {v.ToMatrix()}, type);
+			switch(type) {
 			case SocketType::Bool:
-			{
-				if constexpr(std::is_convertible_v<T,bool>)
-					return std::make_shared<bool>(static_cast<bool>(v));
-				return nullptr;
-			}
+				{
+					if constexpr(std::is_convertible_v<T, bool>)
+						return std::make_shared<bool>(static_cast<bool>(v));
+					return nullptr;
+				}
 			case SocketType::Float:
-			{
-				if constexpr(std::is_convertible_v<T,float>)
-					return std::make_shared<float>(static_cast<float>(v));
-				return nullptr;
-			}
+				{
+					if constexpr(std::is_convertible_v<T, float>)
+						return std::make_shared<float>(static_cast<float>(v));
+					return nullptr;
+				}
 			case SocketType::Int:
 			case SocketType::Enum:
-			{
-				if constexpr(std::is_convertible_v<T,int32_t>)
-					return std::make_shared<int32_t>(static_cast<int32_t>(v));
-				return nullptr;
-			}
+				{
+					if constexpr(std::is_convertible_v<T, int32_t>)
+						return std::make_shared<int32_t>(static_cast<int32_t>(v));
+					return nullptr;
+				}
 			case SocketType::UInt:
-			{
-				if constexpr(std::is_convertible_v<T,uint32_t>)
-					return std::make_shared<uint32_t>(static_cast<uint32_t>(v));
-				return nullptr;
-			}
+				{
+					if constexpr(std::is_convertible_v<T, uint32_t>)
+						return std::make_shared<uint32_t>(static_cast<uint32_t>(v));
+					return nullptr;
+				}
 			case SocketType::Color:
 			case SocketType::Vector:
 			case SocketType::Point:
 			case SocketType::Normal:
-			{
-				if constexpr(std::is_convertible_v<T,Vector3>)
-					return std::make_shared<Vector3>(static_cast<Vector3>(v));
-				return nullptr;
-			}
+				{
+					if constexpr(std::is_convertible_v<T, Vector3>)
+						return std::make_shared<Vector3>(static_cast<Vector3>(v));
+					return nullptr;
+				}
 			case SocketType::Point2:
-			{
-				if constexpr(std::is_convertible_v<T,Vector2>)
-					return std::make_shared<Vector2>(static_cast<Vector2>(v));
-				return nullptr;
-			}
+				{
+					if constexpr(std::is_convertible_v<T, Vector2>)
+						return std::make_shared<Vector2>(static_cast<Vector2>(v));
+					return nullptr;
+				}
 			case SocketType::String:
-			{
-				if constexpr(std::is_convertible_v<T,std::string>)
-					return std::make_shared<std::string>(static_cast<std::string>(v));
-				return nullptr;
-			}
+				{
+					if constexpr(std::is_convertible_v<T, std::string>)
+						return std::make_shared<std::string>(static_cast<std::string>(v));
+					return nullptr;
+				}
 			case SocketType::Transform:
-			{
-				if constexpr(std::is_convertible_v<T,Mat4x3>)
-					return std::make_shared<Mat4x3>(static_cast<Mat4x3>(v));
-				return nullptr;
-			}
+				{
+					if constexpr(std::is_convertible_v<T, Mat4x3>)
+						return std::make_shared<Mat4x3>(static_cast<Mat4x3>(v));
+					return nullptr;
+				}
 			case SocketType::FloatArray:
-			{
-				if constexpr(std::is_convertible_v<T,std::vector<float>>)
-					return std::make_shared<std::vector<float>>(static_cast<std::vector<float>>(v));
-				return nullptr;
-			}
+				{
+					if constexpr(std::is_convertible_v<T, std::vector<float>>)
+						return std::make_shared<std::vector<float>>(static_cast<std::vector<float>>(v));
+					return nullptr;
+				}
 			case SocketType::ColorArray:
-			{
-				if constexpr(std::is_convertible_v<T,std::vector<Vector3>>)
-					return std::make_shared<std::vector<Vector3>>(static_cast<std::vector<Vector3>>(v));
-				return nullptr;
-			}
+				{
+					if constexpr(std::is_convertible_v<T, std::vector<Vector3>>)
+						return std::make_shared<std::vector<Vector3>>(static_cast<std::vector<Vector3>>(v));
+					return nullptr;
+				}
 			}
 			static_assert(umath::to_integral(SocketType::Count) == 16);
 			return nullptr;
 		}
 		std::string m_typeName;
 		std::string m_name;
-		std::unordered_map<std::string,NodeSocketDesc> m_inputs;
-		std::unordered_map<std::string,NodeSocketDesc> m_outputs;
-		std::unordered_map<std::string,NodeSocketDesc> m_properties;
+		std::unordered_map<std::string, NodeSocketDesc> m_inputs;
+		std::unordered_map<std::string, NodeSocketDesc> m_outputs;
+		std::unordered_map<std::string, NodeSocketDesc> m_properties;
 		std::optional<std::string> m_primaryOutputSocket {};
 		std::weak_ptr<GroupNodeDesc> m_parent {};
 	};
 
-	enum class TextureType : uint8_t
-	{
-		EquirectangularImage,
-		ColorImage,
-		NonColorImage,
-		NormalMap,
-		Count
-	};
+	enum class TextureType : uint8_t { EquirectangularImage, ColorImage, NonColorImage, NormalMap, Count };
 
 	class NodeManager;
-	class DLLRTUTIL GroupNodeDesc
-		: public NodeDesc
-	{
-	public:
-		static std::shared_ptr<GroupNodeDesc> Create(NodeManager &nodeManager,GroupNodeDesc *parent=nullptr);
+	class DLLRTUTIL GroupNodeDesc : public NodeDesc {
+	  public:
+		static std::shared_ptr<GroupNodeDesc> Create(NodeManager &nodeManager, GroupNodeDesc *parent = nullptr);
 		const std::vector<std::shared_ptr<NodeDesc>> &GetChildNodes() const;
 		const std::vector<NodeDescLink> &GetLinks() const;
-		virtual bool IsGroupNode() const override {return true;}
+		virtual bool IsGroupNode() const override { return true; }
 
 		NodeDesc *FindNode(const std::string &name);
 		NodeDesc *FindNodeByType(const std::string &type);
@@ -301,80 +280,70 @@ namespace unirender
 		void ResolveGroupNodes();
 		NodeDesc &AddNode(const std::string &typeName);
 		NodeDesc &AddNode(NodeTypeId id);
-		Socket AddMathNode(const Socket &socket0,const Socket &socket1,nodes::math::MathType mathOp);
-		NodeDesc &AddVectorMathNode(const Socket &socket0,const Socket &socket1,nodes::vector_math::MathType mathOp);
-		Socket CombineRGB(const Socket &r,const Socket &g,const Socket &b);
+		Socket AddMathNode(const Socket &socket0, const Socket &socket1, nodes::math::MathType mathOp);
+		NodeDesc &AddVectorMathNode(const Socket &socket0, const Socket &socket1, nodes::vector_math::MathType mathOp);
+		Socket CombineRGB(const Socket &r, const Socket &g, const Socket &b);
 		NodeDesc &SeparateRGB(const Socket &rgb);
-		NodeDesc &AddImageTextureNode(const std::string &fileName,TextureType type=TextureType::ColorImage);
-		NodeDesc &AddImageTextureNode(const Socket &fileNameSocket,TextureType type=TextureType::ColorImage);
-		Socket AddNormalMapNode(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,float strength=1.f);
+		NodeDesc &AddImageTextureNode(const std::string &fileName, TextureType type = TextureType::ColorImage);
+		NodeDesc &AddImageTextureNode(const Socket &fileNameSocket, TextureType type = TextureType::ColorImage);
+		Socket AddNormalMapNode(const std::optional<std::string> &fileName, const std::optional<Socket> &fileNameSocket, float strength = 1.f);
 		Socket AddConstantNode(float f);
 		Socket AddConstantNode(const Vector3 &v);
-		Socket Mix(const Socket &socket0,const Socket &socket1,const Socket &fac);
-		Socket Mix(const Socket &socket0,const Socket &socket1,const Socket &fac,nodes::mix::Mix type);
-		Socket Invert(const Socket &socket,const std::optional<Socket> &fac={});
+		Socket Mix(const Socket &socket0, const Socket &socket1, const Socket &fac);
+		Socket Mix(const Socket &socket0, const Socket &socket1, const Socket &fac, nodes::mix::Mix type);
+		Socket Invert(const Socket &socket, const std::optional<Socket> &fac = {});
 		Socket ToGrayScale(const Socket &socket);
-		void Link(const Socket &fromSocket,const Socket &toSocket);
-		void Link(NodeDesc &fromNode,const std::string &fromSocket,NodeDesc &toNode,const std::string &toSocket);
+		void Link(const Socket &fromSocket, const Socket &toSocket);
+		void Link(NodeDesc &fromNode, const std::string &fromSocket, NodeDesc &toNode, const std::string &toSocket);
 		void Serialize(DataStream &dsOut);
 		void Deserialize(DataStream &dsOut);
-	protected:
+	  protected:
 		virtual void SerializeNodes(DataStream &dsOut) const override;
-		void SerializeLinks(DataStream &dsOut,const std::unordered_map<const NodeDesc*,uint64_t> &nodeIndexTable);
+		void SerializeLinks(DataStream &dsOut, const std::unordered_map<const NodeDesc *, uint64_t> &nodeIndexTable);
 
 		virtual void DeserializeNodes(DataStream &dsIn) override;
-		void DeserializeLinks(DataStream &dsIn,const std::vector<const NodeDesc*> &nodeIndexTable);
-		
+		void DeserializeLinks(DataStream &dsIn, const std::vector<const NodeDesc *> &nodeIndexTable);
+
 		std::vector<std::shared_ptr<unirender::NodeDesc>>::iterator ResolveGroupNodes(std::vector<std::shared_ptr<unirender::NodeDesc>>::iterator itParent);
-		unirender::NodeDesc &AddNormalMapNodeDesc(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,float strength=1.f);
-		unirender::NodeDesc &AddImageTextureNode(const std::optional<std::string> &fileName,const std::optional<Socket> &fileNameSocket,TextureType type);
+		unirender::NodeDesc &AddNormalMapNodeDesc(const std::optional<std::string> &fileName, const std::optional<Socket> &fileNameSocket, float strength = 1.f);
+		unirender::NodeDesc &AddImageTextureNode(const std::optional<std::string> &fileName, const std::optional<Socket> &fileNameSocket, TextureType type);
 		GroupNodeDesc(NodeManager &nodeManager);
-	private:
+	  private:
 		std::vector<std::shared_ptr<NodeDesc>> m_nodes = {};
 		std::vector<NodeDescLink> m_links = {};
 		NodeManager &m_nodeManager;
 	};
 
-	struct DLLRTUTIL SubdivisionSettings
-	{
+	struct DLLRTUTIL SubdivisionSettings {
 		uint32_t maxLevel = 2;
 		float maxEdgeScreenSize = 0.f;
 	};
 
-	class DLLRTUTIL Shader final
-		: public std::enable_shared_from_this<Shader>,
-		public BaseObject
-	{
-	public:
-		enum class Pass : uint8_t
-		{
-			Combined = 0,
-			Albedo,
-			Normal,
-			Depth
-		};
+	class DLLRTUTIL Shader final : public std::enable_shared_from_this<Shader>, public BaseObject {
+	  public:
+		enum class Pass : uint8_t { Combined = 0, Albedo, Normal, Depth };
 		template<class TShader>
-			static std::shared_ptr<TShader> Create()
+		static std::shared_ptr<TShader> Create()
 		{
-			auto shader = std::shared_ptr<TShader>{new TShader{}};
+			auto shader = std::shared_ptr<TShader> {new TShader {}};
 			shader->Initialize();
 			return shader;
 		}
-		~Shader()=default;
+		~Shader() = default;
 
 		void SetActivePass(Pass pass);
 		std::shared_ptr<unirender::GroupNodeDesc> GetActivePassNode() const;
 
 		void Serialize(DataStream &dsOut) const;
-		void Deserialize(DataStream &dsIn,NodeManager &nodeManager);
+		void Deserialize(DataStream &dsIn, NodeManager &nodeManager);
 
-		const std::optional<util::HairConfig> &GetHairConfig() const {return m_hairConfig;}
-		void SetHairConfig(const util::HairConfig &hairConfig) {m_hairConfig = hairConfig;}
-		void ClearHairConfig() {m_hairConfig = {};}
+		const std::optional<util::HairConfig> &GetHairConfig() const { return m_hairConfig; }
+		void SetHairConfig(const util::HairConfig &hairConfig) { m_hairConfig = hairConfig; }
+		void ClearHairConfig() { m_hairConfig = {}; }
 
-		const std::optional<SubdivisionSettings> &GetSubdivisionSettings() const {return m_subdivisionSettings;}
-		void SetSubdivisionSettings(const SubdivisionSettings &subDivSettings) {m_subdivisionSettings = subDivSettings;}
-		void ClearSubdivisionSettings() {m_subdivisionSettings = {};}
+		const std::optional<SubdivisionSettings> &GetSubdivisionSettings() const { return m_subdivisionSettings; }
+		void SetSubdivisionSettings(const SubdivisionSettings &subDivSettings) { m_subdivisionSettings = subDivSettings; }
+		void ClearSubdivisionSettings() { m_subdivisionSettings = {}; }
 
 		udm::LinkedPropertyWrapper &GetVolumeProperties();
 
@@ -384,9 +353,9 @@ namespace unirender
 		std::shared_ptr<unirender::GroupNodeDesc> depthPass = nullptr;
 
 		void Finalize();
-	protected:
+	  protected:
 		void Initialize();
-	private:
+	  private:
 		Shader();
 		Pass m_activePass = Pass::Combined;
 		std::optional<util::HairConfig> m_hairConfig {};
@@ -396,30 +365,27 @@ namespace unirender
 
 	using GenericShader = Shader;
 
-	struct DLLRTUTIL NodeType
-	{
+	struct DLLRTUTIL NodeType {
 		std::string typeName;
-		std::function<std::shared_ptr<NodeDesc>(GroupNodeDesc*)> factory = nullptr;
+		std::function<std::shared_ptr<NodeDesc>(GroupNodeDesc *)> factory = nullptr;
 	};
-	class DLLRTUTIL NodeManager
-		: public std::enable_shared_from_this<NodeManager>
-	{
-	public:
+	class DLLRTUTIL NodeManager : public std::enable_shared_from_this<NodeManager> {
+	  public:
 		static std::shared_ptr<NodeManager> Create();
-		NodeTypeId RegisterNodeType(const std::string &typeName,const std::function<std::shared_ptr<NodeDesc>(GroupNodeDesc*)> &factory);
+		NodeTypeId RegisterNodeType(const std::string &typeName, const std::function<std::shared_ptr<NodeDesc>(GroupNodeDesc *)> &factory);
 		std::optional<NodeTypeId> FindNodeTypeId(const std::string &typeName) const;
 
 		template<typename TNode>
-			NodeTypeId RegisterNodeType(const std::string &typeName)
+		NodeTypeId RegisterNodeType(const std::string &typeName)
 		{
-			return RegisterNodeType(typeName,[]() -> std::shared_ptr<NodeDesc> {return std::shared_ptr<TNode>{new TNode{}};});
+			return RegisterNodeType(typeName, []() -> std::shared_ptr<NodeDesc> { return std::shared_ptr<TNode> {new TNode {}}; });
 		}
 
 		void RegisterNodeTypes();
-		std::shared_ptr<NodeDesc> CreateNode(const std::string &typeName,GroupNodeDesc *parent=nullptr) const;
-		std::shared_ptr<NodeDesc> CreateNode(NodeTypeId id,GroupNodeDesc *parent=nullptr) const;
-	private:
-		NodeManager()=default;
+		std::shared_ptr<NodeDesc> CreateNode(const std::string &typeName, GroupNodeDesc *parent = nullptr) const;
+		std::shared_ptr<NodeDesc> CreateNode(NodeTypeId id, GroupNodeDesc *parent = nullptr) const;
+	  private:
+		NodeManager() = default;
 		std::vector<NodeType> m_nodeTypes;
 	};
 
@@ -468,10 +434,10 @@ namespace unirender
 	constexpr auto *NODE_VOLUME_CLEAR = "volume_clear";
 	constexpr auto *NODE_VOLUME_HOMOGENEOUS = "volume_homogeneous";
 	constexpr auto *NODE_VOLUME_HETEROGENEOUS = "volume_heterogeneous";
-	static_assert(NODE_COUNT == 43,"Increase this number if new node types are added!");
+	static_assert(NODE_COUNT == 43, "Increase this number if new node types are added!");
 };
 
-DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::NodeDesc &desc);
-DLLRTUTIL std::ostream& operator<<(std::ostream &os,const unirender::GroupNodeDesc &desc);
+DLLRTUTIL std::ostream &operator<<(std::ostream &os, const unirender::NodeDesc &desc);
+DLLRTUTIL std::ostream &operator<<(std::ostream &os, const unirender::GroupNodeDesc &desc);
 
 #endif

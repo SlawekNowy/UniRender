@@ -16,8 +16,7 @@
 #include <mathutil/umat.h>
 #include <sharedutils/datastream.h>
 
-namespace unirender
-{
+namespace unirender {
 	using STBool = bool;
 	using STFloat = float;
 	using STInt = int32_t;
@@ -34,8 +33,7 @@ namespace unirender
 	using STFloatArray = std::vector<STFloat>;
 	using STColorArray = std::vector<STColor>;
 	using STNode = void;
-	enum class SocketType : uint8_t
-	{
+	enum class SocketType : uint8_t {
 		Bool = 0,
 		Float,
 		Int,
@@ -59,8 +57,7 @@ namespace unirender
 	DLLRTUTIL std::string to_string(SocketType type);
 	constexpr bool is_numeric_type(SocketType type)
 	{
-		switch(type)
-		{
+		switch(type) {
 		case SocketType::Bool:
 		case SocketType::Float:
 		case SocketType::Int:
@@ -72,8 +69,7 @@ namespace unirender
 	}
 	constexpr bool is_vector_type(SocketType type)
 	{
-		switch(type)
-		{
+		switch(type) {
 		case SocketType::Color:
 		case SocketType::Vector:
 		case SocketType::Point:
@@ -84,8 +80,7 @@ namespace unirender
 	}
 	constexpr bool is_vector2_type(SocketType type)
 	{
-		switch(type)
-		{
+		switch(type) {
 		case SocketType::Point2:
 			return true;
 		}
@@ -93,8 +88,7 @@ namespace unirender
 	}
 	constexpr bool is_array_type(SocketType type)
 	{
-		switch(type)
-		{
+		switch(type) {
 		case SocketType::FloatArray:
 		case SocketType::ColorArray:
 			return true;
@@ -102,81 +96,78 @@ namespace unirender
 		return false;
 	}
 	template<typename T>
-		constexpr bool is_convertible_to(SocketType type)
+	constexpr bool is_convertible_to(SocketType type)
 	{
-		switch(type)
-		{
+		switch(type) {
 		case SocketType::Bool:
-			return std::is_convertible_v<T,STBool>;
+			return std::is_convertible_v<T, STBool>;
 		case SocketType::Float:
-			return std::is_convertible_v<T,STFloat>;
+			return std::is_convertible_v<T, STFloat>;
 		case SocketType::Int:
-			return std::is_convertible_v<T,STInt>;
+			return std::is_convertible_v<T, STInt>;
 		case SocketType::Enum:
-			return std::is_convertible_v<T,STEnum>;
+			return std::is_convertible_v<T, STEnum>;
 		case SocketType::UInt:
-			return std::is_convertible_v<T,STUInt>;
+			return std::is_convertible_v<T, STUInt>;
 		case SocketType::Color:
-			return std::is_convertible_v<T,STColor>;
+			return std::is_convertible_v<T, STColor>;
 		case SocketType::Vector:
-			return std::is_convertible_v<T,STVector>;
+			return std::is_convertible_v<T, STVector>;
 		case SocketType::Point:
-			return std::is_convertible_v<T,STPoint>;
+			return std::is_convertible_v<T, STPoint>;
 		case SocketType::Normal:
-			return std::is_convertible_v<T,STNormal>;
+			return std::is_convertible_v<T, STNormal>;
 		case SocketType::Point2:
-			return std::is_convertible_v<T,STPoint2>;
+			return std::is_convertible_v<T, STPoint2>;
 		case SocketType::String:
-			return std::is_convertible_v<T,STString>;
+			return std::is_convertible_v<T, STString>;
 		case SocketType::Transform:
-			return std::is_convertible_v<T,STTransform>;
+			return std::is_convertible_v<T, STTransform>;
 		case SocketType::FloatArray:
-			return std::is_convertible_v<T,STFloatArray>;
+			return std::is_convertible_v<T, STFloatArray>;
 		case SocketType::ColorArray:
-			return std::is_convertible_v<T,STColorArray>;
+			return std::is_convertible_v<T, STColorArray>;
 		}
 		return false;
 	}
 	template<typename T>
-		constexpr bool is_convertible_from(SocketType type)
+	constexpr bool is_convertible_from(SocketType type)
 	{
-		switch(type)
-		{
+		switch(type) {
 		case SocketType::Bool:
-			return std::is_convertible_v<STBool,T>;
+			return std::is_convertible_v<STBool, T>;
 		case SocketType::Float:
-			return std::is_convertible_v<STFloat,T>;
+			return std::is_convertible_v<STFloat, T>;
 		case SocketType::Int:
-			return std::is_convertible_v<STInt,T>;
+			return std::is_convertible_v<STInt, T>;
 		case SocketType::Enum:
-			return std::is_convertible_v<STEnum,T>;
+			return std::is_convertible_v<STEnum, T>;
 		case SocketType::UInt:
-			return std::is_convertible_v<STUInt,T>;
+			return std::is_convertible_v<STUInt, T>;
 		case SocketType::Color:
-			return std::is_convertible_v<STColor,T>;
+			return std::is_convertible_v<STColor, T>;
 		case SocketType::Vector:
-			return std::is_convertible_v<STVector,T>;
+			return std::is_convertible_v<STVector, T>;
 		case SocketType::Point:
-			return std::is_convertible_v<STPoint,T>;
+			return std::is_convertible_v<STPoint, T>;
 		case SocketType::Normal:
-			return std::is_convertible_v<STNormal,T>;
+			return std::is_convertible_v<STNormal, T>;
 		case SocketType::Point2:
-			return std::is_convertible_v<STPoint2,T>;
+			return std::is_convertible_v<STPoint2, T>;
 		case SocketType::String:
-			return std::is_convertible_v<STString,T>;
+			return std::is_convertible_v<STString, T>;
 		case SocketType::Transform:
-			return std::is_convertible_v<STTransform,T>;
+			return std::is_convertible_v<STTransform, T>;
 		case SocketType::FloatArray:
-			return std::is_convertible_v<STFloatArray,T>;
+			return std::is_convertible_v<STFloatArray, T>;
 		case SocketType::ColorArray:
-			return std::is_convertible_v<STColorArray,T>;
+			return std::is_convertible_v<STColorArray, T>;
 		}
 		return false;
 	}
-	constexpr bool is_convertible_to(SocketType src,SocketType dst)
+	constexpr bool is_convertible_to(SocketType src, SocketType dst)
 	{
-		switch(src)
-		{
+		switch(src) {
 		case SocketType::Bool:
 			return is_convertible_to<STBool>(dst);
 		case SocketType::Float:
@@ -209,81 +200,77 @@ namespace unirender
 		return false;
 	}
 
-	struct DataValue
-	{
-		template<typename T,SocketType type>
-			static DataValue Create(const T &value)
+	struct DataValue {
+		template<typename T, SocketType type>
+		static DataValue Create(const T &value)
 		{
-			switch(type)
-			{
+			switch(type) {
 			case SocketType::Bool:
 				if constexpr(is_convertible_to<T>(SocketType::Bool))
-					return {type,std::make_shared<STBool>(static_cast<STBool>(value))};
+					return {type, std::make_shared<STBool>(static_cast<STBool>(value))};
 				break;
 			case SocketType::Float:
 				if constexpr(is_convertible_to<T>(SocketType::Float))
-					return {type,std::make_shared<STFloat>(static_cast<STFloat>(value))};
+					return {type, std::make_shared<STFloat>(static_cast<STFloat>(value))};
 				break;
 			case SocketType::Int:
 				if constexpr(is_convertible_to<T>(SocketType::Int))
-					return {type,std::make_shared<STInt>(static_cast<STInt>(value))};
+					return {type, std::make_shared<STInt>(static_cast<STInt>(value))};
 				break;
 			case SocketType::Enum:
 				if constexpr(is_convertible_to<T>(SocketType::Enum))
-					return {type,std::make_shared<STEnum>(static_cast<STEnum>(value))};
+					return {type, std::make_shared<STEnum>(static_cast<STEnum>(value))};
 				break;
 			case SocketType::UInt:
 				if constexpr(is_convertible_to<T>(SocketType::UInt))
-					return {type,std::make_shared<STUInt>(static_cast<STUInt>(value))};
+					return {type, std::make_shared<STUInt>(static_cast<STUInt>(value))};
 				break;
 			case SocketType::Color:
 				if constexpr(is_convertible_to<T>(SocketType::Color))
-					return {type,std::make_shared<STColor>(static_cast<STColor>(value))};
+					return {type, std::make_shared<STColor>(static_cast<STColor>(value))};
 				break;
 			case SocketType::Vector:
 				if constexpr(is_convertible_to<T>(SocketType::Vector))
-					return {type,std::make_shared<STVector>(static_cast<STVector>(value))};
+					return {type, std::make_shared<STVector>(static_cast<STVector>(value))};
 				break;
 			case SocketType::Point:
 				if constexpr(is_convertible_to<T>(SocketType::Point))
-					return {type,std::make_shared<STPoint>(static_cast<STPoint>(value))};
+					return {type, std::make_shared<STPoint>(static_cast<STPoint>(value))};
 				break;
 			case SocketType::Normal:
 				if constexpr(is_convertible_to<T>(SocketType::Normal))
-					return {type,std::make_shared<STNormal>(static_cast<STNormal>(value))};
+					return {type, std::make_shared<STNormal>(static_cast<STNormal>(value))};
 				break;
 			case SocketType::Point2:
 				if constexpr(is_convertible_to<T>(SocketType::Point2))
-					return {type,std::make_shared<STPoint2>(static_cast<STPoint2>(value))};
+					return {type, std::make_shared<STPoint2>(static_cast<STPoint2>(value))};
 				break;
 			case SocketType::String:
 				if constexpr(is_convertible_to<T>(SocketType::String))
-					return {type,std::make_shared<STString>(static_cast<STString>(value))};
+					return {type, std::make_shared<STString>(static_cast<STString>(value))};
 				break;
 			case SocketType::Transform:
 				if constexpr(is_convertible_to<T>(SocketType::Transform))
-					return {type,std::make_shared<STTransform>(static_cast<STTransform>(value))};
+					return {type, std::make_shared<STTransform>(static_cast<STTransform>(value))};
 				break;
 			case SocketType::FloatArray:
 				if constexpr(is_convertible_to<T>(SocketType::FloatArray))
-					return {type,std::make_shared<STFloatArray>(static_cast<STFloatArray>(value))};
+					return {type, std::make_shared<STFloatArray>(static_cast<STFloatArray>(value))};
 				break;
 			case SocketType::ColorArray:
 				if constexpr(is_convertible_to<T>(SocketType::ColorArray))
-					return {type,std::make_shared<STColorArray>(static_cast<STColorArray>(value))};
+					return {type, std::make_shared<STColorArray>(static_cast<STColorArray>(value))};
 				break;
 			}
 			assert(false);
 			return {};
 		}
 		static DataValue Deserialize(DataStream &dsIn);
-		DataValue(SocketType type,const std::shared_ptr<void> &value)
-			: type{type},value{value}
-		{}
-		DataValue()=default;
+		DataValue(SocketType type, const std::shared_ptr<void> &value) : type {type}, value {value} {}
+		DataValue() = default;
 
-		bool operator==(const DataValue &other) const {return type == other.type && value.get() == other.value.get();}
-		bool operator!=(const DataValue &other) const {return !operator==(other);}
+		bool operator==(const DataValue &other) const { return type == other.type && value.get() == other.value.get(); }
+		bool operator!=(const DataValue &other) const { return !operator==(other); }
 
 		void Serialize(DataStream &dsOut) const;
 
@@ -291,110 +278,108 @@ namespace unirender
 		std::shared_ptr<void> value = nullptr;
 
 		template<typename T>
-			std::optional<T> ToValue() const
+		std::optional<T> ToValue() const
 		{
-			return convert<T>(value.get(),type);
+			return convert<T>(value.get(), type);
 		}
-	private:
+	  private:
 	};
 
 	template<typename T>
-		constexpr std::optional<T> convert(const void *value,SocketType valueType)
+	constexpr std::optional<T> convert(const void *value, SocketType valueType)
 	{
-		if(is_convertible_from<T>(valueType))
-		{
-			switch(valueType)
-			{
+		if(is_convertible_from<T>(valueType)) {
+			switch(valueType) {
 			case SocketType::Bool:
-			{
-				if constexpr(std::is_convertible_v<STBool,T>)
-					return static_cast<T>(*static_cast<const STBool*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STBool, T>)
+						return static_cast<T>(*static_cast<const STBool *>(value));
+					break;
+				}
 			case SocketType::Float:
-			{
-				if constexpr(std::is_convertible_v<STFloat,T>)
-					return static_cast<T>(*static_cast<const STFloat*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STFloat, T>)
+						return static_cast<T>(*static_cast<const STFloat *>(value));
+					break;
+				}
 			case SocketType::Int:
-			{
-				if constexpr(std::is_convertible_v<STInt,T>)
-					return static_cast<T>(*static_cast<const STInt*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STInt, T>)
+						return static_cast<T>(*static_cast<const STInt *>(value));
+					break;
+				}
 			case SocketType::UInt:
-			{
-				if constexpr(std::is_convertible_v<STUInt,T>)
-					return static_cast<T>(*static_cast<const STUInt*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STUInt, T>)
+						return static_cast<T>(*static_cast<const STUInt *>(value));
+					break;
+				}
 			case SocketType::Color:
-			{
-				if constexpr(std::is_convertible_v<STColor,T>)
-					return static_cast<T>(*static_cast<const STColor*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STColor, T>)
+						return static_cast<T>(*static_cast<const STColor *>(value));
+					break;
+				}
 			case SocketType::Vector:
-			{
-				if constexpr(std::is_convertible_v<STVector,T>)
-					return static_cast<T>(*static_cast<const STVector*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STVector, T>)
+						return static_cast<T>(*static_cast<const STVector *>(value));
+					break;
+				}
 			case SocketType::Point:
-			{
-				if constexpr(std::is_convertible_v<STPoint,T>)
-					return static_cast<T>(*static_cast<const STPoint*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STPoint, T>)
+						return static_cast<T>(*static_cast<const STPoint *>(value));
+					break;
+				}
 			case SocketType::Normal:
-			{
-				if constexpr(std::is_convertible_v<STNormal,T>)
-					return static_cast<T>(*static_cast<const STNormal*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STNormal, T>)
+						return static_cast<T>(*static_cast<const STNormal *>(value));
+					break;
+				}
 			case SocketType::Point2:
-			{
-				if constexpr(std::is_convertible_v<STPoint2,T>)
-					return static_cast<T>(*static_cast<const STPoint2*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STPoint2, T>)
+						return static_cast<T>(*static_cast<const STPoint2 *>(value));
+					break;
+				}
 			case SocketType::String:
-			{
-				if constexpr(std::is_convertible_v<STString,T>)
-					return static_cast<T>(*static_cast<const STString*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STString, T>)
+						return static_cast<T>(*static_cast<const STString *>(value));
+					break;
+				}
 			case SocketType::Enum:
-			{
-				if constexpr(std::is_convertible_v<STEnum,T>)
-					return static_cast<T>(*static_cast<const STEnum*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STEnum, T>)
+						return static_cast<T>(*static_cast<const STEnum *>(value));
+					break;
+				}
 			case SocketType::Transform:
-			{
-				if constexpr(std::is_convertible_v<STTransform,T>)
-					return static_cast<T>(*static_cast<const STTransform*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STTransform, T>)
+						return static_cast<T>(*static_cast<const STTransform *>(value));
+					break;
+				}
 			case SocketType::FloatArray:
-			{
-				if constexpr(std::is_convertible_v<STFloatArray,T>)
-					return static_cast<T>(*static_cast<const STFloatArray*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STFloatArray, T>)
+						return static_cast<T>(*static_cast<const STFloatArray *>(value));
+					break;
+				}
 			case SocketType::ColorArray:
-			{
-				if constexpr(std::is_convertible_v<STColorArray,T>)
-					return static_cast<T>(*static_cast<const STColorArray*>(value));
-				break;
-			}
+				{
+					if constexpr(std::is_convertible_v<STColorArray, T>)
+						return static_cast<T>(*static_cast<const STColorArray *>(value));
+					break;
+				}
 			}
 		}
-		return std::optional<T>{};
+		return std::optional<T> {};
 	}
 
-	DLLRTUTIL std::optional<DataValue> convert(const void *value,SocketType srcType,SocketType dstType);
+	DLLRTUTIL std::optional<DataValue> convert(const void *value, SocketType srcType, SocketType dstType);
 };
 
 #endif

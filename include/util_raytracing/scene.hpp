@@ -22,8 +22,7 @@
 
 #define ENABLE_TEST_AMBIENT_OCCLUSION
 
-namespace ccl
-{
+namespace ccl {
 	class Session;
 	class Scene;
 	class ShaderInput;
@@ -38,20 +37,24 @@ namespace ccl
 	class BufferParams;
 	class SessionParams;
 };
-namespace udm
-{
+namespace udm {
 	struct Property;
 };
-namespace OpenImageIO_v2_1
-{
+namespace OpenImageIO_v2_1 {
 	class ustring;
 };
-namespace umath {class Transform; class ScaledTransform;};
-namespace uimg {class ImageBuffer;};
-namespace util::ocio {class ColorProcessor;};
+namespace umath {
+	class Transform;
+	class ScaledTransform;
+};
+namespace uimg {
+	class ImageBuffer;
+};
+namespace util::ocio {
+	class ColorProcessor;
+};
 class DataStream;
-namespace unirender
-{
+namespace unirender {
 	class GroupNodeDesc;
 	class SceneObject;
 	class Scene;
@@ -70,8 +73,8 @@ namespace unirender
 	using PMesh = std::shared_ptr<Mesh>;
 	struct Socket;
 
-	DLLRTUTIL void serialize_udm_property(DataStream &dsOut,const udm::Property &prop);
-	DLLRTUTIL void deserialize_udm_property(DataStream &dsIn,udm::Property &prop);
+	DLLRTUTIL void serialize_udm_property(DataStream &dsOut, const udm::Property &prop);
+	DLLRTUTIL void deserialize_udm_property(DataStream &dsIn, udm::Property &prop);
 
 	class ModelCache;
 	class ShaderCache;
@@ -79,26 +82,21 @@ namespace unirender
 	class CCLShader;
 	class TileManager;
 	enum class ColorTransform : uint8_t;
-	class DLLRTUTIL Scene
-		: public std::enable_shared_from_this<Scene>
-	{
-	public:
+	class DLLRTUTIL Scene : public std::enable_shared_from_this<Scene> {
+	  public:
 		static constexpr uint32_t SERIALIZATION_VERSION = 6;
-		struct DLLRTUTIL SerializationData
-		{
+		struct DLLRTUTIL SerializationData {
 			std::string outputFileName;
 		};
 
-		enum class DeviceType : uint8_t
-		{
+		enum class DeviceType : uint8_t {
 			CPU = 0u,
 			GPU,
 
 			Count
 		};
 
-		struct DLLRTUTIL SceneInfo
-		{
+		struct DLLRTUTIL SceneInfo {
 			std::string sky = "";
 			EulerAngles skyAngles {};
 			float skyStrength = 1.f;
@@ -117,13 +115,8 @@ namespace unirender
 			uint32_t adaptiveMinSamples = 0;
 		};
 
-		enum class ColorSpace : uint8_t
-		{
-			SRGB = 0,
-			Raw
-		};
-		enum class RenderMode : uint8_t
-		{
+		enum class ColorSpace : uint8_t { SRGB = 0, Raw };
+		enum class RenderMode : uint8_t {
 			RenderImage = 0u,
 			BakeAmbientOcclusion,
 			BakeNormals,
@@ -132,7 +125,7 @@ namespace unirender
 			SceneAlbedo,
 			SceneNormals,
 			SceneDepth,
-			
+
 			Alpha,
 			GeometryNormal,
 			ShadingNormal,
@@ -164,32 +157,19 @@ namespace unirender
 			LightmapBakingStart = BakeDiffuseLighting,
 			LightmapBakingEnd = BakeDiffuseLightingSeparate
 		};
-		enum class StateFlags : uint16_t
-		{
-			None = 0u,
-			OutputResultWithHDRColors = 1u
-		};
+		enum class StateFlags : uint16_t { None = 0u, OutputResultWithHDRColors = 1u };
 
-		enum class DenoiseMode : uint8_t
-		{
-			None = 0,
-			AutoFast,
-			AutoDetailed,
-			Optix,
-			OpenImage
-		};
+		enum class DenoiseMode : uint8_t { None = 0, AutoFast, AutoDetailed, Optix, OpenImage };
 
-		struct DLLRTUTIL ColorTransformInfo
-		{
+		struct DLLRTUTIL ColorTransformInfo {
 			std::string config;
 			std::optional<std::string> lookName {};
 		};
 
-		struct DLLRTUTIL CreateInfo
-		{
+		struct DLLRTUTIL CreateInfo {
 			CreateInfo();
 			void Serialize(DataStream &ds) const;
-			void Deserialize(DataStream &ds,uint32_t version);
+			void Deserialize(DataStream &ds, uint32_t version);
 
 			std::string renderer = "cycles";
 			std::optional<uint32_t> samples = {};
@@ -206,24 +186,24 @@ namespace unirender
 		static bool IsLightmapRenderMode(RenderMode renderMode);
 		static bool IsBakingRenderMode(RenderMode renderMode);
 		static void SetKernelPath(const std::string &kernelPath);
-		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,RenderMode renderMode,const CreateInfo &createInfo={});
-		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,DataStream &dsIn,const std::string &rootDir,RenderMode renderMode,const CreateInfo &createInfo={});
-		static std::shared_ptr<Scene> Create(NodeManager &nodeManager,DataStream &dsIn,const std::string &rootDir);
-		static bool ReadHeaderInfo(DataStream &ds,RenderMode &outRenderMode,CreateInfo &outCreateInfo,SerializationData &outSerializationData,uint32_t &outVersion,SceneInfo *optOutSceneInfo=nullptr);
+		static std::shared_ptr<Scene> Create(NodeManager &nodeManager, RenderMode renderMode, const CreateInfo &createInfo = {});
+		static std::shared_ptr<Scene> Create(NodeManager &nodeManager, DataStream &dsIn, const std::string &rootDir, RenderMode renderMode, const CreateInfo &createInfo = {});
+		static std::shared_ptr<Scene> Create(NodeManager &nodeManager, DataStream &dsIn, const std::string &rootDir);
+		static bool ReadHeaderInfo(DataStream &ds, RenderMode &outRenderMode, CreateInfo &outCreateInfo, SerializationData &outSerializationData, uint32_t &outVersion, SceneInfo *optOutSceneInfo = nullptr);
 		//
 		static std::optional<std::string> GetAbsSkyPath(const std::string &skyTex);
 		static std::string ToRelativePath(const std::string &absPath);
 		static std::string ToAbsolutePath(const std::string &relPath);
 		template<class T>
-			static void SerializeDataBlock(const T &value,DataStream &dsOut,size_t dataStartOffset)
+		static void SerializeDataBlock(const T &value, DataStream &dsOut, size_t dataStartOffset)
 		{
-			dsOut->Write(reinterpret_cast<const uint8_t*>(&value) +dataStartOffset,sizeof(T) -dataStartOffset);
+			dsOut->Write(reinterpret_cast<const uint8_t *>(&value) + dataStartOffset, sizeof(T) - dataStartOffset);
 		}
 
 		template<class T>
-			static void DeserializeDataBlock(T &value,DataStream &dsOut,size_t dataStartOffset)
+		static void DeserializeDataBlock(T &value, DataStream &dsOut, size_t dataStartOffset)
 		{
-			dsOut->Read(reinterpret_cast<uint8_t*>(&value) +dataStartOffset,sizeof(T) -dataStartOffset);
+			dsOut->Read(reinterpret_cast<uint8_t *>(&value) + dataStartOffset, sizeof(T) - dataStartOffset);
 		}
 
 		static constexpr uint32_t INPUT_CHANNEL_COUNT = 4u;
@@ -232,10 +212,10 @@ namespace unirender
 		~Scene();
 		Camera &GetCamera();
 		float GetProgress() const;
-		RenderMode GetRenderMode() const {return m_renderMode;}
+		RenderMode GetRenderMode() const { return m_renderMode; }
 
-		void SetDebugHandler(const std::string &identifier,const std::function<void(const std::shared_ptr<void>&)> &f);
-		std::function<void(const std::shared_ptr<void>&)> GetDebugHandler(const std::string &identifier);
+		void SetDebugHandler(const std::string &identifier, const std::function<void(const std::shared_ptr<void> &)> &f);
+		std::function<void(const std::shared_ptr<void> &)> GetDebugHandler(const std::string &identifier);
 
 		bool IsProgressive() const;
 		bool IsProgressiveRefine() const;
@@ -243,9 +223,9 @@ namespace unirender
 		const std::vector<PLight> &GetLights() const;
 		std::vector<PLight> &GetLights();
 
-		const SceneInfo &GetSceneInfo() const {return const_cast<Scene*>(this)->GetSceneInfo();}
-		SceneInfo &GetSceneInfo() {return m_sceneInfo;}
-		StateFlags GetStateFlags() const {return m_stateFlags;}
+		const SceneInfo &GetSceneInfo() const { return const_cast<Scene *>(this)->GetSceneInfo(); }
+		SceneInfo &GetSceneInfo() { return m_sceneInfo; }
+		StateFlags GetStateFlags() const { return m_stateFlags; }
 
 		void SetLightIntensityFactor(float f);
 		float GetLightIntensityFactor() const;
@@ -253,9 +233,9 @@ namespace unirender
 		static void SetVerbose(bool verbose);
 		static bool IsVerbose();
 
-		static bool ReadSerializationHeader(DataStream &dsIn,RenderMode &outRenderMode,CreateInfo &outCreateInfo,SerializationData &outSerializationData,uint32_t &outVersion,SceneInfo *optOutSceneInfo=nullptr);
-		void Save(DataStream &dsOut,const std::string &rootDir,const SerializationData &serializationData) const;
-		bool Load(DataStream &dsIn,const std::string &rootDir);
+		static bool ReadSerializationHeader(DataStream &dsIn, RenderMode &outRenderMode, CreateInfo &outCreateInfo, SerializationData &outSerializationData, uint32_t &outVersion, SceneInfo *optOutSceneInfo = nullptr);
+		void Save(DataStream &dsOut, const std::string &rootDir, const SerializationData &serializationData) const;
+		bool Load(DataStream &dsIn, const std::string &rootDir);
 
 		void HandleError(const std::string &errMsg) const;
 
@@ -271,40 +251,40 @@ namespace unirender
 		void SetMaxGlossyBounces(uint32_t bounces);
 		void SetMaxTransmissionBounces(uint32_t bounces);
 		void SetMotionBlurStrength(float strength);
-		void SetAdaptiveSampling(bool enabled,float adaptiveSamplingThreshold=0.01f,uint32_t adaptiveMinSamples=0);
+		void SetAdaptiveSampling(bool enabled, float adaptiveSamplingThreshold = 0.01f, uint32_t adaptiveMinSamples = 0);
 		void SetBakeTarget(Object &o);
 		const std::string *GetBakeTargetName() const;
 		bool HasBakeTarget() const;
 		Vector2i GetResolution() const;
-		const CreateInfo &GetCreateInfo() const {return m_createInfo;}
+		const CreateInfo &GetCreateInfo() const { return m_createInfo; }
 
-		const std::vector<std::shared_ptr<ModelCache>> &GetModelCaches() const {return m_mdlCaches;}
+		const std::vector<std::shared_ptr<ModelCache>> &GetModelCaches() const { return m_mdlCaches; }
 		void AddModelsFromCache(const ModelCache &cache);
 		void AddLight(Light &light);
-		
+
 		void Close();
 		void Finalize();
 
-		DenoiseMode GetDenoiseMode() const {return m_createInfo.denoiseMode;}
-		bool ShouldDenoise() const {return GetDenoiseMode() != DenoiseMode::None;}
+		DenoiseMode GetDenoiseMode() const { return m_createInfo.denoiseMode; }
+		bool ShouldDenoise() const { return GetDenoiseMode() != DenoiseMode::None; }
 		float GetGamma() const;
 
-		std::unordered_map<size_t,WorldObject*> BuildActorMap() const;
-		static void AddActorToActorMap(std::unordered_map<size_t,WorldObject*> &map,WorldObject &obj);
+		std::unordered_map<size_t, WorldObject *> BuildActorMap() const;
+		static void AddActorToActorMap(std::unordered_map<size_t, WorldObject *> &map, WorldObject &obj);
 
 		void PrintLogInfo();
-	private:
+	  private:
 		friend Shader;
 		friend Object;
 		friend Light;
-		Scene(NodeManager &nodeManager,RenderMode renderMode);
-		static ccl::ShaderOutput *FindShaderNodeOutput(ccl::ShaderNode &node,const std::string &output);
-		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const std::string &nodeName);
-		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph,const OpenImageIO_v2_1::ustring &name);
-		void DenoiseHDRImageArea(uimg::ImageBuffer &imgBuffer,uint32_t imgWidth,uint32_t imgHeight,uint32_t x,uint32_t y,uint32_t w,uint32_t h) const;
+		Scene(NodeManager &nodeManager, RenderMode renderMode);
+		static ccl::ShaderOutput *FindShaderNodeOutput(ccl::ShaderNode &node, const std::string &output);
+		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph, const std::string &nodeName);
+		static ccl::ShaderNode *FindShaderNode(ccl::ShaderGraph &graph, const OpenImageIO_v2_1::ustring &name);
+		void DenoiseHDRImageArea(uimg::ImageBuffer &imgBuffer, uint32_t imgWidth, uint32_t imgHeight, uint32_t x, uint32_t y, uint32_t w, uint32_t h) const;
 		bool IsValidTexture(const std::string &filePath) const;
 
-		std::unordered_map<std::string,std::function<void(const std::shared_ptr<void>&)>> m_debugHandlers;
+		std::unordered_map<std::string, std::function<void(const std::shared_ptr<void> &)>> m_debugHandlers;
 		std::shared_ptr<NodeManager> m_nodeManager = nullptr;
 		SceneInfo m_sceneInfo {};
 		std::vector<std::shared_ptr<ModelCache>> m_mdlCaches {};

@@ -10,16 +10,14 @@
 #include <sharedutils/util.h>
 #include <sharedutils/util_path.hpp>
 
-bool unirender::apply_color_transform(
-	uimg::ImageBuffer &imgBuf,const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr,float exposure,float gamma
-)
+bool unirender::apply_color_transform(uimg::ImageBuffer &imgBuf, const ColorTransformProcessorCreateInfo &createInfo, std::string &outErr, float exposure, float gamma)
 {
-	auto processor = create_color_transform_processor(createInfo,outErr,exposure,gamma);
+	auto processor = create_color_transform_processor(createInfo, outErr, exposure, gamma);
 	if(!processor)
 		return false;
-	return processor->Apply(imgBuf,outErr);
+	return processor->Apply(imgBuf, outErr);
 }
-std::shared_ptr<util::ocio::ColorProcessor> unirender::create_color_transform_processor(const ColorTransformProcessorCreateInfo &createInfo,std::string &outErr,float exposure,float gamma)
+std::shared_ptr<util::ocio::ColorProcessor> unirender::create_color_transform_processor(const ColorTransformProcessorCreateInfo &createInfo, std::string &outErr, float exposure, float gamma)
 {
 	auto ocioConfigLocation = util::Path::CreatePath(util::get_program_path());
 	ocioConfigLocation += "modules/open_color_io/configs/";
@@ -30,5 +28,5 @@ std::shared_ptr<util::ocio::ColorProcessor> unirender::create_color_transform_pr
 	ocioCreateInfo.config = createInfo.config;
 	ocioCreateInfo.lookName = createInfo.lookName;
 	ocioCreateInfo.bitDepth = static_cast<util::ocio::ColorProcessor::CreateInfo::BitDepth>(createInfo.bitDepth);
-	return util::ocio::ColorProcessor::Create(ocioCreateInfo,outErr,exposure,gamma);
+	return util::ocio::ColorProcessor::Create(ocioCreateInfo, outErr, exposure, gamma);
 }

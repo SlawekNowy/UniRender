@@ -19,22 +19,18 @@
 #include <mathutil/uvec.h>
 #include "util_raytracing.hpp"
 
-namespace uimg {class ImageBuffer;};
-namespace util::ocio {class ColorProcessor;};
-namespace unirender
-{
+namespace uimg {
+	class ImageBuffer;
+};
+namespace util::ocio {
+	class ColorProcessor;
+};
+namespace unirender {
 	enum class ColorTransform : uint8_t;
-	class DLLRTUTIL TileManager
-	{
-	public:
-		struct TileData
-		{
-			enum class Flags : uint8_t
-			{
-				None = 0,
-				HDRData = 1,
-				Initialized = HDRData<<1u
-			};
+	class DLLRTUTIL TileManager {
+	  public:
+		struct TileData {
+			enum class Flags : uint8_t { None = 0, HDRData = 1, Initialized = HDRData << 1u };
 			uint16_t x = 0;
 			uint16_t y = 0;
 			uint16_t w = 0;
@@ -46,19 +42,10 @@ namespace unirender
 			bool IsFloatData() const;
 			bool IsHDRData() const;
 		};
-		struct ThreadData
-		{
-
-		};
-		enum class State : uint8_t
-		{
-			Initial = 0,
-			Running,
-			Cancelled,
-			Stopped
-		};
+		struct ThreadData {};
+		enum class State : uint8_t { Initial = 0, Running, Cancelled, Stopped };
 		~TileManager();
-		void Initialize(uint32_t w,uint32_t h,uint32_t wTile,uint32_t hTile,bool cpuDevice,float exposure=0.f,float gamma=DEFAULT_GAMMA,util::ocio::ColorProcessor *optColorProcessor=nullptr);
+		void Initialize(uint32_t w, uint32_t h, uint32_t wTile, uint32_t hTile, bool cpuDevice, float exposure = 0.f, float gamma = DEFAULT_GAMMA, util::ocio::ColorProcessor *optColorProcessor = nullptr);
 		void Reload(bool waitForCompletion);
 		void Cancel();
 		void Wait();
@@ -66,28 +53,28 @@ namespace unirender
 		std::shared_ptr<uimg::ImageBuffer> UpdateFinalImage();
 		std::vector<TileData> GetRenderedTileBatch();
 		void AddRenderedTile(TileData &&tile);
-		Vector2i GetTileSize() const {return m_tileSize;}
-		uint32_t GetTileCount() const {return m_numTiles;}
-		Vector2i GetTilesPerAxisCount() const {return m_numTilesPerAxis;}
-		float GetExposure() const {return m_exposure;}
-		float GetGamma() const {return m_gamma;}
-		bool IsCpuDevice() const {return m_cpuDevice;}
+		Vector2i GetTileSize() const { return m_tileSize; }
+		uint32_t GetTileCount() const { return m_numTiles; }
+		Vector2i GetTilesPerAxisCount() const { return m_numTilesPerAxis; }
+		float GetExposure() const { return m_exposure; }
+		float GetGamma() const { return m_gamma; }
+		bool IsCpuDevice() const { return m_cpuDevice; }
 		int32_t GetCurrentTileSampleCount(uint32_t tileIndex) const;
-		uint32_t GetTilesWithRenderedSamplesCount() const {return m_numTilesWithRenderedSamples;}
-		bool AllTilesHaveRenderedSamples() const {return GetTilesWithRenderedSamplesCount() == GetTileCount();}
-		void SetFlipImage(bool flipHorizontally,bool flipVertically);
+		uint32_t GetTilesWithRenderedSamplesCount() const { return m_numTilesWithRenderedSamples; }
+		bool AllTilesHaveRenderedSamples() const { return GetTilesWithRenderedSamplesCount() == GetTileCount(); }
+		void SetFlipImage(bool flipHorizontally, bool flipVertically);
 		void SetExposure(float exposure);
 		void SetGamma(float gamma);
 		void SetUseFloatData(bool b);
-		
+
 		void ApplyPostProcessingForProgressiveTile(TileData &data);
 
 		// For internal use only
-		std::vector<TileData> &GetInputTiles() {return m_inputTiles;}
-		std::mutex &GetInputTileMutex() {return m_inputTileMutex;}
-		std::queue<size_t> &GetInputTileQueue() {return m_inputTileQueue;}
+		std::vector<TileData> &GetInputTiles() { return m_inputTiles; }
+		std::mutex &GetInputTileMutex() { return m_inputTileMutex; }
+		std::queue<size_t> &GetInputTileQueue() { return m_inputTileQueue; }
 		void NotifyPendingWork();
-	private:
+	  private:
 		void ApplyRectData(const TileData &data);
 		void InitializeTileData(TileData &data);
 		void SetState(State state);
@@ -113,7 +100,7 @@ namespace unirender
 
 		std::mutex m_renderedTileMutex;
 		std::vector<TileData> m_renderedTiles;
-		std::array<std::future<void>,10> m_ppThreadPoolHandles;
+		std::array<std::future<void>, 10> m_ppThreadPoolHandles;
 		ctpl::thread_pool m_ppThreadPool {static_cast<int32_t>(m_ppThreadPoolHandles.size())};
 		std::condition_variable m_threadWaitCondition {};
 		std::mutex m_threadWaitMutex {};
