@@ -295,6 +295,8 @@ namespace unirender {
 		StateFlags m_stateFlags = StateFlags::None;
 		RenderMode m_renderMode = RenderMode::RenderImage;
 	};
+	enum class PassType : uint32_t;
+	DLLRTUTIL std::optional<PassType> get_main_pass_type(Scene::RenderMode renderMode);
 };
 REGISTER_BASIC_BITWISE_OPERATORS(unirender::Scene::StateFlags)
 

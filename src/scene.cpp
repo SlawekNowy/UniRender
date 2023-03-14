@@ -229,17 +229,7 @@ bool unirender::Scene::IsLightmapRenderMode(RenderMode renderMode) { return umat
 
 bool unirender::Scene::IsBakingRenderMode(RenderMode renderMode) { return umath::to_integral(renderMode) >= umath::to_integral(RenderMode::BakingStart) && umath::to_integral(renderMode) <= umath::to_integral(RenderMode::BakingEnd); }
 
-bool unirender::Scene::IsRenderSceneMode(RenderMode renderMode)
-{
-	switch(renderMode) {
-	case RenderMode::RenderImage:
-	case RenderMode::SceneAlbedo:
-	case RenderMode::SceneNormals:
-	case RenderMode::SceneDepth:
-		return true;
-	}
-	return false;
-}
+bool unirender::Scene::IsRenderSceneMode(RenderMode renderMode) { return !IsBakingRenderMode(renderMode); }
 
 bool unirender::Scene::ReadHeaderInfo(DataStream &ds, RenderMode &outRenderMode, CreateInfo &outCreateInfo, SerializationData &outSerializationData, uint32_t &outVersion, SceneInfo *optOutSceneInfo)
 {
@@ -782,4 +772,59 @@ void unirender::Scene::AddLight(Light &light)
 	if(m_lights.size() == m_lights.capacity())
 		m_lights.reserve(m_lights.size() * 1.5 + 50);
 	m_lights.push_back(light.shared_from_this());
+}
+
+std::optional<unirender::PassType> unirender::get_main_pass_type(Scene::RenderMode renderMode)
+{
+	switch(renderMode) {
+	case Scene::RenderMode::RenderImage:
+		return PassType::Combined;
+	case Scene::RenderMode::BakeAmbientOcclusion:
+		return PassType::Ao;
+	case Scene::RenderMode::BakeNormals:
+		return PassType::Normals;
+	case Scene::RenderMode::BakeDiffuseLighting:
+		return PassType::Diffuse;
+	case Scene::RenderMode::BakeDiffuseLightingSeparate:
+		return {};
+	case Scene::RenderMode::SceneAlbedo:
+		return PassType::Albedo;
+	case Scene::RenderMode::SceneNormals:
+		return PassType::Normals;
+	case Scene::RenderMode::SceneDepth:
+		return PassType::Depth;
+
+	case Scene::RenderMode::Alpha:
+	case Scene::RenderMode::GeometryNormal:
+	case Scene::RenderMode::ShadingNormal:
+	case Scene::RenderMode::DirectDiffuseReflect:
+	case Scene::RenderMode::DirectDiffuseTransmit:
+	case Scene::RenderMode::DirectGlossyReflect:
+	case Scene::RenderMode::DirectGlossyTransmit:
+	case Scene::RenderMode::IndirectDiffuseReflect:
+	case Scene::RenderMode::IndirectDiffuseTransmit:
+	case Scene::RenderMode::IndirectGlossyReflect:
+	case Scene::RenderMode::IndirectGlossyTransmit:
+	case Scene::RenderMode::IndirectSpecular:
+	case Scene::RenderMode::IndirectSpecularReflect:
+	case Scene::RenderMode::IndirectSpecularTransmit:
+	case Scene::RenderMode::Noise:
+	case Scene::RenderMode::Irradiance:
+	case Scene::RenderMode::Caustic:
+		return {};
+	case Scene::RenderMode::DirectDiffuse:
+		return PassType::DiffuseDirect;
+	case Scene::RenderMode::DirectGlossy:
+		return PassType::GlossyDirect;
+	case Scene::RenderMode::Emission:
+		return PassType::Emission;
+	case Scene::RenderMode::IndirectDiffuse:
+		return PassType::DiffuseIndirect;
+	case Scene::RenderMode::IndirectGlossy:
+		return PassType::GlossyIndirect;
+	case Scene::RenderMode::Uv:
+		return PassType::Uv;
+	}
+	static_assert(umath::to_integral(Scene::RenderMode::Count) == 31, "Update this implementation when new render modes are added!");
+	return {};
 }

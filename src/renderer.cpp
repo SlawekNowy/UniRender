@@ -38,7 +38,7 @@ uimg::ImageLayerSet unirender::RenderWorker::GetResult()
 		auto &imgBuf = pair.second.front();
 		if(!imgBuf)
 			continue;
-		result.images[pair.first] = imgBuf;
+		result.images[std::string {magic_enum::enum_name(pair.first)}] = imgBuf;
 	}
 	return result;
 }
@@ -102,14 +102,14 @@ bool unirender::Renderer::UnloadRendererLibrary(const std::string &rendererIdent
 ///////////////////
 
 unirender::Renderer::Renderer(const Scene &scene, Flags flags) : m_scene {const_cast<Scene &>(scene).shared_from_this()}, m_apiData {udm::Property::Create(udm::Type::Element)}, m_flags {flags} {}
-std::pair<uint32_t, std::string> unirender::Renderer::AddOutput(const std::string &type)
+std::pair<uint32_t, unirender::PassType> unirender::Renderer::AddPass(PassType passType)
 {
-	auto it = m_outputs.find(type);
-	if(it == m_outputs.end())
-		it = m_outputs.insert(std::make_pair(type, m_nextOutputIndex++)).first;
-	return {it->second, type};
+	auto it = m_passes.find(passType);
+	if(it == m_passes.end())
+		it = m_passes.insert(std::make_pair(passType, m_nextOutputIndex++)).first;
+	return {it->second, passType};
 }
-uimg::ImageBuffer *unirender::Renderer::FindResultImageBuffer(const std::string &type, StereoEye eye)
+uimg::ImageBuffer *unirender::Renderer::FindResultImageBuffer(PassType type, StereoEye eye)
 {
 	if(eye == StereoEye::None)
 		eye = StereoEye::Left;
@@ -118,7 +118,7 @@ uimg::ImageBuffer *unirender::Renderer::FindResultImageBuffer(const std::string 
 		return nullptr;
 	return it->second.at(umath::to_integral(eye)).get();
 }
-std::shared_ptr<uimg::ImageBuffer> &unirender::Renderer::GetResultImageBuffer(const std::string &type, StereoEye eye)
+std::shared_ptr<uimg::ImageBuffer> &unirender::Renderer::GetResultImageBuffer(PassType type, StereoEye eye)
 {
 	if(eye == StereoEye::None)
 		eye = StereoEye::Left;
@@ -162,42 +162,45 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker, un
 	switch(stage) {
 	case ImageRenderStage::Denoise:
 		{
-			// Denoise
-			denoise::Info denoiseInfo {};
-			auto &resultImageBuffer = GetResultImageBuffer(OUTPUT_COLOR, eyeStage);
-			denoiseInfo.width = resultImageBuffer->GetWidth();
-			denoiseInfo.height = resultImageBuffer->GetHeight();
-			denoiseInfo.lightmap = Scene::IsLightmapRenderMode(m_scene->GetRenderMode());
+			auto denoiseImg = [this, eyeStage, &worker](uimg::ImageBuffer &imgBuf, bool lightmap) {
+				auto albedoImageBuffer = GetResultImageBuffer(PassType::Albedo, eyeStage);
+				auto normalImageBuffer = GetResultImageBuffer(PassType::Normals, eyeStage);
 
-			static auto dbgAlbedo = false;
-			static auto dbgNormals = false;
-			if(dbgAlbedo)
-				resultImageBuffer = GetResultImageBuffer(OUTPUT_ALBEDO, eyeStage);
-			else if(dbgNormals)
-				resultImageBuffer = GetResultImageBuffer(OUTPUT_NORMAL, eyeStage);
+				denoise::Info denoiseInfo {};
+				denoiseInfo.width = imgBuf.GetWidth();
+				denoiseInfo.height = imgBuf.GetHeight();
+				denoiseInfo.lightmap = lightmap;
+				denoise::denoise(denoiseInfo, imgBuf, albedoImageBuffer.get(), normalImageBuffer.get(), [this, &worker](float progress) -> bool { return !worker.IsCancelled(); });
+			};
+			if(Scene::IsLightmapRenderMode(m_scene->GetRenderMode())) {
+				switch(m_scene->GetRenderMode()) {
+				case Scene::RenderMode::BakeDiffuseLighting:
+					denoiseImg(*GetResultImageBuffer(PassType::Diffuse, eyeStage), true);
+					break;
+				case Scene::RenderMode::BakeDiffuseLightingSeparate:
+					denoiseImg(*GetResultImageBuffer(PassType::DiffuseDirect, eyeStage), true);
+					denoiseImg(*GetResultImageBuffer(PassType::DiffuseIndirect, eyeStage), true);
+					break;
+				}
+			}
 			else {
-				auto albedoImageBuffer = GetResultImageBuffer(OUTPUT_ALBEDO, eyeStage);
-				auto normalImageBuffer = GetResultImageBuffer(OUTPUT_NORMAL, eyeStage);
+				auto passType = get_main_pass_type(m_scene->GetRenderMode());
+				assert(passType.has_value());
+				if(passType.has_value()) {
+					auto &resultImageBuffer = GetResultImageBuffer(*passType, eyeStage);
 
-				/*{
-				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf.png","wb");
-				if(f0)
-					uimg::save_image(f0,*resultImageBuffer,uimg::ImageFormat::PNG);
-			}
-			{
-				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf_albedo.png","wb");
-				if(f0)
-					uimg::save_image(f0,*albedoImageBuffer,uimg::ImageFormat::PNG);
-			}
-			{
-				auto f0 = FileManager::OpenFile<VFilePtrReal>("imgbuf_normal.png","wb");
-				if(f0)
-					uimg::save_image(f0,*normalImageBuffer,uimg::ImageFormat::PNG);
-			}*/
-
-				denoise::denoise(denoiseInfo, *resultImageBuffer, albedoImageBuffer.get(), normalImageBuffer.get(), [this, &worker](float progress) -> bool { return !worker.IsCancelled(); });
-				if(ShouldDumpRenderStageImages())
-					DumpImage("denoise", *resultImageBuffer, uimg::ImageFormat::HDR);
+					static auto dbgAlbedo = false;
+					static auto dbgNormals = false;
+					if(dbgAlbedo)
+						resultImageBuffer = GetResultImageBuffer(PassType::Albedo, eyeStage);
+					else if(dbgNormals)
+						resultImageBuffer = GetResultImageBuffer(PassType::Normals, eyeStage);
+					else {
+						denoiseImg(*resultImageBuffer, false);
+						if(ShouldDumpRenderStageImages())
+							DumpImage("denoise", *resultImageBuffer, uimg::ImageFormat::HDR);
+					}
+				}
 			}
 
 			if(UpdateStereoEye(worker, stage, eyeStage)) {
@@ -241,18 +244,21 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker, un
 		}
 	case ImageRenderStage::MergeStereoscopic:
 		{
-			auto &imgLeft = GetResultImageBuffer(OUTPUT_COLOR, StereoEye::Left);
-			auto &imgRight = GetResultImageBuffer(OUTPUT_COLOR, StereoEye::Right);
-			auto w = imgLeft->GetWidth();
-			auto h = imgLeft->GetHeight();
-			auto imgComposite = uimg::ImageBuffer::Create(w, h * 2, imgLeft->GetFormat());
-			auto *dataSrcLeft = imgLeft->GetData();
-			auto *dataSrcRight = imgRight->GetData();
-			auto *dataDst = imgComposite->GetData();
-			memcpy(dataDst, dataSrcLeft, imgLeft->GetSize());
-			memcpy(static_cast<uint8_t *>(dataDst) + imgLeft->GetSize(), dataSrcRight, imgRight->GetSize());
-			imgLeft = imgComposite;
-			imgRight = nullptr;
+			auto passType = get_main_pass_type(m_scene->GetRenderMode());
+			if(passType.has_value()) {
+				auto &imgLeft = GetResultImageBuffer(*passType, StereoEye::Left);
+				auto &imgRight = GetResultImageBuffer(*passType, StereoEye::Right);
+				auto w = imgLeft->GetWidth();
+				auto h = imgLeft->GetHeight();
+				auto imgComposite = uimg::ImageBuffer::Create(w, h * 2, imgLeft->GetFormat());
+				auto *dataSrcLeft = imgLeft->GetData();
+				auto *dataSrcRight = imgRight->GetData();
+				auto *dataDst = imgComposite->GetData();
+				memcpy(dataDst, dataSrcLeft, imgLeft->GetSize());
+				memcpy(static_cast<uint8_t *>(dataDst) + imgLeft->GetSize(), dataSrcRight, imgRight->GetSize());
+				imgLeft = imgComposite;
+				imgRight = nullptr;
+			}
 			return HandleRenderStage(worker, ImageRenderStage::Finalize, StereoEye::None, optResult);
 		}
 	case ImageRenderStage::Finalize:
@@ -339,6 +345,7 @@ bool unirender::Renderer::Initialize()
 		shader->Finalize();
 	return true;
 }
+
 static std::function<void(const std::string)> g_logHandler = nullptr;
 void unirender::set_log_handler(const std::function<void(const std::string)> &logHandler) { g_logHandler = logHandler; }
 const std::function<void(const std::string)> &unirender::get_log_handler() { return g_logHandler; }

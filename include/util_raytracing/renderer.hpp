@@ -49,6 +49,38 @@ namespace unirender {
 		friend util::ParallelJob<typename TJob::RESULT_TYPE> util::create_parallel_job(TARGS &&...args);
 	};
 
+	enum class PassType : uint32_t {
+		Combined = 0,
+		Albedo,
+		Normals,
+		Depth,
+		Emission,
+		Background,
+		Ao,
+		Shadow,
+		Diffuse,
+		DiffuseDirect,
+		DiffuseIndirect,
+		Glossy,
+		GlossyDirect,
+		GlossyIndirect,
+		Transmission,
+		TransmissionDirect,
+		TransmissionIndirect,
+		Volume,
+		VolumeDirect,
+		VolumeIndirect,
+
+		Position,
+		Roughness,
+		Uv,
+		DiffuseColor,
+		GlossyColor,
+		TransmissionColor,
+
+		Count
+	};
+
 	class Scene;
 	class Mesh;
 	class Shader;
@@ -67,14 +99,6 @@ namespace unirender {
 		static std::shared_ptr<Renderer> Create(const unirender::Scene &scene, const std::string &rendererIdentifier, std::string &outErr, Flags flags = Flags::None);
 		static bool UnloadRendererLibrary(const std::string &rendererIdentifier);
 		static void Close();
-		static constexpr const char *OUTPUT_COLOR = "COLOR";
-		static constexpr const char *OUTPUT_ALBEDO = "ALBEDO";
-		static constexpr const char *OUTPUT_NORMAL = "NORMAL";
-		static constexpr const char *OUTPUT_DEPTH = "DEPTH";
-		static constexpr const char *OUTPUT_AO = "AO";
-		static constexpr const char *OUTPUT_DIFFUSE = "DIFFUSE";
-		static constexpr const char *OUTPUT_DIFFUSE_DIRECT = "DIFFUSE_DIRECT";
-		static constexpr const char *OUTPUT_DIFFUSE_INDIRECT = "DIFFUSE_INDIRECT";
 
 		virtual ~Renderer() = default;
 		virtual void Wait() = 0;
@@ -112,7 +136,7 @@ namespace unirender {
 		std::vector<unirender::TileManager::TileData> GetRenderedTileBatch();
 		void AddActorToActorMap(WorldObject &obj);
 
-		const std::unordered_map<std::string, std::array<std::shared_ptr<uimg::ImageBuffer>, umath::to_integral(StereoEye::Count)>> &GetResultImageBuffers() const { return m_resultImageBuffers; }
+		const std::unordered_map<PassType, std::array<std::shared_ptr<uimg::ImageBuffer>, umath::to_integral(StereoEye::Count)>> &GetResultImageBuffers() const { return m_resultImageBuffers; }
 	  protected:
 		Renderer(const Scene &scene, Flags flags);
 		bool Initialize();
@@ -133,7 +157,8 @@ namespace unirender {
 
 			Bake,
 
-			Finalize
+			Finalize,
+			Count
 		};
 		enum class RenderStageResult : uint8_t { Complete = 0, Continue };
 		void OnParallelWorkerCancelled();
@@ -145,7 +170,7 @@ namespace unirender {
 		virtual void CloseRenderScene() = 0;
 		virtual void FinalizeImage(uimg::ImageBuffer &imgBuf, StereoEye eyeStage) {};
 		void UpdateActorMap();
-		std::pair<uint32_t, std::string> AddOutput(const std::string &type);
+		std::pair<uint32_t, PassType> AddPass(PassType passType);
 		void DumpImage(const std::string &renderStage, uimg::ImageBuffer &imgBuffer, uimg::ImageFormat format = uimg::ImageFormat::HDR, const std::optional<std::string> &fileName = {}) const;
 		bool ShouldDumpRenderStageImages() const;
 
@@ -165,10 +190,11 @@ namespace unirender {
 		std::shared_ptr<util::ocio::ColorProcessor> m_colorTransformProcessor = nullptr;
 		std::unordered_map<size_t, unirender::WorldObject *> m_actorMap;
 
-		std::shared_ptr<uimg::ImageBuffer> &GetResultImageBuffer(const std::string &type, StereoEye eye = StereoEye::Left);
-		uimg::ImageBuffer *FindResultImageBuffer(const std::string &type, StereoEye eye = StereoEye::Left);
-		std::unordered_map<std::string, std::array<std::shared_ptr<uimg::ImageBuffer>, umath::to_integral(StereoEye::Count)>> m_resultImageBuffers = {};
-		std::unordered_map<std::string, uint32_t> m_outputs {};
+		std::shared_ptr<uimg::ImageBuffer> &GetResultImageBuffer(PassType type, StereoEye eye = StereoEye::Left);
+		uimg::ImageBuffer *FindResultImageBuffer(PassType type, StereoEye eye = StereoEye::Left);
+		std::unordered_map<PassType, std::array<std::shared_ptr<uimg::ImageBuffer>, umath::to_integral(StereoEye::Count)>> m_resultImageBuffers = {};
+
+		std::unordered_map<PassType, uint32_t> m_passes {};
 		uint32_t m_nextOutputIndex = 0;
 	};
 };
