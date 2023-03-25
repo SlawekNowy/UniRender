@@ -84,6 +84,9 @@ namespace unirender {
 	DLLRTUTIL const std::shared_ptr<spdlog::logger> &get_logger();
 	DLLRTUTIL bool should_log();
 
+	DLLRTUTIL void set_kernel_compile_callback(const std::function<void(bool)> &f);
+	DLLRTUTIL const std::function<void(bool)> &get_kernel_compile_callback();
+
 	class ModelCache;
 	class ShaderCache;
 	class NodeManager;

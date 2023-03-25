@@ -88,7 +88,12 @@ namespace unirender {
 	class WorldObject;
 	class DLLRTUTIL Renderer : public std::enable_shared_from_this<Renderer> {
 	  public:
-		enum class Flags : uint32_t { None = 0u, EnableLiveEditing = 1u, DisableDisplayDriver = EnableLiveEditing << 1u };
+		enum class Flags : uint32_t {
+			None = 0u,
+			EnableLiveEditing = 1u,
+			DisableDisplayDriver = EnableLiveEditing << 1u,
+			CompilingKernels = DisableDisplayDriver << 1u,
+		};
 		enum class StereoEye : uint8_t {
 			Left = 0,
 			Right,
@@ -129,6 +134,8 @@ namespace unirender {
 		virtual bool ShouldUseProgressiveFloatFormat() const;
 		bool ShouldUseTransparentSky() const;
 		bool IsDisplayDriverEnabled() const;
+		void SetIsBuildingKernels(bool compiling);
+		bool IsBuildingKernels() const;
 		Scene &GetScene() { return *m_scene; }
 		const Scene &GetScene() const { return const_cast<Renderer *>(this)->GetScene(); }
 		TileManager &GetTileManager() { return m_tileManager; }
@@ -175,7 +182,7 @@ namespace unirender {
 		bool ShouldDumpRenderStageImages() const;
 
 		std::shared_ptr<Scene> m_scene = nullptr;
-		Flags m_flags = Flags::None;
+		std::atomic<Flags> m_flags = Flags::None;
 		TileManager m_tileManager {};
 		udm::PProperty m_apiData = nullptr;
 

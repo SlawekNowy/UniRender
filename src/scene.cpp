@@ -67,6 +67,10 @@ void unirender::set_logger(const std::shared_ptr<spdlog::logger> &logger) { g_lo
 const std::shared_ptr<spdlog::logger> &unirender::get_logger() { return g_logger; }
 bool unirender::should_log() { return g_logger != nullptr; }
 
+static std::function<void(bool)> g_kernelCompileCallback = nullptr;
+void unirender::set_kernel_compile_callback(const std::function<void(bool)> &f) { g_kernelCompileCallback = f; }
+const std::function<void(bool)> &unirender::get_kernel_compile_callback() { return g_kernelCompileCallback; }
+
 unirender::Scene::CreateInfo::CreateInfo() {}
 
 void unirender::Scene::CreateInfo::Serialize(DataStream &ds) const
