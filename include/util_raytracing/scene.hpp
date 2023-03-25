@@ -12,6 +12,7 @@
 #include <sharedutils/datastream.h>
 #include <sharedutils/util_weak_handle.hpp>
 #include <sharedutils/util.h>
+#include <sharedutils/util_log.hpp>
 #include <condition_variable>
 #include <memory>
 #include <mathutil/uvec.h>
@@ -53,6 +54,9 @@ namespace uimg {
 namespace util::ocio {
 	class ColorProcessor;
 };
+namespace spdlog {
+	class logger;
+};
 class DataStream;
 namespace unirender {
 	class GroupNodeDesc;
@@ -75,6 +79,10 @@ namespace unirender {
 
 	DLLRTUTIL void serialize_udm_property(DataStream &dsOut, const udm::Property &prop);
 	DLLRTUTIL void deserialize_udm_property(DataStream &dsIn, udm::Property &prop);
+
+	DLLRTUTIL void set_logger(const std::shared_ptr<spdlog::logger> &logger);
+	DLLRTUTIL const std::shared_ptr<spdlog::logger> &get_logger();
+	DLLRTUTIL bool should_log();
 
 	class ModelCache;
 	class ShaderCache;

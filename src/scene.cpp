@@ -62,6 +62,11 @@ void unirender::deserialize_udm_property(DataStream &dsIn, udm::Property &prop)
 	prop.Read(f);
 }
 
+static std::shared_ptr<spdlog::logger> g_logger = nullptr;
+void unirender::set_logger(const std::shared_ptr<spdlog::logger> &logger) { g_logger = logger; }
+const std::shared_ptr<spdlog::logger> &unirender::get_logger() { return g_logger; }
+bool unirender::should_log() { return g_logger != nullptr; }
+
 unirender::Scene::CreateInfo::CreateInfo() {}
 
 void unirender::Scene::CreateInfo::Serialize(DataStream &ds) const
