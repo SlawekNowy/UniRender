@@ -233,12 +233,12 @@ util::EventReply unirender::Renderer::HandleRenderStage(RenderWorker &worker, un
 					DumpImage("alpha", *resultImageBuffer, uimg::ImageFormat::HDR);
 				FinalizeImage(*resultImageBuffer, eyeStage);
 			}
-			if(UpdateStereoEye(worker, stage, eyeStage)) {
+			if(eyeStage == StereoEye::Left) {
 				if(optResult)
 					*optResult = RenderStageResult::Continue;
 				return util::EventReply::Handled;
 			}
-			if(eyeStage == StereoEye::Left)
+			if(eyeStage == StereoEye::Right)
 				return HandleRenderStage(worker, ImageRenderStage::MergeStereoscopic, StereoEye::None, optResult);
 			return HandleRenderStage(worker, ImageRenderStage::Finalize, StereoEye::None, optResult);
 		}
