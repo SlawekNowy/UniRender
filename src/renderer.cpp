@@ -129,6 +129,7 @@ std::shared_ptr<uimg::ImageBuffer> &unirender::Renderer::GetResultImageBuffer(Pa
 }
 
 void unirender::Renderer::UpdateActorMap() { m_actorMap = m_scene->BuildActorMap(); }
+bool unirender::Renderer::IsFeatureEnabled(Feature feature) const { return false; }
 
 unirender::Renderer::RenderStageResult unirender::Renderer::StartNextRenderStage(RenderWorker &worker, unirender::Renderer::ImageRenderStage stage, StereoEye eyeStage)
 {

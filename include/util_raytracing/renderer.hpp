@@ -101,6 +101,10 @@ namespace unirender {
 
 			None = std::numeric_limits<uint8_t>::max()
 		};
+		enum class Feature : uint32_t {
+			None = 0,
+			OptiXAvailable = 1
+		};
 		static std::shared_ptr<Renderer> Create(const unirender::Scene &scene, const std::string &rendererIdentifier, std::string &outErr, Flags flags = Flags::None);
 		static bool UnloadRendererLibrary(const std::string &rendererIdentifier);
 		static void Close();
@@ -123,6 +127,7 @@ namespace unirender {
 		virtual std::optional<std::string> SaveRenderPreview(const std::string &path, std::string &outErr) const = 0;
 		virtual util::ParallelJob<uimg::ImageLayerSet> StartRender() = 0;
 		void StopRendering();
+		virtual bool IsFeatureEnabled(Feature feature) const;
 
 		const std::unordered_map<size_t, unirender::WorldObject *> &GetActorMap() const { return m_actorMap; }
 		unirender::WorldObject *FindActor(const util::Uuid &uuid);
@@ -206,5 +211,6 @@ namespace unirender {
 	};
 };
 REGISTER_BASIC_BITWISE_OPERATORS(unirender::Renderer::Flags)
+REGISTER_BASIC_BITWISE_OPERATORS(unirender::Renderer::Feature)
 
 #endif
