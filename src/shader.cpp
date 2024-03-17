@@ -508,6 +508,8 @@ unirender::NodeDesc &unirender::GroupNodeDesc::AddImageTextureNode(const std::op
 		{
 			auto &node = AddNode(NODE_IMAGE_TEXTURE);
 			node.SetProperty(nodes::image_texture::IN_COLORSPACE, COLORSPACE_SRGB.c_str());
+			// This is required, otherwise the alpha channel will affect the color channels even if alpha translucency is disabled (tested with cycles)
+			node.SetProperty(nodes::image_texture::IN_ALPHA_TYPE, unirender::nodes::image_texture::AlphaType::ChannelPacked);
 			desc = &node;
 			break;
 		}
