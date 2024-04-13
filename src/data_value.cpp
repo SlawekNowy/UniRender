@@ -121,6 +121,8 @@ unirender::DataValue unirender::DataValue::Deserialize(DataStream &dsIn)
 	case SocketType::Node:
 		return DataValue {type, nullptr};
 	}
+	//unreachable, unless it went seriously wrong.
+	return DataValue {type, nullptr};
 }
 
 std::string unirender::to_string(SocketType type)
