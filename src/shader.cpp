@@ -1082,6 +1082,11 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterSocket<unirender::SocketType::Normal>(nodes::texture_coordinate::OUT_REFLECTION, SocketIO::Out);
 		return desc;
 	});
+	RegisterNodeType(NODE_UVMAP, [](GroupNodeDesc *parent) {
+		auto desc = NodeDesc::Create(parent);
+		desc->RegisterSocket<unirender::SocketType::Point>(nodes::texture_coordinate::OUT_UV, SocketIO::Out);
+		return desc;
+	});
 	RegisterNodeType(NODE_MAPPING, [](GroupNodeDesc *parent) {
 		auto desc = NodeDesc::Create(parent);
 		desc->RegisterSocket<unirender::SocketType::Enum>(nodes::mapping::IN_TYPE, nodes::mapping::Type::Point);
@@ -1471,7 +1476,7 @@ void unirender::NodeManager::RegisterNodeTypes()
 		desc->RegisterPrimaryOutputSocket(nodes::layer_weight::OUT_FRESNEL);
 		return desc;
 	});
-	static_assert(NODE_COUNT == 43, "Increase this number if new node types are added!");
+	static_assert(NODE_COUNT == 44, "Increase this number if new node types are added!");
 }
 
 std::ostream &operator<<(std::ostream &os, const unirender::NodeDesc &desc)

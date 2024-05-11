@@ -340,6 +340,9 @@ namespace unirender {
 			constexpr auto *OUT_WINDOW = "window";
 			constexpr auto *OUT_REFLECTION = "reflection";
 		};
+		namespace uvmap {
+			constexpr auto *OUT_UV = "UV";
+		};
 		namespace mapping {
 			constexpr auto *IN_TYPE = "type";
 			constexpr auto *IN_VECTOR = "vector";
@@ -694,7 +697,7 @@ namespace unirender {
 			constexpr auto *OUT_AO = "ao";
 		};
 	};
-	constexpr uint32_t NODE_COUNT = 43;
+	constexpr uint32_t NODE_COUNT = 44;
 };
 
 DLLRTUTIL std::ostream &operator<<(std::ostream &os, const unirender::Socket &socket);

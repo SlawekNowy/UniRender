@@ -405,6 +405,7 @@ namespace unirender {
 	constexpr auto *NODE_ADD_CLOSURE = "add_closure";
 	constexpr auto *NODE_BACKGROUND_SHADER = "background_shader";
 	constexpr auto *NODE_TEXTURE_COORDINATE = "texture_coordinate";
+	constexpr auto *NODE_UVMAP = "uvmap";
 	constexpr auto *NODE_MAPPING = "mapping";
 	constexpr auto *NODE_SCATTER_VOLUME = "scatter_volume";
 	constexpr auto *NODE_EMISSION = "emission";
@@ -434,7 +435,7 @@ namespace unirender {
 	constexpr auto *NODE_VOLUME_CLEAR = "volume_clear";
 	constexpr auto *NODE_VOLUME_HOMOGENEOUS = "volume_homogeneous";
 	constexpr auto *NODE_VOLUME_HETEROGENEOUS = "volume_heterogeneous";
-	static_assert(NODE_COUNT == 43, "Increase this number if new node types are added!");
+	static_assert(NODE_COUNT == 44, "Increase this number if new node types are added!");
 };
 
 DLLRTUTIL std::ostream &operator<<(std::ostream &os, const unirender::NodeDesc &desc);
