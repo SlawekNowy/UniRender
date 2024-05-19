@@ -149,4 +149,5 @@ endif()
 
 if(${UNIRENDER_ENABLE_DEPENDENCIES})
 	add_dependencies(${PROJ_NAME} mathutil sharedutils vfilesystem util_image util_ocio util_udm lz4)
+	#add_dependencies(${PROJ_NAME} mathutil sharedutils vfilesystem lz4)
 endif()
