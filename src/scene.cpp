@@ -20,6 +20,7 @@
 #include <fsys/filesystem.h>
 #include <sharedutils/datastream.h>
 #include <sharedutils/util_file.h>
+#include <sharedutils/util_ifile.hpp>
 #include <sharedutils/util.h>
 #include <sharedutils/util_path.hpp>
 #include <sharedutils/magic_enum.hpp>
