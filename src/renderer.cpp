@@ -18,6 +18,7 @@
 #include <util_ocio.hpp>
 #include <sharedutils/util_path.hpp>
 #include <sharedutils/util_library.hpp>
+#include <sharedutils/magic_enum.hpp>
 #include <fsys/ifile.hpp>
 
 unirender::RenderWorker::RenderWorker(Renderer &renderer) : util::ParallelWorker<uimg::ImageLayerSet> {}, m_renderer {renderer.shared_from_this()} {}
