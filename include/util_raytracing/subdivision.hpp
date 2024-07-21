@@ -16,7 +16,7 @@
 #include <memory>
 #include <functional>
 
-namespace OpenSubdiv::v3_4_3::Far {
+namespace OpenSubdiv::v3_6_0::Far {
 	class PrimvarRefiner;
 };
 namespace unirender {
@@ -28,7 +28,7 @@ namespace unirender {
 		virtual void *GetDataPtr() = 0;
 		void *GetElementPtr(uint32_t idx) { return static_cast<uint8_t *>(GetDataPtr()) + (idx * GetElementSize()); }
 		virtual uint32_t GetElementSize() const = 0;
-		virtual void Interpolate(OpenSubdiv::v3_4_3::Far::PrimvarRefiner &primvarRefiner, int32_t level, void *src, void *dst, int channel) = 0;
+		virtual void Interpolate(OpenSubdiv::v3_6_0::Far::PrimvarRefiner &primvarRefiner, int32_t level, void *src, void *dst, int channel) = 0;
 		void Apply(FaceVertexIndex face, umath::Vertex &v, int idx)
 		{
 			if(m_apply)
