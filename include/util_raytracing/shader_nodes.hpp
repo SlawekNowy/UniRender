@@ -628,6 +628,7 @@ namespace unirender {
 				Color,
 				Soft,
 				Linear,
+				Exclusion,
 				Clamp,
 
 				Count

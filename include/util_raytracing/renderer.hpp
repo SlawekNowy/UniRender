@@ -57,7 +57,6 @@ namespace unirender {
 		Emission,
 		Background,
 		Ao,
-		Shadow,
 		Diffuse,
 		DiffuseDirect,
 		DiffuseIndirect,
