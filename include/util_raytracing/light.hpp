@@ -67,7 +67,7 @@ namespace unirender {
 
 		// Note: All of these are automatically serialized/deserialized!
 		// There must be no unserializable data after this point!
-		float m_size = util::pragma::metres_to_units(1.f);
+		float m_size = pragma::metres_to_units(1.f);
 		Vector3 m_color = {1.f, 1.f, 1.f};
 		Lumen m_intensity = 1'600.f;
 		Type m_type = Type::Point;
@@ -76,8 +76,8 @@ namespace unirender {
 
 		Vector3 m_axisU = {};
 		Vector3 m_axisV = {};
-		float m_sizeU = util::pragma::metres_to_units(1.f);
-		float m_sizeV = util::pragma::metres_to_units(1.f);
+		float m_sizeU = pragma::metres_to_units(1.f);
+		float m_sizeV = pragma::metres_to_units(1.f);
 		bool m_bRound = false;
 		Flags m_flags = Flags::None;
 	};
