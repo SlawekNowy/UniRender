@@ -9,6 +9,8 @@ module;
 
 #include <memory>
 #include <mathutil/umath.h>
+#include <optional>
+#include <sharedutils/datastream.h>
 
 module pragma.scenekit;
 

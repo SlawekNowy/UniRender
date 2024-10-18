@@ -9,6 +9,7 @@ module;
 
 #include "definitions.hpp"
 #include <functional>
+#include <condition_variable>
 #include <util_image.hpp>
 #include <sharedutils/util_parallel_job.hpp>
 #include <sharedutils/util.h>
@@ -44,8 +45,6 @@ export namespace pragma::scenekit {
 	  private:
 		virtual void DoCancel(const std::string &resultMsg, std::optional<int32_t> resultCode) override;
 		PRenderer m_renderer = nullptr;
-		template<typename TJob, typename... TARGS>
-		friend util::ParallelJob<typename TJob::RESULT_TYPE> util::create_parallel_job(TARGS &&...args);
 	};
 
 	enum class PassType : uint32_t {

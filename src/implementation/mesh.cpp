@@ -8,6 +8,8 @@
 module;
 
 #include <sharedutils/datastream.h>
+#include <sharedutils/util_hair.hpp>
+#include <sharedutils/util_weak_handle.hpp>
 #include <udm.hpp>
 #include <iostream>
 

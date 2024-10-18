@@ -12,6 +12,9 @@ module;
 #include <stdexcept>
 #include <iostream>
 #include <sstream>
+#include <optional>
+#include <thread>
+#include <memory>
 #include <sharedutils/util_hash.hpp>
 #include <mathutil/uvec.h>
 #include "interface/definitions.hpp"

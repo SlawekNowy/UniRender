@@ -17,12 +17,14 @@ module;
 #include <sharedutils/util_path.hpp>
 #include <sharedutils/magic_enum.hpp>
 #include <sharedutils/util_hash.hpp>
+#include <sharedutils/util_log.hpp>
 #include <util_image.hpp>
 #include <util_image_buffer.hpp>
 #include <util_texture_info.hpp>
 #include <util_ocio.hpp>
 #include <udm.hpp>
 #include <random>
+#include "interface/definitions.hpp"
 
 #ifdef ENABLE_CYCLES_LOGGING
 #pragma comment(lib, "shlwapi.lib")

@@ -13,6 +13,8 @@ module;
 #include <sharedutils/util_path.hpp>
 #include <sharedutils/util_library.hpp>
 #include <sharedutils/magic_enum.hpp>
+#include <sharedutils/util_parallel_job.hpp>
+#include <sharedutils/util_event_reply.hpp>
 #include <util_image.hpp>
 #include <fsys/ifile.hpp>
 #include <udm.hpp>

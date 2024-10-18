@@ -11,6 +11,7 @@ module;
 #include <iostream>
 #include <mathutil/umath.h>
 #include <sharedutils/util.h>
+#include <sharedutils/datastream.h>
 
 #undef GetObject
 

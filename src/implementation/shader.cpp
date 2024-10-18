@@ -12,6 +12,7 @@ module;
 #include <sharedutils/util_pragma.hpp>
 #undef __UTIL_STRING_H__
 #include <sharedutils/util_string.h>
+#include <sharedutils/util_hair.hpp>
 #include <mathutil/uvec.h>
 #include <queue>
 #include <cassert>

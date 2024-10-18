@@ -14,6 +14,7 @@ module;
 #include <mathutil/vertex.hpp>
 #include <opensubdiv/far/topologyDescriptor.h>
 #include <opensubdiv/far/primvarRefiner.h>
+#include <memory>
 
 module pragma.scenekit;
 

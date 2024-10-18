@@ -12,6 +12,7 @@ module;
 #include <mathutil/color.h>
 #include <optional>
 #include <functional>
+#include <memory>
 
 export module pragma.scenekit:shader_nodes;
 

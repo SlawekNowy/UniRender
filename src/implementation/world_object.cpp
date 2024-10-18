@@ -9,6 +9,7 @@ module;
 
 #include <sharedutils/datastream.h>
 #include <mathutil/uvec.h>
+#include <mathutil/transform.hpp>
 
 module pragma.scenekit;
 
