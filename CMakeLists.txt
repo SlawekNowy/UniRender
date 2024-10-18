@@ -10,8 +10,9 @@ pr_add_external_dependency(${PROJ_NAME} openimagedenoise LIBRARY PUBLIC)
 pr_add_external_dependency(${PROJ_NAME} opensubdiv LIBRARY PUBLIC)
 pr_add_external_dependency(${PROJ_NAME} opensubdiv_cpu LIBRARY PUBLIC LINK_ONLY)
 
-pr_add_headers(${PROJ_NAME} "include/")
-pr_add_sources(${PROJ_NAME} "src/")
+pr_init_module(${PROJ_NAME})
+
+pr_add_compile_definitions(${PROJ_NAME} -DENABLE_TEST_AMBIENT_OCCLUSION PUBLIC)
 
 pr_add_compile_definitions(${PROJ_NAME} -DOIIO_STATIC_BUILD -DGLEW_STATIC -DRTUTIL_DLL)
 pr_add_compile_definitions(${PROJ_NAME} -DCCL_NAMESPACE_BEGIN=namespace\ ccl\ {)
